@@ -1,0 +1,5 @@
+{
+{% if options["chinese_programming"] and 'rust' in layers %}
+  "rust-analyzer.cargo.checkOnSave.command": "clippy"
+{% endif %}
+}

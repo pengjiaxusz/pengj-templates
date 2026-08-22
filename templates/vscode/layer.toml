@@ -1,0 +1,3 @@
+name = "VS Code"
+description = "VS Code 工作区配置：推荐扩展（rust 层存在时推荐 rust-analyzer）、按中文编程关 rust 检查的 lint"
+depends = ["common"]

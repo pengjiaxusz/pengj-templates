@@ -1,0 +1,3 @@
+name = "Agent"
+description = "AI 编码助手规范（AGENTS.md）：按所选层与选项生成 rust / 中文编程等编码约定"
+depends = ["common"]

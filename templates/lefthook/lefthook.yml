@@ -1,0 +1,14 @@
+# lefthook.yml — git hooks 配置（lefthook 层）
+pre-commit:
+  parallel: true
+  commands:
+    # 约定式提交在 pre-commit 做基础校验（此命令可自行扩展）
+    lint:
+      glob: "*.{js,ts,rs,toml,json,md}"
+      run: echo "lefthook pre-commit ok"
+
+commit-msg:
+  commands:
+    commitlint:
+      # 用 pnpm exec（本地已装 commitlint）而非 npx；"{1}" 是 lefthook 占位符（跨平台，勿用 $1）
+      run: pnpm exec commitlint --edit "{1}"

@@ -1,0 +1,49 @@
+# toolchain.toml — 项目要求的工具链清单
+#
+# 每个工具一个 [[required]] 块：
+#   name  : 在 PATH 里查找的 exe 名（Windows 会自动补 .exe/.cmd/.bat/.ps1 后缀）
+#   desc  : 用途说明（检测失败时提示用户该装什么）
+#   check : 启动验证用的参数（可省略，默认 ["--version"]）
+#           检测器会实际执行 <name> <check...>，能跑通才判定为"可用"
+#
+# 换项目时：删掉不需要的块、加上自己要求的工具即可，不用改检测器代码。
+
+[[required]]
+name = "rustc"
+desc = "Rust 编译器（rustup 安装）"
+check = ["--version"]
+
+[[required]]
+name = "cargo"
+desc = "Rust 包管理器（rustup 自带）"
+check = ["--version"]
+
+[[required]]
+name = "sccache"
+desc = "编译缓存（模板强制使用）"
+check = ["--version"]
+
+[[required]]
+name = "just"
+desc = "任务运行器（cargo install just 或 scoop 安装）"
+check = ["--version"]
+
+[[required]]
+name = "node"
+desc = "Node.js 运行时"
+check = ["--version"]
+
+[[required]]
+name = "pnpm"
+desc = "Node 包管理器"
+check = ["--version"]
+
+[[required]]
+name = "git"
+desc = "版本控制"
+check = ["--version"]
+
+[[required]]
+name = "lld"
+desc = "链接器（MSVC 的 LLVM 目录自带，或 scoop install llvm）"
+check = ["--version"]

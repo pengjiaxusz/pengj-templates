@@ -1,0 +1,8 @@
+# pnpm 工作区与设置
+packages:
+  - crates/app
+
+# 放行 lefthook 的构建脚本（下载平台二进制）— pnpm 11 使用 allowBuilds
+allowBuilds:
+  lefthook: true
+  esbuild: true

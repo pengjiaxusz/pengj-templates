@@ -1,0 +1,15 @@
+[package]
+name = "{{ project_slug }}"
+version = "0.1.0"
+edition = "{{ options["edition"] or "2024" }}"
+
+{% if options["chinese_programming"] %}
+# 中文编程：允许中文标识符与字符串字面量，关闭相关命名 lint
+[lints.rust]
+non_ascii_idents = "allow"
+
+[lints.clippy]
+non_ascii_literal = "allow"
+{% endif %}
+
+[dependencies]
