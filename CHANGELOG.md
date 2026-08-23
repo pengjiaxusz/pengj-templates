@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.6.1-beta.1...v0.6.2-beta.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* pre-release 版本自动标记 GitHub Prerelease 徽章 ([4dadeca](https://github.com/pengjiaxusz/pengj-templates/commit/4dadeca714af0cafb85abbf91145888f7e68d05c))
+
 ## [0.6.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.6.0-beta.1...v0.6.1-beta.1) (2026-08-23)
 
 
