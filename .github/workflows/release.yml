@@ -199,6 +199,17 @@ jobs:
           files: |
             pengj-templates_${{ env.VER }}_${{ matrix.os }}-${{ matrix.arch }}*
           tag_name: ${{ needs.release-please.outputs.tag_name }}
+      # pre-release（版本带 - 后缀，如 beta/rc）时把 release 标为 GitHub Prerelease，
+      # 让 Release 页显示橙色 PRE-RELEASE 徽章。幂等，矩阵各组合重复执行无害。
+      - name: 标记 pre-release 徽章
+        shell: bash
+        run: |
+          TAG="${{ needs.release-please.outputs.tag_name }}"
+          if echo "$TAG" | grep -q '-'; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease || echo "::warning::标记 prerelease 失败（可能发布并发问题，可稍后手动）"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Release 合并后，把工作区新版本号自动写回 Cargo.lock 并提交
   # （release-please 只会 bump Cargo.toml / package.json，Cargo.lock 需要 cargo 同步）
