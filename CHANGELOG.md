@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.6.2-beta.1...v0.6.3-beta.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* 更新 commitlint 配置，添加 scope-enum 规则 ([aea7395](https://github.com/pengjiaxusz/pengj-templates/commit/aea7395f952405edefc460287b13076735cb6eb0))
+
 ## [0.6.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.6.1-beta.1...v0.6.2-beta.1) (2026-08-23)
 
 
