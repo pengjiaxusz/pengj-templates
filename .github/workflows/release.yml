@@ -202,7 +202,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: 生成工作区 resolve 并同步自版本号到 Cargo.lock
         run: |
-          cargo update -w --workspace
+          cargo update --workspace
           git status --porcelain
       - name: 提交并推送 Cargo.lock 同步
         run: |
