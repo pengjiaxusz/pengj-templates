@@ -47,6 +47,11 @@ cargo run -p pengj-cli -- update --dir ./my-app                # 同步模板更
     - 覆盖 Windows x64/arm64、Linux x86_64/arm64、macOS arm64/x86_64（arm 用 GitHub 原生 arm64 runner 构建）。
     - 安装包：Windows `_windows-<arch>.msi` / `-setup.exe`、Linux `_linux-<arch>.deb` / `.AppImage`、macOS `_macos-<arch>.dmg`。
     - 每组合一个**便携版 zip** `pengj-templates_<版本>_<os>-<arch>_portable.zip`，同时含 GUI + CLI（CLI 命名 `pengj-templates-cli`）。
+  - **全自动发布**：`auto-merge` job 在 release-please 创建 Release PR 后用 PAT 自动合并（无需手动），合并即触发上文构建。
+  - **beta/preview 分阶段**：release-please 原生支持用 commit footer 指定预发布号并自动递增：
+    - 切到某预发布号：正常提交时在其描述加 `Release-As: 0.5.0-beta.1`、`0.5.0-rc.1`、`0.5.0-preview.1` 等；
+    - 之后它会在同阶段自动 +1（`beta.1`→`beta.2`），GitHub Release 会自动标为 **Prerelease**；
+    - 要回到正式版，再提交 `Release-As: 0.5.0` 即可。
   - 版本号方案（release-please 规则）：`feat`→minor、`fix`→patch、`BREAKING CHANGE`→major（`0.x` 阶段因 `bump-minor-pre-major=true`，BREAKING 只升 minor 而不跳 major；`feat` 在 `0.x` 也仍升 minor）。
 
 `rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。

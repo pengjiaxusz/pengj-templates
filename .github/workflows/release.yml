@@ -213,3 +213,27 @@ jobs:
             git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "chore: 同步 Cargo.lock 自版本"
             git push origin HEAD:main
           fi
+
+  # 全自动：release-please 创建了 Release PR 时，用 PAT 自动合并，并触发后续构建
+  # 关键：用 RELEASE_PLEASE_TOKEN 合并（而非 GITHUB_TOKEN），否则合并不会触发 build workflow。
+  auto-merge:
+    needs: release-please
+    # release_created == 'false' 表示本轮只创建/更新了 Release PR（尚未发布），需要自动合并
+    if: ${{ needs.release-please.outputs.release_created == 'false' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: 查找并自动合并 release-please 的 Release PR
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          PRS=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --json number,headRefName --jq '.[] | select(.headRefName == "release-please--branches--main") | .number' 2>/dev/null)
+          if [ -z "$PRS" ]; then
+            echo "没有待合并的 Release PR，跳过"; exit 0
+          fi
+          for N in $PRS; do
+            echo "自动合并 Release PR #$N ..."
+            # --admin 用 PAT 强合（main 无分支保护时也能直接合），squash 保持历史干净
+            gh pr merge "$N" --repo "$GITHUB_REPOSITORY" --squash --admin || echo "::warning::PR #$N 自动合并失败"
+          done
