@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.1...v0.2.2) (2026-08-23)
+
+
+### Bug Fixes
+
+* release GUI 构建升级到 Node 24 ([f343341](https://github.com/pengjiaxusz/pengj-templates/commit/f3433412429590c8de6e7a60e244884bfe12d782))
+
 ## [0.2.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.0...v0.2.1) (2026-08-23)
 
 
