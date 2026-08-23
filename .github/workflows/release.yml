@@ -55,8 +55,9 @@ jobs:
       - name: 打包压缩包
         shell: bash
         run: |
-          cd target/release
-          tar -czf "$GITHUB_WORKSPACE/${{ matrix.archive }}" "pengj${{ matrix.ext }}"
+          cd "$GITHUB_WORKSPACE"
+          # 用相对路径输出：Windows 上绝对路径 "D:\..." 会被 tar 当成 SSH 主机
+          tar -czf "${{ matrix.archive }}" -C target/release "pengj${{ matrix.ext }}"
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
@@ -76,9 +77,8 @@ jobs:
           ref: ${{ needs.release-please.outputs.tag_name }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # 不指定 version，让 pnpm read packageManager（package.json: pnpm@11.6.0）
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
