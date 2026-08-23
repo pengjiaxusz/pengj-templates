@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.6...v0.2.7) (2026-08-23)
+
+
+### Bug Fixes
+
+* GUI 命名为 pengj-templates 而非 pengj-app ([6b3848a](https://github.com/pengjiaxusz/pengj-templates/commit/6b3848a93332c4bfc653d85d179407367535900a))
+
 ## [0.2.6](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.5...v0.2.6) (2026-08-23)
 
 
