@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm --dir crates/app dev",
     "devUrl": "http://localhost:43999",
-    "beforeBuildCommand": "pnpm --filter pengj-app build",
+    "beforeBuildCommand": "pnpm --filter pengj-templates build",
     "frontendDist": "../dist"
   },
   "app": {

@@ -2275,20 +2275,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "pengj-app"
-version = "0.2.5"
-dependencies = [
- "pengj-core",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
-]
-
-[[package]]
 name = "pengj-cli"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -2298,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "pengj-core"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "minijinja",
  "serde",
@@ -2306,6 +2294,18 @@ dependencies = [
  "sha2",
  "thiserror 2.0.20",
  "toml 0.8.2",
+]
+
+[[package]]
+name = "pengj-templates"
+version = "0.2.6"
+dependencies = [
+ "pengj-core",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
 ]
 
 [[package]]
