@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.2...v0.2.3) (2026-08-23)
+
+
+### Bug Fixes
+
+* tauri 构建/开发命令改为 workspace 感知 ([b661efb](https://github.com/pengjiaxusz/pengj-templates/commit/b661efb0e7b0b5eb45ae4664d1fe4272a2c5fbfe))
+
 ## [0.2.2](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.1...v0.2.2) (2026-08-23)
 
 
