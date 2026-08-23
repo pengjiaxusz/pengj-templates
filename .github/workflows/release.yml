@@ -26,153 +26,188 @@ jobs:
           config-file: .github/release-please-config.json
           manifest-file: .github/release-please-manifest.json
 
-  # Tauri GUI（Linux）：deb 安装包 + 便携版（GUI + CLI）
-  build-gui-linux:
+  # Tauri GUI + CLI 全平台矩阵构建：Windows/Linux/macOS × x64/arm64
+  # 产物命名统一带「系统-架构」，Release 页一眼可辨；便携版含 GUI + CLI。
+  build-gui:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            runner: windows-latest
+            os: windows
+            arch: x86_64
+            rust_target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+          - id: windows-arm64
+            runner: windows-11-arm
+            os: windows
+            arch: arm64
+            rust_target: aarch64-pc-windows-msvc
+            bundles: msi,nsis
+          - id: linux-x64
+            runner: ubuntu-latest
+            os: linux
+            arch: x86_64
+            rust_target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+          - id: linux-arm64
+            runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+            bundles: deb,appimage
+          - id: macos-arm64
+            runner: macos-latest
+            os: macos
+            arch: arm64
+            rust_target: aarch64-apple-darwin
+            bundles: dmg
+          - id: macos-x64
+            # Apple Silicon runner 上交叉编译 x86_64（Tauri 原生支持 --target）
+            runner: macos-latest
+            os: macos
+            arch: x86_64
+            rust_target: x86_64-apple-darwin
+            bundles: dmg
+    runs-on: ${{ matrix.runner }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RUST_TARGET: ${{ matrix.rust_target }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
       - uses: dtolnay/rust-toolchain@stable
+      - name: 添加 Rust 目标
+        run: rustup target add ${{ matrix.rust_target }}
       - uses: Swatinem/rust-cache@v2
-      - name: 安装 Tauri 系统依赖
+      # ===== 系统依赖 =====
+      - name: 安装 Tauri Linux 依赖
+        if: matrix.os == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      # ===== 前端依赖 =====
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           # pnpm 11 需 Node >= 22.13
           node-version: 24
           cache: pnpm
-      - name: 安装依赖
+      - name: 安装前端依赖
         run: pnpm install
-      - name: 构建 Tauri GUI（deb 安装包）并附加到 Release
-        uses: tauri-apps/tauri-action@v0
-        with:
-          args: --bundles deb
-          tagName: ${{ needs.release-please.outputs.tag_name }}
-          releaseName: ${{ needs.release-please.outputs.tag_name }}
-          releaseDraft: false
-          prerelease: false
-      - name: 构建 CLI（供便携版）
-        run: cargo build --release -p pengj-cli
-      - name: 打包 Linux 便携版（GUI + CLI）
+      - name: 构建 Tauri GUI
+        run: pnpm --dir crates/app tauri build --target ${{ matrix.rust_target }} --bundles ${{ matrix.bundles }}
+      # ===== 构建 CLI（供便携版）=====
+      - name: 构建 CLI
+        run: cargo build --release -p pengj-cli --target ${{ matrix.rust_target }}
+      # ===== 重命名所有产物为「系统-架构」显式命名 =====
+      - name: 重命名 GUI / CLI 产物
         shell: bash
         run: |
+          set -e
           VER=$(echo "${{ needs.release-please.outputs.tag_name }}" | sed 's/^v//')
-          cd "$GITHUB_WORKSPACE/target/release"
-          mv pengj pengj-templates-cli
-          PKG="pengj-templates_${VER}_linux-x64_portable.zip"
-          zip "../../$PKG" pengj-templates pengj-templates-cli
-          echo "PKG=$PKG" >> "$GITHUB_ENV"
-      - name: 上传 Linux 便携版
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ env.PKG }}
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
-
-  # Tauri GUI（macOS）：dmg 安装包 + 便携版（GUI.app + CLI）
-  build-gui-macos:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: macos-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          # pnpm 11 需 Node >= 22.13
-          node-version: 24
-          cache: pnpm
-      - name: 安装依赖
-        run: pnpm install
-      - name: 构建 Tauri GUI（dmg）并附加到 Release
-        uses: tauri-apps/tauri-action@v0
-        with:
-          args: --bundles dmg
-          tagName: ${{ needs.release-please.outputs.tag_name }}
-          releaseName: ${{ needs.release-please.outputs.tag_name }}
-          releaseDraft: false
-          prerelease: false
-      - name: 构建 CLI（供便携版）
-        run: cargo build --release -p pengj-cli
-      - name: 打包 macOS 便携版（GUI.app + CLI）
-        shell: bash
+          R="$GITHUB_WORKSPACE/target/${{ matrix.rust_target }}/release"
+          B="$R/bundle"
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "REL_DIR=$R" >> "$GITHUB_ENV"
+          # 可执行文件扩展名（Windows 带 .exe）
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows" ]; then EXT=".exe"; fi
+          # CLI 统一命名 pengj-templates-cli
+          mv -f "$R/pengj${EXT}" "$R/pengj-templates-cli${EXT}"
+          # 安装包重命名（原始名形如 pengj-templates_0.x.x_x64-setup.exe）
+          case "${{ matrix.os }}" in
+            windows)
+              find "$B/msi"    -name '*.msi'   -exec bash -c '
+                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_windows-${{ matrix.arch }}.msi"; done
+              ' _ {} +
+              find "$B/nsis"   -name '*-setup.exe' -exec bash -c '
+                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_windows-${{ matrix.arch }}-setup.exe"; done
+              ' _ {} +
+              ;;
+            linux)
+              find "$B/deb"    -name '*.deb' -exec bash -c '
+                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_linux-${{ matrix.arch }}.deb"; done
+              ' _ {} +
+              find "$B/appimage" -name '*.AppImage' -exec bash -c '
+                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_linux-${{ matrix.arch }}.AppImage"; done
+              ' _ {} +
+              ;;
+            macos)
+              find "$B/dmg"    -name '*.dmg' -exec bash -c '
+                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_macos-${{ matrix.arch }}.dmg"; done
+              ' _ {} +
+              ;;
+          esac
+      # ===== 便携版 zip（GUI + CLI）=====
+      # Windows 用 PowerShell；Linux/macOS 用 bash zip
+      - name: 打包便携版（Windows）
+        if: matrix.os == 'windows'
+        shell: pwsh
         run: |
-          VER=$(echo "${{ needs.release-please.outputs.tag_name }}" | sed 's/^v//')
-          cd "$GITHUB_WORKSPACE/target/release"
-          mv pengj pengj-templates-cli
-          PKG="pengj-templates_${VER}_macos-aarch64_portable.zip"
-          # 动态定位 .app（tauri 的 bundle 目录随 bundle 类型/架构变化）
-          APP=$(find bundle -type d -name "*.app" 2>/dev/null | head -n1)
-          if [ -n "$APP" ]; then
-            zip -r "../../$PKG" "$APP" pengj-templates-cli
-          else
-            echo "::warning::未找到 macOS .app，便携包仅含 CLI"
-            zip "../../$PKG" pengj-templates-cli
-          fi
-          echo "PKG=$PKG" >> "$GITHUB_ENV"
-      - name: 上传 macOS 便携版
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ env.PKG }}
-          tag_name: ${{ needs.release-please.outputs.tag_name }}
-
-  # Tauri GUI（Windows）：安装包 msi/exe + 便携版（GUI + CLI）
-  build-gui-windows:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: windows-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      # 不指定 version，让 pnpm read packageManager（package.json: pnpm@11.6.0）
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          # pnpm 11 需 Node >= 22.13
-          node-version: 24
-          cache: pnpm
-      - name: 安装依赖
-        run: pnpm install
-      - name: 构建 Tauri GUI（安装包）并附加到 Release
-        uses: tauri-apps/tauri-action@v0
-        with:
-          tagName: ${{ needs.release-please.outputs.tag_name }}
-          releaseName: ${{ needs.release-please.outputs.tag_name }}
-          releaseDraft: false
-          prerelease: false
-      - name: 构建 CLI（供便携版）
-        run: cargo build --release -p pengj-cli
-      - name: 打包 Windows 便携版（GUI + CLI）
-        run: |
-          $VER = ("${{ needs.release-please.outputs.tag_name }}" -replace '^v','')
-          Set-Location "$env:GITHUB_WORKSPACE\target\release"
-          Move-Item -Force pengj.exe pengj-templates-cli.exe
-          # GUI 可执行文件按 Cargo 包名生成（非 productName），动态查找
-          $gui = (Get-ChildItem -Filter '*.exe' | Where-Object { $_.Name -ne 'pengj-templates-cli.exe' } | Select-Object -First 1)
-          if (-not $gui) { throw '未找到 GUI 可执行文件' }
-          $PKG = "pengj-templates_${VER}_windows-x64_portable.zip"
-          Compress-Archive -Path $gui.Name,'pengj-templates-cli.exe' -DestinationPath "$env:GITHUB_WORKSPACE\$PKG"
+          $VER = "$env:VER".Trim()
+          $R = "$env:REL_DIR"
+          $PKG = "pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.zip"
+          Compress-Archive -Path "$R\pengj-templates.exe","$R\pengj-templates-cli.exe" -DestinationPath "$env:GITHUB_WORKSPACE\$PKG" -Force
           "PKG=$PKG" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: 上传 Windows 便携版
+      - name: 打包便携版（Unix）
+        if: matrix.os != 'windows'
+        shell: bash
+        run: |
+          set -e
+          PKG="pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.zip"
+          echo "PKG=$PKG" >> "$GITHUB_ENV"
+          case "${{ matrix.os }}" in
+            linux)
+              (cd "$R" && zip -q "$GITHUB_WORKSPACE/$PKG" pengj-templates pengj-templates-cli)
+              ;;
+            macos)
+              APP=$(find "$R/bundle" -type d -name '*.app' 2>/dev/null | head -n1)
+              if [ -n "$APP" ]; then
+                # 以 .app 名打包到 zip
+                APPNAME=$(basename "$APP")
+                (cd "$(dirname "$APP")" && zip -q -r "$GITHUB_WORKSPACE/$PKG" "$APPNAME"; cd "$R" && zip -q "$GITHUB_WORKSPACE/$PKG" pengj-templates-cli)
+              else
+                echo "::warning::未找到 macOS .app，便携包仅含 CLI"
+                (cd "$R" && zip "$GITHUB_WORKSPACE/$PKG" pengj-templates-cli)
+              fi
+              ;;
+          esac
+      # ===== 上传安装包 + 便携版到 Release =====
+      - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.PKG }}
+          files: |
+            pengj-templates_${{ env.VER }}_${{ matrix.os }}-${{ matrix.arch }}*
           tag_name: ${{ needs.release-please.outputs.tag_name }}
+
+  # Release 合并后，把工作区新版本号自动写回 Cargo.lock 并提交
+  # （release-please 只会 bump Cargo.toml / package.json，Cargo.lock 需要 cargo 同步）
+  sync-lockfile:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 生成工作区 resolve 并同步自版本号到 Cargo.lock
+        run: |
+          cargo update -w --workspace
+          git status --porcelain
+      - name: 提交并推送 Cargo.lock 同步
+        run: |
+          git add Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Cargo.lock 无变化，跳过提交"
+          else
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "chore: 同步 Cargo.lock 自版本"
+            git push origin HEAD:main
+          fi
