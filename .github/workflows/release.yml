@@ -19,9 +19,10 @@ jobs:
       patch: ${{ steps.release.outputs.patch }}
     steps:
       - id: release
-        uses: google-github-actions/release-please-action@v4
+        # 使用 googleapis 官方 action（不再弃用）。token 优先用 PAT，缺省回落 GITHUB_TOKEN。
+        uses: googleapis/release-please-action@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: .github/release-please-config.json
           manifest-file: .github/release-please-manifest.json
 
