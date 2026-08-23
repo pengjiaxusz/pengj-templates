@@ -99,8 +99,11 @@ jobs:
           $VER = ("${{ needs.release-please.outputs.tag_name }}" -replace '^v','')
           Set-Location "$env:GITHUB_WORKSPACE\target\release"
           Move-Item -Force pengj.exe pengj-templates-cli.exe
+          # GUI 可执行文件按 Cargo 包名生成（非 productName），动态查找
+          $gui = (Get-ChildItem -Filter '*.exe' | Where-Object { $_.Name -ne 'pengj-templates-cli.exe' } | Select-Object -First 1)
+          if (-not $gui) { throw '未找到 GUI 可执行文件' }
           $PKG = "pengj-templates_${VER}_windows-x64_portable.zip"
-          Compress-Archive -Path pengj-templates.exe,pengj-templates-cli.exe -DestinationPath "$env:GITHUB_WORKSPACE\$PKG"
+          Compress-Archive -Path $gui.Name,'pengj-templates-cli.exe' -DestinationPath "$env:GITHUB_WORKSPACE\$PKG"
           "PKG=$PKG" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: 上传 Windows 便携版
         uses: softprops/action-gh-release@v2
