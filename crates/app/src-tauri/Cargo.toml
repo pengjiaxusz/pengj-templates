@@ -1,6 +1,6 @@
 [package]
 name = "pengj-app"
-version = "0.2.3"
+version = "0.2.4"
 description = "pengj-templates 桌面应用：分层模板生成与更新"
 authors = ["pengj"]
 edition = "2021"
