@@ -47,7 +47,7 @@ cargo run -p pengj-cli -- update --dir ./my-app                # 同步模板更
     - 覆盖 Windows x64/arm64、Linux x86_64/arm64、macOS arm64/x86_64（arm 用 GitHub 原生 arm64 runner 构建）。
     - 安装包：Windows `_windows-<arch>.msi` / `-setup.exe`、Linux `_linux-<arch>.deb` / `.AppImage`、macOS `_macos-<arch>.dmg`。
     - 每组合一个**便携版 zip** `pengj-templates_<版本>_<os>-<arch>_portable.zip`，同时含 GUI + CLI（CLI 命名 `pengj-templates-cli`）。
-  - 版本号方案（release-please 规则）：`feat`→minor、`fix`→patch、`BREAKING CHANGE`→major（`0.x` 阶段因 `bump-minor-pre-major=false`，BREAKING 只升 minor 而不升 major；`feat` 在 `0.x` 也仍升 minor）。
+  - 版本号方案（release-please 规则）：`feat`→minor、`fix`→patch、`BREAKING CHANGE`→major（`0.x` 阶段因 `bump-minor-pre-major=true`，BREAKING 只升 minor 而不跳 major；`feat` 在 `0.x` 也仍升 minor）。
 
 `rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。
 
