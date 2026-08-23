@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.4.1...v0.5.0) (2026-08-23)
+
+
+### Features
+
+* 全自动合并 Release PR 与 beta/preview 分阶段说明 ([198cb33](https://github.com/pengjiaxusz/pengj-templates/commit/198cb33e011e6cc1314777adbf1106d4badad082))
+
+
+### Bug Fixes
+
+* auto-merge 改为步骤内检测 Release PR 而非 job 级 if ([b8c6bd2](https://github.com/pengjiaxusz/pengj-templates/commit/b8c6bd205e39a7147e90d8942e46bc9eb4932757))
+
 ## [0.4.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.4.0...v0.4.1) (2026-08-23)
 
 
