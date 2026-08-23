@@ -43,7 +43,7 @@ cargo run -p pengj-cli -- update --dir ./my-app                # 同步模板更
 - **CI**（`.github/workflows/ci.yml`）：推 `main` 或 PR 时跑 `cargo fmt --check`、`clippy -D warnings`、build、test。
 - **自动版本号 + Release**（`.github/workflows/release.yml`）：
   - `release-please` 读 conventional commits 自动 bump semver，多人改版本号到 root `Cargo.toml`、`crates/app` Cargo/package.json、`tauri.conf.json`，并创建 release PR；合并后打 tag、建 GitHub Release。
-  - 有 `release` 时自动构建发布：每平台一个**便携版 zip** `pengj-templates_<版本>_<平台>-x64_portable.zip`（含 CLI，命名 `pengj-templates-cli`；Windows 便携版同时含 GUI 可执行文件 + CLI），另附 Windows 安装包 `setup.exe` / `.msi`。Linux/macOS GUI 安装包需额外系统依赖，后续按需加。
+  - 有 `release` 时自动构建发布：每平台一个**便携版 zip** `pengj-templates_<版本>_<平台>-x64_portable.zip`（同时含 GUI + CLI，CLI 命名 `pengj-templates-cli`）；另附各平台安装包（Windows `setup.exe`/`.msi`、Linux `.deb`、macOS `.dmg`）。
   - 版本号方案：`feat`→minor、`fix`→patch、`BREAKING CHANGE`→major；`bump-minor-pre-major=false` 让 `0.x` 阶段 `feat` 也只 +patch。
 
 `rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。
