@@ -96,7 +96,7 @@ jobs:
         run: cargo build --release -p pengj-cli
       - name: 打包 Windows 便携版（GUI + CLI）
         run: |
-          VER = ("${{ needs.release-please.outputs.tag_name }}" -replace '^v','')
+          $VER = ("${{ needs.release-please.outputs.tag_name }}" -replace '^v','')
           Set-Location "$env:GITHUB_WORKSPACE\target\release"
           Move-Item -Force pengj.exe pengj-templates-cli.exe
           $PKG = "pengj-templates_${VER}_windows-x64_portable.zip"
