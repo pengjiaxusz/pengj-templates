@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.4](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.3...v0.2.4) (2026-08-23)
+
+
+### Bug Fixes
+
+* 发布产物改为便携版 zip（GUI+CLI，CLI 命名 pengj-templates-cli） ([3e0a061](https://github.com/pengjiaxusz/pengj-templates/commit/3e0a061d4ec8e4595b2324091b7dd9033868f1b9))
+
 ## [0.2.3](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.2...v0.2.3) (2026-08-23)
 
 
