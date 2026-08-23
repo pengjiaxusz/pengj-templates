@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.5.0...v0.6.0-beta.1) (2026-08-23)
+
+
+### Documentation
+
+* **agent:** commit 技能支持切发 beta/preview/rc ([6fad804](https://github.com/pengjiaxusz/pengj-templates/commit/6fad8045867430825092e71892ee112a02c217f1))
+
 ## [0.5.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.4.1...v0.5.0) (2026-08-23)
 
 
