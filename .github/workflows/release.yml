@@ -99,6 +99,19 @@ jobs:
           cache: pnpm
       - name: 安装前端依赖
         run: pnpm install
+      # Windows 的 MSI/NSIS 只接受 x.y.z 纯数字版本号，
+      # 若 tag 是 pre-release（如 0.6.0-beta.1），剥离后缀避免打包报错；不影响产物文件名/release 名。
+      - name: Windows 剥离版本号 pre-release 后缀
+        if: matrix.os == 'windows'
+        run: |
+          node -e "
+            const fs=require('fs');
+            const p='crates/app/src-tauri/tauri.conf.json';
+            const c=JSON.parse(fs.readFileSync(p,'utf8'));
+            c.version=c.version.replace(/-[^.]+(?:\.[0-9]+)?$/,'');
+            fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n');
+            console.log('Windows 打包版本号:', c.version);
+          "
       - name: 构建 Tauri GUI
         run: pnpm --dir crates/app tauri build --target ${{ matrix.rust_target }} --bundles ${{ matrix.bundles }}
       # ===== 构建 CLI（供便携版）=====
