@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.5...v0.2.6) (2026-08-23)
+
+
+### Bug Fixes
+
+* Windows 便携包动态定位 GUI 可执行文件 ([c300d91](https://github.com/pengjiaxusz/pengj-templates/commit/c300d91e0daba063f3c8ea1452661e7c69fb3558))
+
 ## [0.2.5](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.4...v0.2.5) (2026-08-23)
 
 
