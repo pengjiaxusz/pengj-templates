@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Context;
@@ -109,7 +110,7 @@ fn cmd_list_layers(templates: &pengj_core::Templates) -> anyhow::Result<()> {
         println!("(没有可用层)");
         return Ok(());
     }
-    println!("{:<10} {:<16} {:<40} {}", "ID", "名称", "描述", "文件数");
+    println!("{:<10} {:<16} {:<40} 文件数", "ID", "名称", "描述");
     for l in layers {
         let deps = if l.depends.is_empty() {
             "-".to_string()
@@ -124,6 +125,7 @@ fn cmd_list_layers(templates: &pengj_core::Templates) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_create(
     templates: &pengj_core::Templates,
     name: &str,
@@ -135,7 +137,7 @@ fn cmd_create(
     chinese: bool,
     skill_lang: &str,
     commit_zh: bool,
-    output: &PathBuf,
+    output: &Path,
 ) -> anyhow::Result<()> {
     if layers.is_empty() {
         anyhow::bail!("至少需要选择一个层，例如 --layers rust");
@@ -176,7 +178,7 @@ fn cmd_create(
     Ok(())
 }
 
-fn cmd_update(templates: &pengj_core::Templates, dir: &PathBuf) -> anyhow::Result<()> {
+fn cmd_update(templates: &pengj_core::Templates, dir: &Path) -> anyhow::Result<()> {
     let report = pengj_core::update_project(templates, dir).context("更新项目失败")?;
     println!(
         "项目: {}（层: {}）",
