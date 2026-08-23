@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.0...v0.2.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* 修复 release 构建流程（pnpm 版本冲突 + windows tar 打包） ([d758ff6](https://github.com/pengjiaxusz/pengj-templates/commit/d758ff696b60559257b8fe9cee4bd133a9cdaa67))
+
 ## [0.2.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.1.0...v0.2.0) (2026-08-23)
 
 
