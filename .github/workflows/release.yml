@@ -216,10 +216,10 @@ jobs:
 
   # 全自动：release-please 创建了 Release PR 时，用 PAT 自动合并，并触发后续构建
   # 关键：用 RELEASE_PLEASE_TOKEN 合并（而非 GITHUB_TOKEN），否则合并不会触发 build workflow。
+  # 注意：不要用 release_created == 'false' 做 job 级 if（创建 PR 时该输出为空，条件不命中），
+  #       改为在步骤内用 gh pr list 检测是否存在待合并的 Release PR。
   auto-merge:
     needs: release-please
-    # release_created == 'false' 表示本轮只创建/更新了 Release PR（尚未发布），需要自动合并
-    if: ${{ needs.release-please.outputs.release_created == 'false' }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
