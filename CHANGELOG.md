@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.4...v0.2.5) (2026-08-23)
+
+
+### Bug Fixes
+
+* Windows 便携打包 PowerScript 变量缺 \$ 前缀 ([0999e9c](https://github.com/pengjiaxusz/pengj-templates/commit/0999e9c1f1ef1a6707908e6f4a71be12ebdea022))
+
 ## [0.2.4](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.3...v0.2.4) (2026-08-23)
 
 
