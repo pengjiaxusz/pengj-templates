@@ -4,9 +4,9 @@
   "version": "0.2.2",
   "identifier": "com.pengj.templates",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm --dir crates/app dev",
     "devUrl": "http://localhost:43999",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm --filter pengj-app build",
     "frontendDist": "../dist"
   },
   "app": {
