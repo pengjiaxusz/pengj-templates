@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.6.0-beta.1...v0.6.1-beta.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* Windows 构建剥离 pre-release 版本号后缀 ([34d6398](https://github.com/pengjiaxusz/pengj-templates/commit/34d639806a07104628753bde727b95526c2fb954))
+
 ## [0.6.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.5.0...v0.6.0-beta.1) (2026-08-23)
 
 
