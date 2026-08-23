@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.4.0...v0.4.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* 修正 sync-lockfile 的 cargo update 参数重复 ([b67adc0](https://github.com/pengjiaxusz/pengj-templates/commit/b67adc06184b1e081e2f83c1cfa3b641dd08fb0a))
+
 ## [0.4.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.3.0...v0.4.0) (2026-08-23)
 
 
