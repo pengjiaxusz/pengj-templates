@@ -2276,7 +2276,7 @@ dependencies = [
 
 [[package]]
 name = "pengj-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "pengj-core",
  "serde",
@@ -2288,7 +2288,7 @@ dependencies = [
 
 [[package]]
 name = "pengj-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2298,7 +2298,7 @@ dependencies = [
 
 [[package]]
 name = "pengj-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "minijinja",
  "serde",
