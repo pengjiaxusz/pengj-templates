@@ -38,6 +38,14 @@ cargo run -p pengj-cli -- update --dir ./my-app                # 同步模板更
 
 `agent` 层的技能选项（选 agent 层时生效）：`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `commit` 技能。三个中文概念互相独立：**中文编程**（代码标识符）、**技能用中文写**（文档语言，`skill_lang`）、**提交信息是中文**（提交信息语言，`commit_zh`）。
 
+## CI / Release
+
+- **CI**（`.github/workflows/ci.yml`）：推 `main` 或 PR 时跑 `cargo fmt --check`、`clippy -D warnings`、build、test。
+- **自动版本号 + Release**（`.github/workflows/release.yml`）：
+  - `release-please` 读 conventional commits 自动 bump semver，多人改版本号到 root `Cargo.toml`、`crates/app` Cargo/package.json、`tauri.conf.json`，并创建 release PR；合并后打 tag、建 GitHub Release。
+  - 有 `release` 时自动构建发布：CLI 二进制（Windows/Linux/macOS，打包 `pengj-<os>-x64.tar.gz`）与 Tauri GUI 安装包（Windows `.msi`/`.exe`）。Linux/macOS GUI 安装包需额外系统依赖，后续按需加。
+  - 版本号方案：`feat`→minor、`fix`→patch、`BREAKING CHANGE`→major；`0.x` 期间 `feat` 也+patch（`bump-minor-pre-major`）。
+
 `rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。
 
 `package.json` 走**结构化并集合并**：生成时各层并集；更新时以用户现有文件为底，模板新增的依赖/脚本并入（同名依赖模板优先），用户自己加的库与 name/version 等字段保留不动。模板中依赖用 `latest`，用户 `pnpm install` 时自动拉最新。`layer.toml` 里用 `update_ignore` 声明黑名单文件。

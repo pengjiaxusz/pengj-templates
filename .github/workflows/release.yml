@@ -1,0 +1,93 @@
+name: release-please
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # 自动版本号 + 生成 release PR / 合并后打 tag 建 release
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      major: ${{ steps.release.outputs.major }}
+      minor: ${{ steps.release.outputs.minor }}
+      patch: ${{ steps.release.outputs.patch }}
+    steps:
+      - id: release
+        uses: google-github-actions/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: .github/release-please-config.json
+          manifest-file: .github/release-please-manifest.json
+
+  # CLI 二进制 + 压缩包（Windows / Linux / macOS）
+  build-cli:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            ext: .exe
+            archive: pengj-windows-x64.tar.gz
+          - os: ubuntu-latest
+            ext: ""
+            archive: pengj-linux-x64.tar.gz
+          - os: macos-latest
+            ext: ""
+            archive: pengj-macos-x64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: 构建 CLI
+        run: cargo build --release -p pengj-cli
+      - name: 打包压缩包
+        shell: bash
+        run: |
+          cd target/release
+          tar -czf "$GITHUB_WORKSPACE/${{ matrix.archive }}" "pengj${{ matrix.ext }}"
+      - name: 上传到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.archive }}
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+
+  # Tauri GUI 安装包（Windows：msi/exe）
+  build-gui-windows:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: 安装依赖
+        run: pnpm install
+      - name: 构建 Tauri GUI 并附加到 Release
+        uses: tauri-apps/tauri-action@v0
+        with:
+          tagName: ${{ needs.release-please.outputs.tag_name }}
+          releaseName: ${{ needs.release-please.outputs.tag_name }}
+          releaseDraft: false
+          prerelease: false
