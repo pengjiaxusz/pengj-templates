@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.3.0...v0.4.0) (2026-08-23)
+
+
+### Features
+
+* 支持 Win/Linux/macOS arm64 并统一多架构产物命名 ([e4493ca](https://github.com/pengjiaxusz/pengj-templates/commit/e4493caecba86eb2f05c1aae25c7773e1e6ae6b7))
+
+
+### Bug Fixes
+
+* macOS 便携包动态定位并打包 .app ([efe016d](https://github.com/pengjiaxusz/pengj-templates/commit/efe016d6906a692bf793d4665743b4d607ee6728))
+* 修正多架构便携打包步骤路径变量 ([216d66b](https://github.com/pengjiaxusz/pengj-templates/commit/216d66b49dd29a2c58b33ca016f225a37f4946e5))
+
 ## [0.3.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.7...v0.3.0) (2026-08-23)
 
 
