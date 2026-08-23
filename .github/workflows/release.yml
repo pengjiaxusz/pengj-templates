@@ -26,7 +26,7 @@ jobs:
           config-file: .github/release-please-config.json
           manifest-file: .github/release-please-manifest.json
 
-  # CLI 二进制 + 压缩包（Windows / Linux / macOS）
+  # CLI 便携版压缩包（Linux / macOS；Windows 并入 GUI 便携包，见 build-gui-windows）
   build-cli:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
@@ -34,15 +34,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            ext: .exe
-            archive: pengj-windows-x64.tar.gz
           - os: ubuntu-latest
-            ext: ""
-            archive: pengj-linux-x64.tar.gz
+            short: linux
           - os: macos-latest
-            ext: ""
-            archive: pengj-macos-x64.tar.gz
+            short: macos
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -52,19 +47,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: 构建 CLI
         run: cargo build --release -p pengj-cli
-      - name: 打包压缩包
+      - name: 打包便携版压缩包（zip，CLI 命名 pengj-templates-cli）
         shell: bash
         run: |
+          VER=$(echo "${{ needs.release-please.outputs.tag_name }}" | sed 's/^v//')
           cd "$GITHUB_WORKSPACE"
-          # 用相对路径输出：Windows 上绝对路径 "D:\..." 会被 tar 当成 SSH 主机
-          tar -czf "${{ matrix.archive }}" -C target/release "pengj${{ matrix.ext }}"
+          mv "target/release/pengj" "target/release/pengj-templates-cli"
+          cd target/release
+          PKG="pengj-templates_${VER}_${{ matrix.short }}-x64_portable.zip"
+          zip "../../$PKG" "pengj-templates-cli"
+          echo "PKG=$PKG" >> "$GITHUB_ENV"
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.archive }}
+          files: ${{ env.PKG }}
           tag_name: ${{ needs.release-please.outputs.tag_name }}
 
-  # Tauri GUI 安装包（Windows：msi/exe）
+  # Tauri GUI（Windows）：安装包 msi/exe + 便携版（GUI + CLI）
   build-gui-windows:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
@@ -86,10 +85,25 @@ jobs:
           cache: pnpm
       - name: 安装依赖
         run: pnpm install
-      - name: 构建 Tauri GUI 并附加到 Release
+      - name: 构建 Tauri GUI（安装包）并附加到 Release
         uses: tauri-apps/tauri-action@v0
         with:
           tagName: ${{ needs.release-please.outputs.tag_name }}
           releaseName: ${{ needs.release-please.outputs.tag_name }}
           releaseDraft: false
           prerelease: false
+      - name: 构建 CLI（供便携版）
+        run: cargo build --release -p pengj-cli
+      - name: 打包 Windows 便携版（GUI + CLI）
+        run: |
+          VER = ("${{ needs.release-please.outputs.tag_name }}" -replace '^v','')
+          Set-Location "$env:GITHUB_WORKSPACE\target\release"
+          Move-Item -Force pengj.exe pengj-templates-cli.exe
+          $PKG = "pengj-templates_${VER}_windows-x64_portable.zip"
+          Compress-Archive -Path pengj-templates.exe,pengj-templates-cli.exe -DestinationPath "$env:GITHUB_WORKSPACE\$PKG"
+          "PKG=$PKG" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: 上传 Windows 便携版
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PKG }}
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
