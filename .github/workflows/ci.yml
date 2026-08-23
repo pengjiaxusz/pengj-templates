@@ -1,12 +1,65 @@
 name: ci
+
 on:
   push:
     branches: [main]
+    # 纯文档 / 非构建相关改动直接跳过整个 CI（README、docs、.agents 技能文档等）。
+    # 注意：templates/** 是编译期嵌入二进制的，不在此列表，改了必然触发。
+    paths-ignore: &docs_only
+      - '*.md'
+      - 'docs/**'
+      - '.agents/**'
   pull_request:
+    paths-ignore: *docs_only
+
+permissions:
+  contents: read
+
+# 同一分支/PR 连续推送时，自动取消上一次还没跑完的 CI，避免浪费额度
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  rust:
+  # 先判定本次提交改了什么，只跑对应模块的检查：
+  #   rust      → 引擎/CLI/Tauri/模板/构建配置
+  #   frontend  → Tauri GUI 的 React 前端
+  # 两者都没改（例如只动了 release-please 配置）→ 本 job 直接通过，下面两个 job 跳过。
+  changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'crates/core/**'
+              - 'crates/cli/**'
+              - 'crates/app/src-tauri/**'
+              - 'templates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/*.yml'
+            frontend:
+              - 'crates/app/src/**'
+              - 'crates/app/index.html'
+              - 'crates/app/package.json'
+              - 'crates/app/vite.config.*'
+              - 'crates/app/tsconfig*.json'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+
+  rust:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -26,7 +79,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      # Rust 编译缓存（含失败缓存，修复 commit 也能吃到）
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       - name: 格式检查
         run: cargo fmt --check
       - name: Clippy（warnings 视为错误）
@@ -35,3 +91,20 @@ jobs:
         run: cargo build --workspace
       - name: 测试
         run: cargo test --workspace
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: 安装前端依赖
+        run: pnpm install --frozen-lockfile
+      - name: 类型检查 + 前端构建
+        run: pnpm --dir crates/app build

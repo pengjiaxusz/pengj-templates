@@ -2,6 +2,13 @@ name: release-please
 on:
   push:
     branches: [main]
+    # 纯文档 / 非构建相关改动不触发发布流程（与 ci.yml 的忽略列表保持一致）。
+    # release-please 只响应 feat/fix/BREAKING 等提交；若要用 Release-As 强制发版，
+    # 请把它写在改动代码/模板/配置的提交里（纯文档提交不会触发本 workflow）。
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.agents/**'
 
 permissions:
   contents: write
@@ -11,6 +18,7 @@ jobs:
   # 自动版本号 + 生成 release PR / 合并后打 tag 建 release
   release-please:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -73,6 +81,7 @@ jobs:
             rust_target: x86_64-apple-darwin
             bundles: dmg
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RUST_TARGET: ${{ matrix.rust_target }}
@@ -83,7 +92,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: 添加 Rust 目标
         run: rustup target add ${{ matrix.rust_target }}
+      # Rust 编译缓存（含失败缓存：打包中途失败时，修复后的重跑也能吃到缓存）
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       # ===== 系统依赖 =====
       - name: 安装 Tauri Linux 依赖
         if: matrix.os == 'linux'
@@ -217,6 +229,7 @@ jobs:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
@@ -245,6 +258,7 @@ jobs:
   auto-merge:
     needs: release-please
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       pull-requests: write
     steps:

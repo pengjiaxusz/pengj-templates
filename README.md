@@ -40,8 +40,12 @@ cargo run -p pengj-cli -- update --dir ./my-app                # 同步模板更
 
 ## CI / Release
 
-- **CI**（`.github/workflows/ci.yml`）：推 `main` 或 PR 时跑 `cargo fmt --check`、`clippy -D warnings`、build、test。
+- **CI**（`.github/workflows/ci.yml`）：
+  - 按变更自动分流：改动 Rust/模板/构建配置 → 跑 `cargo fmt --check`、`clippy -D warnings`、build、test；改动前端（`crates/app/src` 等）→ 跑类型检查 + 前端构建（tsc + vite）。
+  - **纯文档改动自动跳过**（根目录 `*.md`、`docs/**`、`.agents/**`），不占 CI 额度；同一分支/PR 连续推送会自动取消上一次未完成的运行。
+  - 缓存：Rust 编译缓存（rust-cache，含失败缓存）+ pnpm 依赖缓存。
 - **自动版本号 + Release**（`.github/workflows/release.yml`）：
+  - 纯文档改动（与 CI 相同的忽略列表）不触发本流程，只有改动代码/模板/配置时才跑。
   - `release-please` 读 conventional commits 自动 bump semver，多人改版本号到 root `Cargo.toml`、`crates/app` Cargo/package.json、`tauri.conf.json`，并创建 release PR；合并后打 tag、建 GitHub Release。发布后由 `sync-lockfile` job 自动把新版本号写回 `Cargo.lock` 并提交，无需手动同步。
   - 有 `release` 时自动构建发布。**产物命名统一带「系统-架构」**：`pengj-templates_<版本>_<os>-<arch>.<后缀>`。
     - 覆盖 Windows x64/arm64、Linux x86_64/arm64、macOS arm64/x86_64（arm 用 GitHub 原生 arm64 runner 构建）。
