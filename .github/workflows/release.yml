@@ -150,7 +150,8 @@ jobs:
         shell: pwsh
         run: |
           $VER = "$env:VER".Trim()
-          $R = "$env:REL_DIR"
+          # bash 与 pwsh 的 GITHUB_WORKSPACE 路径风格不同，必须用 WS 自行拼接
+          $R = "$env:GITHUB_WORKSPACE\target\${{ matrix.rust_target }}\release"
           $PKG = "pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.zip"
           Compress-Archive -Path "$R\pengj-templates.exe","$R\pengj-templates-cli.exe" -DestinationPath "$env:GITHUB_WORKSPACE\$PKG" -Force
           "PKG=$PKG" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -159,6 +160,7 @@ jobs:
         shell: bash
         run: |
           set -e
+          R="$REL_DIR"
           PKG="pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.zip"
           echo "PKG=$PKG" >> "$GITHUB_ENV"
           case "${{ matrix.os }}" in
