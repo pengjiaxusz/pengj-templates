@@ -30,7 +30,11 @@ fn load_templates(templates: &Option<PathBuf>) -> anyhow::Result<pengj_core::Tem
 #[derive(Subcommand)]
 enum Command {
     /// 列出所有可用层
-    ListLayers,
+    ListLayers {
+        /// 以 JSON 数组输出（供脚本消费）
+        #[arg(long)]
+        json: bool,
+    },
     /// 生成新项目（选层组合输出）
     Create {
         /// 项目名
@@ -75,7 +79,7 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let templates = load_templates(&cli.templates)?;
     match cli.command {
-        Command::ListLayers => cmd_list_layers(&templates),
+        Command::ListLayers { json } => cmd_list_layers(&templates, json),
         Command::Create {
             name,
             layers,
@@ -104,8 +108,12 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn cmd_list_layers(templates: &pengj_core::Templates) -> anyhow::Result<()> {
+fn cmd_list_layers(templates: &pengj_core::Templates, json: bool) -> anyhow::Result<()> {
     let layers = templates.list_layers().context("读取层列表失败")?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&layers)?);
+        return Ok(());
+    }
     if layers.is_empty() {
         println!("(没有可用层)");
         return Ok(());
