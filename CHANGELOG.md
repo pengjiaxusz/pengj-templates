@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.7...v0.3.0) (2026-08-23)
+
+
+### Features
+
+* 增加 Linux/macOS GUI 构建发布 ([0c9d2be](https://github.com/pengjiaxusz/pengj-templates/commit/0c9d2be90906efdc285fae06afa4e7e37d16ac26))
+
 ## [0.2.7](https://github.com/pengjiaxusz/pengj-templates/compare/v0.2.6...v0.2.7) (2026-08-23)
 
 
