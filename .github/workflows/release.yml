@@ -113,8 +113,15 @@ jobs:
           VER=$(echo "${{ needs.release-please.outputs.tag_name }}" | sed 's/^v//')
           cd "$GITHUB_WORKSPACE/target/release"
           mv pengj pengj-templates-cli
-          PKG="pengj-templates_${VER}_macos-x64_portable.zip"
-          zip -r "../../$PKG" bundle/macos/pengj-templates.app pengj-templates-cli
+          PKG="pengj-templates_${VER}_macos-aarch64_portable.zip"
+          # 动态定位 .app（tauri 的 bundle 目录随 bundle 类型/架构变化）
+          APP=$(find bundle -type d -name "*.app" 2>/dev/null | head -n1)
+          if [ -n "$APP" ]; then
+            zip -r "../../$PKG" "$APP" pengj-templates-cli
+          else
+            echo "::warning::未找到 macOS .app，便携包仅含 CLI"
+            zip "../../$PKG" pengj-templates-cli
+          fi
           echo "PKG=$PKG" >> "$GITHUB_ENV"
       - name: 上传 macOS 便携版
         uses: softprops/action-gh-release@v2
