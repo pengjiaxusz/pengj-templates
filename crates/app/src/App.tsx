@@ -30,6 +30,11 @@ interface LayerInfo {
   file_count: number;
 }
 
+interface SkillInfo {
+  name: string;
+  description: string;
+}
+
 interface GenerateReport {
   project_dir: string;
   layers: string[];
@@ -93,12 +98,22 @@ function GenerateTab() {
   const [chinese, setChinese] = useState(false);
   const [skillLang, setSkillLang] = useState("zh");
   const [commitZh, setCommitZh] = useState(true);
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<GenerateReport | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    invoke<LayerInfo[]>("cmd_list_layers").then(setLayers).catch((e) => setError(String(e)));
+    invoke<LayerInfo[]>("cmd_list_layers")
+      .then(setLayers)
+      .catch((e) => setError(String(e)));
+    invoke<SkillInfo[]>("cmd_list_skills")
+      .then((list) => {
+        setSkills(list);
+        setSelectedSkills(new Set(list.map((s) => s.name)));
+      })
+      .catch((e) => setError(String(e)));
   }, []);
 
   const toggle = useCallback((id: string) => {
@@ -106,6 +121,15 @@ function GenerateTab() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSkill = useCallback((name: string) => {
+    setSelectedSkills((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
       return next;
     });
   }, []);
@@ -132,6 +156,7 @@ function GenerateTab() {
           chinese_programming: chinese,
           skill_lang: skillLang,
           commit_zh: commitZh,
+          skills: [...selectedSkills],
         },
       });
       setReport(result);
@@ -271,6 +296,29 @@ function GenerateTab() {
 
           <div className="space-y-2">
             <Label>Agent 技能（选 agent 层时生效）</Label>
+            {skills.length > 0 && (
+              <div className="space-y-2">
+                {skills.map((skill) => (
+                  <div
+                    key={skill.name}
+                    className="flex items-start gap-3 rounded-md border p-3"
+                  >
+                    <Checkbox
+                      id={`skill-${skill.name}`}
+                      checked={selectedSkills.has(skill.name)}
+                      onCheckedChange={() => toggleSkill(skill.name)}
+                    />
+                    <label
+                      htmlFor={`skill-${skill.name}`}
+                      className="flex-1 cursor-pointer space-y-1"
+                    >
+                      <span className="font-medium">{skill.name}</span>
+                      <p className="text-sm text-muted-foreground">{skill.description}</p>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-4">
               <select
                 value={skillLang}

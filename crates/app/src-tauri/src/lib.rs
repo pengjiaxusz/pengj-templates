@@ -23,6 +23,13 @@ fn cmd_list_layers(app: tauri::AppHandle) -> Result<Vec<pengj_core::LayerInfo>, 
     templates.list_layers().map_err(|e| e.to_string())
 }
 
+/// 列出所有可用技能（供 UI 勾选）
+#[tauri::command]
+fn cmd_list_skills(app: tauri::AppHandle) -> Result<Vec<pengj_core::SkillInfo>, String> {
+    let templates = resolve_templates(&app)?;
+    templates.list_skills().map_err(|e| e.to_string())
+}
+
 /// 在 parent_dir 下生成 <name>/ 项目
 #[tauri::command]
 fn cmd_create_project(
@@ -59,6 +66,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             cmd_list_layers,
+            cmd_list_skills,
             cmd_create_project,
             cmd_update_project
         ])
