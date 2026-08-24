@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.9.1-beta.1...v0.10.0-beta.1) (2026-08-24)
+
+
+### Features
+
+* **agent:** 新增 arch-align 架构对齐技能并支持中英双语 ([41fff78](https://github.com/pengjiaxusz/pengj-templates/commit/41fff78a9ebe7a595dcfdd66f15a6d8364aa76bc))
+
 ## [0.9.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.9.0-beta.1...v0.9.1-beta.1) (2026-08-24)
 
 
