@@ -24,5 +24,12 @@ pub struct LayerInfo {
     pub file_count: usize,
 }
 
+/// 暴露给上层（CLI / GUI）的技能信息
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SkillInfo {
+    pub name: String,
+    pub description: String,
+}
+
 /// 层元数据文件名，写入时跳过
 pub const LAYER_META_FILE: &str = "layer.toml";

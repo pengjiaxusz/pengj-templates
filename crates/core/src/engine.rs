@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
 use crate::context::RenderContext;
 use crate::error::{CoreError, Result};
-use crate::layer::{LayerInfo, LayerMeta, LAYER_META_FILE};
+use crate::layer::{LayerInfo, LayerMeta, SkillInfo, LAYER_META_FILE};
 use crate::manifest::ProjectManifest;
 use crate::render::{is_text, render_text};
 
@@ -87,6 +87,52 @@ impl Templates {
         }
         out.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(out)
+    }
+
+    /// 列出各层可用的技能（`.agents/skills/<name>/SKILL.md`）
+    ///
+    /// 描述从 SKILL.md 的 frontmatter 解析：先按 zh 语言渲染模板，再取 `description`
+    /// 字段（支持 `description: >` / `description: >-` 折叠块）。解析失败时回退为空
+    /// 字符串，不阻断整个列表。
+    pub fn list_skills(&self) -> Result<Vec<SkillInfo>> {
+        let ctx = dummy_skill_ctx();
+        let mut out: BTreeMap<String, String> = BTreeMap::new();
+        for entry in std::fs::read_dir(&self.root)? {
+            let path = entry?.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let skills_root = path.join(SKILLS_ROOT);
+            if !skills_root.is_dir() {
+                continue;
+            }
+            for sk in std::fs::read_dir(&skills_root)? {
+                let sk_path = sk?.path();
+                if !sk_path.is_dir() {
+                    continue;
+                }
+                let Some(name) = sk_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                else {
+                    continue;
+                };
+                let md = sk_path.join("SKILL.md");
+                if !md.exists() {
+                    continue;
+                }
+                let desc = std::fs::read_to_string(&md)
+                    .ok()
+                    .and_then(|text| render_text(&text, &ctx).ok())
+                    .map(|rendered| parse_skill_description(&rendered))
+                    .unwrap_or_default();
+                out.insert(name, desc);
+            }
+        }
+        Ok(out
+            .into_iter()
+            .map(|(name, description)| SkillInfo { name, description })
+            .collect())
     }
 
     /// 解析选中的层，返回按依赖顺序排列的完整层列表（先依赖、后自己）
@@ -191,6 +237,93 @@ pub fn default_templates_dir() -> Result<PathBuf> {
 /// 每个层贡献一段，按依赖顺序拼接，每段前带来源层注释。
 const ACCUMULATE_FILES: &[&str] = &[".gitignore"];
 
+/// 技能目录：`.agents/skills/<name>/`。技能文件受 `options["skills"]` 过滤：
+/// 未在列表中的技能整目录跳过（选项缺失时包含全部，向后兼容）。
+const SKILLS_ROOT: &str = ".agents/skills";
+
+/// 从选项解析选中的技能集合；`None` 表示未指定（包含全部技能，向后兼容）
+fn selected_skills(options: &BTreeMap<String, serde_json::Value>) -> Option<BTreeSet<String>> {
+    let arr = options.get("skills")?.as_array()?;
+    Some(
+        arr.iter()
+            .filter_map(|x| x.as_str())
+            .map(|s| s.to_string())
+            .collect(),
+    )
+}
+
+/// 判断相对路径是否属于 `.agents/skills/<name>/...`，是则返回技能名。
+/// 跨平台按路径组件判断（Windows 相对路径分隔符为 `\`）。
+fn skill_name_of(rel: &Path) -> Option<String> {
+    let comps: Vec<Component> = rel
+        .components()
+        .filter(|c| *c != Component::CurDir)
+        .collect();
+    let is_skills_root = matches!(
+        (comps.first(), comps.get(1)),
+        (Some(Component::Normal(a)), Some(Component::Normal(b)))
+            if *a == ".agents" && *b == "skills"
+    );
+    if !is_skills_root {
+        return None;
+    }
+    match comps.get(2) {
+        Some(Component::Normal(name)) => Some(name.to_string_lossy().into_owned()),
+        _ => None,
+    }
+}
+
+/// 从 SKILL.md 的 frontmatter（`---` 与 `---` 之间）解析 `description` 字段。
+/// 支持 `description: 值` 与 `description: >` / `>-` 折叠块。
+fn parse_skill_description(text: &str) -> String {
+    let Some(rest) = text.strip_prefix("---") else {
+        return String::new();
+    };
+    let Some(end) = rest.find("\n---") else {
+        return String::new();
+    };
+    let fm = &rest[..end];
+    let mut lines = fm.lines();
+    while let Some(line) = lines.next() {
+        let Some(v) = line.trim_start().strip_prefix("description:") else {
+            continue;
+        };
+        let v = v.trim();
+        if v.is_empty() || matches!(v, ">" | ">-" | "|" | "|-") {
+            let mut parts = Vec::new();
+            for l2 in lines.by_ref() {
+                if l2.trim().is_empty() {
+                    continue;
+                }
+                if !l2.starts_with(' ') && !l2.starts_with('\t') {
+                    break;
+                }
+                parts.push(l2.trim().to_string());
+            }
+            return parts.join(" ");
+        }
+        return v.to_string();
+    }
+    String::new()
+}
+
+/// 渲染技能模板做描述提取时的占位上下文（zh 语言、默认选项）
+fn dummy_skill_ctx() -> RenderContext {
+    let mut options = BTreeMap::new();
+    for (k, v) in [
+        ("skill_lang", serde_json::json!("zh")),
+        ("commit_zh", serde_json::json!(true)),
+        ("chinese_programming", serde_json::json!(false)),
+        ("edition", serde_json::json!("2021")),
+        ("channel", serde_json::json!("stable")),
+        ("use_sccache", serde_json::json!(true)),
+        ("use_lld", serde_json::json!(true)),
+    ] {
+        options.insert(k.to_string(), v);
+    }
+    RenderContext::new("project", vec!["agent".to_string()], options)
+}
+
 /// 需要做结构化 JSON 并集合并的文件。
 /// 典型用途如 `package.json`：
 /// - 生成时：各层按依赖顺序并集合并（模板版本覆盖同名依赖，用户自加项不冲突）
@@ -219,12 +352,18 @@ struct FileMap {
 
 /// 按合并顺序收集模板文件，按类型分发到对应桶
 impl Templates {
-    fn build_file_map(&self, ordered: &[String]) -> Result<FileMap> {
+    fn build_file_map(
+        &self,
+        ordered: &[String],
+        options: &BTreeMap<String, serde_json::Value>,
+    ) -> Result<FileMap> {
         let mut fm = FileMap {
             normal: BTreeMap::new(),
             concat: BTreeMap::new(),
             json: BTreeMap::new(),
         };
+        // 技能过滤：未选中的技能整目录跳过（选项缺失时包含全部）
+        let skills = selected_skills(options);
         for layer_id in ordered {
             let base = self.root.join(layer_id);
             if !base.is_dir() {
@@ -235,6 +374,13 @@ impl Templates {
             for (rel, bytes) in files.drain(..) {
                 if rel == Path::new(LAYER_META_FILE) {
                     continue;
+                }
+                if let Some(name) = skill_name_of(&rel) {
+                    if let Some(allowed) = &skills {
+                        if !allowed.contains(&name) {
+                            continue;
+                        }
+                    }
                 }
                 let rel_str = rel.to_str().unwrap_or("");
                 if ACCUMULATE_FILES.contains(&rel_str) {
@@ -420,7 +566,7 @@ pub fn generate(
     }
 
     let ctx = RenderContext::new(project_name, ordered.clone(), options.clone());
-    let fm = templates.build_file_map(&ordered)?;
+    let fm = templates.build_file_map(&ordered, &options)?;
     let bytes_map = render_file_map(&fm, &ctx, &target)?;
     let mut manifest = ProjectManifest {
         tool: "pengj-templates".to_string(),
@@ -486,7 +632,7 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
         ordered.clone(),
         manifest.options.clone(),
     );
-    let fm = templates.build_file_map(&ordered)?;
+    let fm = templates.build_file_map(&ordered, &manifest.options)?;
     let bytes_map = render_file_map(&fm, &ctx, project_dir)?;
     let ignores = templates.collect_update_ignores(&ordered)?;
 
@@ -620,4 +766,85 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
     (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skill_name_of_detects_skill_dirs() {
+        // 正斜杠（Unix 风格相对路径）
+        assert_eq!(
+            skill_name_of(Path::new(".agents/skills/commit/SKILL.md")),
+            Some("commit".to_string())
+        );
+        assert_eq!(
+            skill_name_of(Path::new(".agents/skills/caveman/references/x.md")),
+            Some("caveman".to_string())
+        );
+        // 反斜杠（Windows 相对路径，strip_prefix 产物）
+        assert_eq!(
+            skill_name_of(Path::new(r".agents\skills\grill-me\SKILL.md")),
+            Some("grill-me".to_string())
+        );
+        // 非技能路径
+        assert_eq!(skill_name_of(Path::new("AGENTS.md")), None);
+        assert_eq!(skill_name_of(Path::new(".agents/AGENTS.md")), None);
+        assert_eq!(
+            skill_name_of(Path::new(".agents/skills")),
+            None,
+            "缺少技能名组件"
+        );
+        assert_eq!(
+            skill_name_of(Path::new("other/.agents/skills/x/SKILL.md")),
+            None
+        );
+    }
+
+    #[test]
+    fn selected_skills_parses_option() {
+        let mut opts = BTreeMap::new();
+        assert_eq!(selected_skills(&opts), None, "缺失选项 = 全部技能");
+
+        opts.insert("skills".to_string(), serde_json::json!([]));
+        assert_eq!(
+            selected_skills(&opts),
+            Some(BTreeSet::new()),
+            "空数组 = 不生成任何技能"
+        );
+
+        opts.insert(
+            "skills".to_string(),
+            serde_json::json!(["commit", "caveman"]),
+        );
+        let set = selected_skills(&opts).unwrap();
+        assert!(set.contains("commit") && set.contains("caveman") && !set.contains("grill-me"));
+    }
+
+    #[test]
+    fn parse_skill_description_folded_block() {
+        // 模拟 minijinja 渲染后的 frontmatter：`{% if %}` 行被移除留下空行
+        let text = "---\nname: caveman\ndescription: >-\n\n  超压缩通信模式。省略废话。\n  Triggers: caveman, be brief\n\n---\n\n# Caveman 模式\n";
+        assert_eq!(
+            parse_skill_description(text),
+            "超压缩通信模式。省略废话。 Triggers: caveman, be brief"
+        );
+    }
+
+    #[test]
+    fn parse_skill_description_inline_value() {
+        let text =
+            "---\nname: grill-me\ndescription: 就计划持续追问，直至达成共识。\n---\n\n正文\n";
+        assert_eq!(
+            parse_skill_description(text),
+            "就计划持续追问，直至达成共识。"
+        );
+    }
+
+    #[test]
+    fn parse_skill_description_missing_or_empty() {
+        assert_eq!(parse_skill_description("no frontmatter here"), "");
+        assert_eq!(parse_skill_description("---\nname: x\n---\n"), "");
+    }
 }

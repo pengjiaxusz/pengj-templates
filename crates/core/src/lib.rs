@@ -13,5 +13,5 @@ pub mod render;
 pub use engine::{default_templates_dir, generate, update_project, Templates};
 pub use engine::{ConflictInfo, GenerateReport, UpdateReport};
 pub use error::{CoreError, Result};
-pub use layer::LayerInfo;
+pub use layer::{LayerInfo, SkillInfo};
 pub use manifest::{ProjectManifest, MANIFEST_FILE};
