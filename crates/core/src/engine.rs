@@ -233,9 +233,9 @@ pub fn default_templates_dir() -> Result<PathBuf> {
     ))
 }
 
-/// 需要按层累加拼接而非后层覆盖的文件（如 `.gitignore`）。
+/// 需要按层累加拼接而非后层覆盖的文件（如 `.gitignore`、`.gitattributes`）。
 /// 每个层贡献一段，按依赖顺序拼接，每段前带来源层注释。
-const ACCUMULATE_FILES: &[&str] = &[".gitignore"];
+const ACCUMULATE_FILES: &[&str] = &[".gitignore", ".gitattributes"];
 
 /// 技能目录：`.agents/skills/<name>/`。技能文件受 `options["skills"]` 过滤：
 /// 未在列表中的技能整目录跳过（选项缺失时包含全部，向后兼容）。
@@ -1520,6 +1520,57 @@ mod tests {
             .find(|k| Path::new(k) == settings_rel)
             .expect("manifest 应记录 settings.json");
         assert_eq!(manifest.files[key], sha256_hex(&disk));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn gitattributes_accumulates_across_layers() {
+        let tmp = std::env::temp_dir().join(format!("pengj-gitattr-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let tpl = tmp.join("templates");
+
+        // layer A
+        let layer_a = tpl.join("layer_a");
+        std::fs::create_dir_all(&layer_a).unwrap();
+        std::fs::write(
+            layer_a.join("layer.toml"),
+            "name = \"Layer A\"\ndescription = \"A\"\ndepends = []\n",
+        )
+        .unwrap();
+        std::fs::write(layer_a.join(".gitattributes"), "* text=auto eol=lf\n").unwrap();
+
+        // layer B
+        let layer_b = tpl.join("layer_b");
+        std::fs::create_dir_all(&layer_b).unwrap();
+        std::fs::write(
+            layer_b.join("layer.toml"),
+            "name = \"Layer B\"\ndescription = \"B\"\ndepends = [\"layer_a\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            layer_b.join(".gitattributes"),
+            "*.rs text eol=lf diff=rust\n",
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let report = generate(
+            &templates,
+            "demo",
+            &["layer_b".to_string()],
+            BTreeMap::new(),
+            &tmp,
+        )
+        .unwrap();
+
+        let gitattributes_path = PathBuf::from(&report.project_dir).join(".gitattributes");
+        assert!(gitattributes_path.exists());
+        let content = std::fs::read_to_string(&gitattributes_path).unwrap();
+        assert!(content.contains("# --- layer_a 层 ---"));
+        assert!(content.contains("* text=auto eol=lf"));
+        assert!(content.contains("# --- layer_b 层 ---"));
+        assert!(content.contains("*.rs text eol=lf diff=rust"));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
