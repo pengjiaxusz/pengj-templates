@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.11.0-beta.1...v0.12.0-beta.1) (2026-08-24)
+
+
+### Features
+
+* **cli:** 支持 adopt 存量项目纳管命令与 Tauri 接口 ([44af406](https://github.com/pengjiaxusz/pengj-templates/commit/44af40627299e191f938f99ae855219db7bd7fd6))
+* **core:** 支持模板锚点局部合并与存量项目纳管 ([5b67ed8](https://github.com/pengjiaxusz/pengj-templates/commit/5b67ed88eb88564c0b6af6eafef7712a357cf736))
+* **templates:** 新增 rust-workspace 与 codegraph 模板层并支持插槽保护与 Commitlint 继承 ([5c894b7](https://github.com/pengjiaxusz/pengj-templates/commit/5c894b7c42d92471608a8d59954ce175cd3b3bf3))
+
 ## [0.11.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.10.0-beta.1...v0.11.0-beta.1) (2026-08-24)
 
 
