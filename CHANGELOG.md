@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.7.0-beta.1...v0.8.0-beta.1) (2026-08-24)
+
+
+### Features
+
+* 支持 VS Code 文件嵌套与工作空间双轨同步 ([21e05bb](https://github.com/pengjiaxusz/pengj-templates/commit/21e05bb29f980cdf16c83c8f8f2998e72e1d0dad))
+
 ## [0.7.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.6.3-beta.1...v0.7.0-beta.1) (2026-08-24)
 
 
