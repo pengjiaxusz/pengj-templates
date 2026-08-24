@@ -10,7 +10,7 @@
 分层模板生成与同步更新工具：把仓库模板按「层（layer）」组织，勾选所需层即可生成新仓库；模板更新后，一键同步到所有基于它生成的项目。
 
 - **引擎**（Rust）：`crates/core` — 层发现、依赖排序、合并渲染、生成/更新、`.pengj-templates.json` manifest
-- **CLI**（Rust/clap）：`crates/cli`，命令 `pengj`
+- **CLI**（Rust/clap）：`crates/cli`，命令 `pengj-templates-cli`
 - **GUI**（Tauri 2 + React + Vite + TypeScript + Tailwind v4 + shadcn/ui）：`crates/app`（`src-tauri/` 为 Rust 壳，`src/` 为前端）
 - **模板**：`templates/<layer>/`，运行时读取（改模板无需重编译，直接 re-run 生效）
 

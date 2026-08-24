@@ -143,7 +143,9 @@ jobs:
           EXT=""
           if [ "${{ matrix.os }}" = "windows" ]; then EXT=".exe"; fi
           # CLI 统一命名 pengj-templates-cli
-          mv -f "$R/pengj${EXT}" "$R/pengj-templates-cli${EXT}"
+          if [ -f "$R/pengj${EXT}" ]; then
+            mv -f "$R/pengj${EXT}" "$R/pengj-templates-cli${EXT}"
+          fi
           # 安装包重命名（原始名形如 pengj-templates_0.x.x_x64-setup.exe）
           case "${{ matrix.os }}" in
             windows)

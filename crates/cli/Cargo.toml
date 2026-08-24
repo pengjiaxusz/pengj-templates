@@ -7,7 +7,7 @@ authors.workspace = true
 description = "pengj-templates 命令行工具"
 
 [[bin]]
-name = "pengj"
+name = "pengj-templates-cli"
 path = "src/main.rs"
 
 [dependencies]

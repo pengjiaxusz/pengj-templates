@@ -21,7 +21,7 @@
 
 - **引擎**：Rust（`crates/core`）— 分层合并、渲染、diff 与更新逻辑，模板编译期嵌入二进制
 - **GUI**：Tauri 2 + React + Vite + TypeScript + Tailwind v4 + shadcn/ui（`crates/app`）
-- **CLI**：clap（`crates/cli`，命令 `pengj`），与 GUI 共用同一套引擎
+- **CLI**：clap（`crates/cli`，命令 `pengj-templates-cli`），与 GUI 共用同一套引擎
 
 ## 使用
 
@@ -79,7 +79,7 @@ pnpm --dir crates/app tauri dev
 ```
 crates/
 ├── core/         # 引擎：层发现、依赖排序、合并渲染、生成/更新、manifest
-├── cli/          # CLI（pengj）
+├── cli/          # CLI（pengj-templates-cli）
 └── app/          # Tauri GUI（src-tauri + React 前端）
 templates/        # 层模板（common/ rust/ frontend/ ...），编译期嵌入
 ```

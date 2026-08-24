@@ -5,7 +5,11 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "pengj", version, about = "分层模板生成与更新工具")]
+#[command(
+    name = "pengj-templates-cli",
+    version,
+    about = "分层模板生成与更新工具"
+)]
 struct Cli {
     /// 模板根目录（默认定位 PENGJ_TEMPLATES > 可执行文件旁 templates > 当前目录 templates）
     #[arg(long, global = true)]
