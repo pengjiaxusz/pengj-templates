@@ -340,8 +340,18 @@ const MERGE_JSON_UNION_KEYS: &[&str] = &[
     "scripts",
 ];
 
+/// 模板渲染出的 VS Code 配置文件在项目内的相对路径。
+///
+/// `update_project` 在同步普通文件之外，还会把其中的 fileNesting 等配置合并写入
+/// 项目根目录下的 `*.code-workspace` 文件，保证多文件夹工作区与单文件夹使用一致
+/// 的资源管理器嵌套显示。
+const VSCODE_SETTINGS_REL: &str = ".vscode/settings.json";
+
 /// 模板文件分三类收集：普通（后层覆盖）、拼接（.gitignore）、JSON 并集（package.json）
-struct FileMap {
+///
+/// 字段保持私有（模块内读取）；结构体本身 `pub` 是因为 `sync_workspace_file` 的公开
+/// 签名需要引用它（供 CLI / Tauri 调用）。
+pub struct FileMap {
     /// 普通文件：路径 -> 最终原始字节（未渲染，后层覆盖前层）
     normal: BTreeMap<PathBuf, Vec<u8>>,
     /// 拼接累加文件：路径 -> [(层名, 该层原始字节)]，保持依赖顺序
@@ -722,6 +732,17 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
         .cloned()
         .collect::<Vec<_>>();
 
+    // `.code-workspace` 工作区文件同步：无论 manifest 是否托管，都扫描项目根目录下
+    // 的工作区文件，把模板的 fileNesting 配置合并进其 `settings` 节点。
+    // 变更的文件计入 `updated`（复用原有字段，不新增报告结构）。
+    for ws_path in list_workspace_files(project_dir) {
+        if sync_workspace_file(&ws_path, &ctx, &fm, project_dir)? {
+            if let Some(name) = ws_path.file_name() {
+                updated.push(name.to_string_lossy().into_owned());
+            }
+        }
+    }
+
     manifest.files = new_files;
     manifest.save(project_dir)?;
 
@@ -734,6 +755,163 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
         removed,
         unchanged,
     })
+}
+
+// ---------- .code-workspace 同步 ----------
+
+/// 扫描 `dir` 下一级（非递归）所有 `*.code-workspace` 文件，按文件名排序返回。
+///
+/// 供 CLI / GUI 在展示或批量处理工作区文件时复用。
+pub fn list_workspace_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let is_workspace = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("code-workspace"));
+        if is_workspace {
+            out.push(path);
+        }
+    }
+    out.sort();
+    out
+}
+
+/// 若 `obj` 中 `key` 的值与 `value` 不同则写入并返回 `true`（未变化返回 `false`）。
+///
+/// 用于 JSON 合并时判断内容是否真正变更，避免无意义的写盘。
+fn json_set_if_changed(
+    obj: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: serde_json::Value,
+) -> bool {
+    if obj.get(key) == Some(&value) {
+        return false;
+    }
+    obj.insert(key.to_string(), value);
+    true
+}
+
+/// 把一个 `*.code-workspace` 文件与模板的 VS Code 配置同步。
+///
+/// 读取 workspace 的 JSON，把 `.vscode/settings.json` 渲染结果里的 fileNesting 配置
+/// 写入其顶层 `settings` 节点（顶层 `folders` / `extensions` 等其它字段原样保留）：
+/// - `explorer.fileNesting.enabled` / `expand`：按模板值直接设值
+/// - `explorer.fileNesting.patterns`：对象合并，模板值覆盖同名 key，其余 key 保留
+/// - `rust-analyzer.cargo.checkOnSave.command = "clippy"`：仅当「中文编程 + rust 层」时写入
+///
+/// 配置来源优先取模板渲染出的 `.vscode/settings.json`（模板优先）；模板未提供时
+/// （未选 vscode 层）回退到磁盘上项目既有的 settings 文件，保证独立调用也能工作。
+/// 仅在内容真正变化时写盘并返回 `true`；workspace 读取/JSON 解析失败时静默返回
+/// `Ok(false)` 跳过，不阻断更新流程。
+///
+/// 注：不写入 `rust-analyzer.linkedProjects`。VS Code 的 rust-analyzer 默认 `[]`
+/// 会自动发现工作区内的 Cargo 项目；显式列出反而会禁用自动发现，冗余且有害，
+/// 因此模板与同步逻辑都不维护该字段。
+pub fn sync_workspace_file(
+    path: &Path,
+    ctx: &RenderContext,
+    fm: &FileMap,
+    project_dir: &Path,
+) -> Result<bool> {
+    // 配置来源：模板渲染出的 `.vscode/settings.json`，缺失时回退磁盘文件
+    let settings_value: serde_json::Value = match fm.normal.get(Path::new(VSCODE_SETTINGS_REL)) {
+        Some(bytes) => serde_json::from_slice(&render_bytes(bytes, ctx)?).unwrap_or_default(),
+        None => std::fs::read_to_string(project_dir.join(VSCODE_SETTINGS_REL))
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default(),
+    };
+    let Some(src) = settings_value.as_object() else {
+        // 无可用配置来源（未选 vscode 层且磁盘无 settings）
+        return Ok(false);
+    };
+
+    // 读取 workspace：失败即跳过（不 panic）
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Ok(false);
+    };
+    let Ok(mut ws) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Ok(false);
+    };
+    let Some(ws_obj) = ws.as_object_mut() else {
+        return Ok(false);
+    };
+    // 确保顶层有 `settings` 对象；已存在但非对象时跳过（避免覆盖用户数据）
+    let Some(settings) = ws_obj
+        .entry("settings")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+    else {
+        return Ok(false);
+    };
+
+    let mut changed = false;
+
+    // fileNesting 开关：直接设值
+    for key in [
+        "explorer.fileNesting.enabled",
+        "explorer.fileNesting.expand",
+    ] {
+        if let Some(v) = src.get(key) {
+            changed |= json_set_if_changed(settings, key, v.clone());
+        }
+    }
+
+    // patterns：对象合并，模板值覆盖同名 key，其余 key 保留
+    if let Some(tpl_patterns) = src.get("explorer.fileNesting.patterns") {
+        let patterns = settings
+            .entry("explorer.fileNesting.patterns")
+            .or_insert_with(|| serde_json::json!({}));
+        match patterns.as_object_mut() {
+            Some(pobj) => {
+                if let Some(tpl_map) = tpl_patterns.as_object() {
+                    for (k, v) in tpl_map {
+                        changed |= json_set_if_changed(pobj, k, v.clone());
+                    }
+                }
+            }
+            None => {
+                // 已有 patterns 但非对象：整体替换为模板值
+                changed |= json_set_if_changed(
+                    settings,
+                    "explorer.fileNesting.patterns",
+                    tpl_patterns.clone(),
+                );
+            }
+        }
+    }
+
+    // rust-analyzer clippy：中文编程且含 rust 层时写入
+    let rust_with_chinese = ctx
+        .options
+        .get("chinese_programming")
+        .and_then(|v| v.as_bool())
+        == Some(true)
+        && ctx.layers.iter().any(|l| l == "rust");
+    if rust_with_chinese {
+        changed |= json_set_if_changed(
+            settings,
+            "rust-analyzer.cargo.checkOnSave.command",
+            serde_json::json!("clippy"),
+        );
+    }
+
+    if !changed {
+        return Ok(false);
+    }
+
+    let mut out = serde_json::to_string_pretty(&ws)?;
+    out.push('\n');
+    std::fs::write(path, out)?;
+    Ok(true)
 }
 
 // ---------- 时间 ----------
@@ -846,5 +1024,138 @@ mod tests {
     fn parse_skill_description_missing_or_empty() {
         assert_eq!(parse_skill_description("no frontmatter here"), "");
         assert_eq!(parse_skill_description("---\nname: x\n---\n"), "");
+    }
+
+    #[test]
+    fn list_workspace_files_finds_sorted_code_workspaces() {
+        let dir = std::env::temp_dir().join(format!("pengj-ws-list-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // 子目录中的工作区文件不参与（非递归）
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("sub").join("inner.code-workspace"), "{}").unwrap();
+        std::fs::write(dir.join("b.code-workspace"), "{}").unwrap();
+        std::fs::write(dir.join("a.CODE-WORKSPACE"), "{}").unwrap();
+        std::fs::write(dir.join("not-ws.json"), "{}").unwrap();
+
+        let names: Vec<String> = list_workspace_files(&dir)
+            .into_iter()
+            .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .collect();
+        assert_eq!(names, vec!["a.CODE-WORKSPACE", "b.code-workspace"]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 构造一个带 `.vscode/settings.json` 模板的 FileMap 与中文编程 + rust 的上下文
+    fn ws_test_fixture() -> (FileMap, RenderContext) {
+        let mut fm = FileMap {
+            normal: BTreeMap::new(),
+            concat: BTreeMap::new(),
+            json: BTreeMap::new(),
+        };
+        fm.normal.insert(
+            PathBuf::from(".vscode/settings.json"),
+            br#"{
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": { "Cargo.toml": "tpl" }
+}"#
+            .to_vec(),
+        );
+        let mut options = BTreeMap::new();
+        options.insert("chinese_programming".to_string(), serde_json::json!(true));
+        let ctx = RenderContext::new(
+            "proj",
+            vec!["vscode".to_string(), "rust".to_string()],
+            options,
+        );
+        (fm, ctx)
+    }
+
+    #[test]
+    fn sync_workspace_file_merges_filenesting_template_priority() {
+        let tmp = std::env::temp_dir().join(format!("pengj-ws-sync-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        let (fm, ctx) = ws_test_fixture();
+
+        let ws = tmp.join("proj.code-workspace");
+        std::fs::write(
+            &ws,
+            r#"{
+  "folders": [{ "path": "." }],
+  "settings": {
+    "editor.fontSize": 14,
+    "explorer.fileNesting.enabled": false,
+    "explorer.fileNesting.patterns": { "Cargo.toml": "user", "README.md": "keep-me" }
+  }
+}"#,
+        )
+        .unwrap();
+
+        // 首次同步发生变更，第二次幂等（不再写盘）
+        assert!(sync_workspace_file(&ws, &ctx, &fm, &proj).unwrap());
+        assert!(!sync_workspace_file(&ws, &ctx, &fm, &proj).unwrap());
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&ws).unwrap()).unwrap();
+        let s = &parsed["settings"];
+        assert_eq!(s["explorer.fileNesting.enabled"], serde_json::json!(true));
+        assert_eq!(s["explorer.fileNesting.expand"], serde_json::json!(false));
+        assert_eq!(s["editor.fontSize"], serde_json::json!(14), "用户标量保留");
+        assert_eq!(
+            s["explorer.fileNesting.patterns"]["Cargo.toml"],
+            serde_json::json!("tpl"),
+            "模板覆盖同名 key"
+        );
+        assert_eq!(
+            s["explorer.fileNesting.patterns"]["README.md"],
+            serde_json::json!("keep-me"),
+            "用户其它 key 保留"
+        );
+        assert_eq!(
+            s["rust-analyzer.cargo.checkOnSave.command"],
+            serde_json::json!("clippy"),
+            "中文编程 + rust 层写入 clippy"
+        );
+        // 顶层 folders / extensions 不被覆盖
+        assert!(parsed["folders"].is_array());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_workspace_file_skips_broken_or_missing_sources() {
+        let tmp = std::env::temp_dir().join(format!("pengj-ws-skip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        let (fm, ctx) = ws_test_fixture();
+
+        // 无效 JSON：跳过且不 panic
+        let broken = tmp.join("broken.code-workspace");
+        std::fs::write(&broken, "{ not json").unwrap();
+        assert!(!sync_workspace_file(&broken, &ctx, &fm, &proj).unwrap());
+
+        // 顶层 settings 非对象：跳过
+        let bad_settings = tmp.join("bad.code-workspace");
+        std::fs::write(&bad_settings, r#"{ "folders": [], "settings": "nope" }"#).unwrap();
+        assert!(!sync_workspace_file(&bad_settings, &ctx, &fm, &proj).unwrap());
+
+        // 无模板来源（fm 无 .vscode/settings.json）且磁盘无 settings：跳过
+        let empty_fm = FileMap {
+            normal: BTreeMap::new(),
+            concat: BTreeMap::new(),
+            json: BTreeMap::new(),
+        };
+        let plain = tmp.join("plain.code-workspace");
+        std::fs::write(&plain, r#"{ "folders": [{ "path": "." }] }"#).unwrap();
+        assert!(!sync_workspace_file(&plain, &ctx, &empty_fm, &proj).unwrap());
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

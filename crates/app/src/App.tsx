@@ -399,6 +399,41 @@ function UpdateTab() {
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState<UpdateReport | null>(null);
   const [error, setError] = useState("");
+  const [workspaces, setWorkspaces] = useState<string[]>([]);
+  const [selectedWorkspace, setSelectedWorkspace] = useState("");
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+
+  // 探测项目根目录下的 *.code-workspace 供用户确认（后端 update 会全量同步所有 workspace 的 fileNesting）
+  useEffect(() => {
+    let cancelled = false;
+    if (!projectDir) {
+      setWorkspaces([]);
+      setSelectedWorkspace("");
+      setWorkspaceLoading(false);
+      return;
+    }
+    setWorkspaceLoading(true);
+    setWorkspaces([]);
+    setSelectedWorkspace("");
+    invoke<string[]>("cmd_list_workspaces", { projectDir })
+      .then((list) => {
+        if (cancelled) return;
+        setWorkspaces(list);
+        if (list.length > 0) setSelectedWorkspace(list[0]);
+      })
+      .catch(() => {
+        // 命令不存在或目录不可读时静默清空，不阻断更新
+        if (cancelled) return;
+        setWorkspaces([]);
+        setSelectedWorkspace("");
+      })
+      .finally(() => {
+        if (!cancelled) setWorkspaceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectDir]);
 
   const pickDir = async () => {
     const dir = await open({ directory: true, title: "选择项目目录" });
@@ -437,6 +472,48 @@ function UpdateTab() {
               选择
             </Button>
           </div>
+
+          <div className="space-y-2">
+            {workspaceLoading && (
+              <p className="text-sm text-muted-foreground">探测中...</p>
+            )}
+            {!workspaceLoading && projectDir && workspaces.length > 0 && (
+              <>
+                <Label htmlFor="workspace-select">
+                  检测到工作空间文件：
+                </Label>
+                <select
+                  id="workspace-select"
+                  value={selectedWorkspace}
+                  onChange={(e) => setSelectedWorkspace(e.target.value)}
+                  className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                >
+                  {workspaces.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  更新时会同步所有工作空间的 fileNesting，默认高亮首项
+                </p>
+              </>
+            )}
+            {!workspaceLoading && projectDir && workspaces.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                未检测到 .code-workspace，将仅更新 .vscode/settings.json
+              </p>
+            )}
+          </div>
+
+          {selectedWorkspace && (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              将同步
+              <Badge variant="outline">{selectedWorkspace}</Badge>
+              等 {workspaces.length} 个工作空间的 fileNesting
+            </p>
+          )}
+
           <Button onClick={update} disabled={!projectDir || busy}>
             {busy ? "更新中…" : "同步模板更新"}
           </Button>
@@ -469,6 +546,12 @@ function UpdateTab() {
                 冲突 {report.conflicted.length} · 移除 {report.removed.length} ·
                 未变 {report.unchanged}
               </p>
+              {workspaces.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  已同步 {workspaces.length} 个工作空间的 fileNesting（
+                  {workspaces.join("、")}）
+                </p>
+              )}
               <Separator />
               <ScrollArea className="h-72 rounded-md border">
                 <div className="p-3 space-y-2 text-xs">

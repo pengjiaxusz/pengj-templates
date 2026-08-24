@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use pengj_core::{generate, update_project, Templates};
+use pengj_core::{generate, list_workspace_files, update_project, Templates};
 use tauri::Manager;
 
 /// 定位模板目录：环境 PENGJ_TEMPLATES > app 资源目录 templates/ > 默认位置
@@ -60,6 +60,19 @@ fn cmd_update_project(
     update_project(&templates, Path::new(&project_dir)).map_err(|e| e.to_string())
 }
 
+/// 列出项目根目录下的工作区文件（`*.code-workspace`，非递归，按文件名排序）。
+///
+/// 供前端在更新前展示可选的 workspace。core 的 `update_project` 会自动同步全部
+/// workspace（fileNesting 等），此处选择仅作展示/提示。目录不存在或无匹配文件时
+/// 返回空数组而非报错。
+#[tauri::command]
+fn cmd_list_workspaces(project_dir: String) -> Result<Vec<String>, String> {
+    Ok(list_workspace_files(Path::new(&project_dir))
+        .into_iter()
+        .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .collect())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -68,7 +81,8 @@ pub fn run() {
             cmd_list_layers,
             cmd_list_skills,
             cmd_create_project,
-            cmd_update_project
+            cmd_update_project,
+            cmd_list_workspaces
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
