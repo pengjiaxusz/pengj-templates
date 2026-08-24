@@ -63,6 +63,9 @@ enum Command {
         /// 提交信息是否用中文（仅 agent 层生效；默认开，传 --no-commit-zh 关闭）
         #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
         commit_zh: bool,
+        /// 选择的技能（仅 agent 层生效），逗号分隔如 commit,caveman,grill-me；默认全部
+        #[arg(long, value_delimiter = ',')]
+        skills: Option<Vec<String>>,
         /// 输出父目录（默认当前目录）
         #[arg(short, long, default_value = ".")]
         output: PathBuf,
@@ -90,6 +93,7 @@ fn main() -> anyhow::Result<()> {
             chinese,
             skill_lang,
             commit_zh,
+            skills,
             output,
         } => cmd_create(
             &templates,
@@ -102,6 +106,7 @@ fn main() -> anyhow::Result<()> {
             chinese,
             &skill_lang,
             commit_zh,
+            skills.as_deref(),
             &output,
         ),
         Command::Update { dir } => cmd_update(&templates, &dir),
@@ -145,6 +150,7 @@ fn cmd_create(
     chinese: bool,
     skill_lang: &str,
     commit_zh: bool,
+    skills: Option<&[String]>,
     output: &Path,
 ) -> anyhow::Result<()> {
     if layers.is_empty() {
@@ -159,8 +165,38 @@ fn cmd_create(
     if !["zh", "en"].contains(&skill_lang) {
         anyhow::bail!("无效 skill-lang：{skill_lang}（可选 zh/en）");
     }
+    let selected_skills: Vec<String> = skills
+        .map(|s| s.iter().filter(|x| !x.is_empty()).cloned().collect())
+        .unwrap_or_default();
+    if !selected_skills.is_empty() {
+        let available: Vec<String> = templates
+            .list_skills()?
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        let unknown: Vec<&String> = selected_skills
+            .iter()
+            .filter(|s| !available.contains(s))
+            .collect();
+        if !unknown.is_empty() {
+            let avail_str = if available.is_empty() {
+                "（无）".to_string()
+            } else {
+                available.join(", ")
+            };
+            anyhow::bail!(
+                "未知技能: {}（可用技能: {}）",
+                unknown
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                avail_str
+            );
+        }
+    }
     // 构造渲染选项：仅对应层读取，其它层无副作用
-    let options: std::collections::BTreeMap<String, serde_json::Value> = [
+    let mut options: std::collections::BTreeMap<String, serde_json::Value> = [
         ("edition", serde_json::Value::String(edition.to_string())),
         ("channel", serde_json::Value::String(channel.to_string())),
         ("use_sccache", serde_json::Value::Bool(sccache)),
@@ -175,6 +211,9 @@ fn cmd_create(
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
     .collect();
+    if !selected_skills.is_empty() {
+        options.insert("skills".to_string(), serde_json::json!(selected_skills));
+    }
     let report = pengj_core::generate(templates, name, layers, options, output)
         .with_context(|| format!("生成项目 {name} 失败"))?;
     println!("已生成: {}", report.project_dir);
