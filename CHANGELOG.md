@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.8.1-beta.1...v0.9.0-beta.1) (2026-08-24)
+
+
+### Features
+
+* **core:** 支持按层累加拼接 .gitattributes ([b2c51aa](https://github.com/pengjiaxusz/pengj-templates/commit/b2c51aa7606581131ff0b16ce3b0d7a6d38ec986))
+
 ## [0.8.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.8.0-beta.1...v0.8.1-beta.1) (2026-08-24)
 
 
