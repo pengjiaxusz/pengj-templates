@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.8.0-beta.1...v0.8.1-beta.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **core:** 增量合并 .vscode/settings.json 保留用户自定义 ([25cdec2](https://github.com/pengjiaxusz/pengj-templates/commit/25cdec2fc24da73b169f7eb442f20c0eb71969b1))
+
 ## [0.8.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.7.0-beta.1...v0.8.0-beta.1) (2026-08-24)
 
 
