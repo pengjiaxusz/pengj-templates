@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.6.3-beta.1...v0.7.0-beta.1) (2026-08-24)
+
+
+### Features
+
+* **agent:** 新增 caveman/grill-me 技能并动态渲染技能清单 ([e019bda](https://github.com/pengjiaxusz/pengj-templates/commit/e019bda231084fbb4dafdd1ab03071aa7e3010d7))
+* **app:** GUI 技能勾选生成 ([bf9fcc8](https://github.com/pengjiaxusz/pengj-templates/commit/bf9fcc8b8db9c27a8a1dc799619f15925af90182))
+* **cli:** create 支持 --skills 选择技能 ([daca2ef](https://github.com/pengjiaxusz/pengj-templates/commit/daca2efefb1d584100d412954988d114fffd7305))
+* **core:** 支持技能发现与按选择过滤 ([e39e2c8](https://github.com/pengjiaxusz/pengj-templates/commit/e39e2c82dcf8fe84a04e653621877ac90809c0b4))
+
 ## [0.6.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.6.2-beta.1...v0.6.3-beta.1) (2026-08-23)
 
 
