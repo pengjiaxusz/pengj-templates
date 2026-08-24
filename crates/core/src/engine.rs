@@ -606,6 +606,160 @@ pub fn generate(
     })
 }
 
+// ---------- 存量纳管 (Adopt) ----------
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AdoptReport {
+    pub project_name: String,
+    pub layers: Vec<String>,
+    pub created: Vec<String>,
+    pub adopted: Vec<String>,
+}
+
+/// 纳管存量项目：为已有目录初始化 `.pengj-templates.json` manifest
+///
+/// 逻辑：
+/// 1. 若项目根目录已存在 manifest，且没有指定 force，则返回错误。
+/// 2. 解析所选层与渲染选项，在内存中渲染出完整的模板 FileMap。
+/// 3. 对模板渲染出的每个文件：
+///    - 若本地文件已存在：
+///      - 尝试通过锚点合并（`try_merge_slots`）同步受保护的模板区域；
+///      - 记录当前磁盘文件的哈希（或合并后哈希）作为初始基线，计入 `adopted`。
+///    - 若本地文件不存在：
+///      - 写入新文件，记录新哈希，计入 `created`。
+/// 4. 将层列表、持久化选项和文件哈希基线写入 `.pengj-templates.json`。
+pub fn adopt_project(
+    templates: &Templates,
+    project_dir: &Path,
+    selected: &[String],
+    options: BTreeMap<String, serde_json::Value>,
+    force: bool,
+) -> Result<AdoptReport> {
+    if !project_dir.exists() || !project_dir.is_dir() {
+        return Err(CoreError::DirExists(format!(
+            "目录不存在或不是目录: {}",
+            project_dir.display()
+        )));
+    }
+
+    let manifest_path = project_dir.join(crate::manifest::MANIFEST_FILE);
+    if manifest_path.exists() && !force {
+        return Err(CoreError::DirExists(format!(
+            "目录已存在 {}，如需重新纳管请使用 force 选项",
+            crate::manifest::MANIFEST_FILE
+        )));
+    }
+
+    let project_name = project_dir
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "project".to_string());
+
+    let ordered = templates.resolve_layers(selected)?;
+    let ctx = RenderContext::new(&project_name, ordered.clone(), options.clone());
+    let fm = templates.build_file_map(&ordered, &options)?;
+    let bytes_map = render_file_map(&fm, &ctx, project_dir)?;
+    let ignores = templates.collect_update_ignores(&ordered)?;
+
+    let mut created = Vec::new();
+    let mut adopted = Vec::new();
+    let mut manifest_files = BTreeMap::new();
+
+    for (rel, bytes) in &bytes_map {
+        let rel_str = rel.to_string_lossy().into_owned();
+        let target = project_dir.join(rel);
+
+        if ignores.contains(rel) {
+            if !target.exists() {
+                write_file(&target, bytes)?;
+                created.push(rel_str.clone());
+            }
+            continue;
+        }
+
+        if target.exists() {
+            let cur = std::fs::read(&target).unwrap_or_default();
+            if let Some(merged) = try_merge_slots(&cur, bytes) {
+                if merged != cur {
+                    write_file(&target, &merged)?;
+                }
+                manifest_files.insert(rel_str.clone(), sha256_hex(&merged));
+            } else {
+                // 存量文件保留用户当前内容，基线记录当前磁盘文件的哈希
+                manifest_files.insert(rel_str.clone(), sha256_hex(&cur));
+            }
+            adopted.push(rel_str);
+        } else {
+            write_file(&target, bytes)?;
+            manifest_files.insert(rel_str.clone(), sha256_hex(bytes));
+            created.push(rel_str);
+        }
+    }
+
+    let manifest = ProjectManifest {
+        tool: "pengj-templates".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        project_name: project_name.clone(),
+        layers: ordered.clone(),
+        options,
+        generated_at: now_rfc3339(),
+        files: manifest_files,
+    };
+    manifest.save(project_dir)?;
+
+    Ok(AdoptReport {
+        project_name,
+        layers: ordered,
+        created,
+        adopted,
+    })
+}
+
+// ---------- 锚点区域保护合并 (Slot / Anchor Merge) ----------
+
+const SLOT_MARKERS: &[(&str, &str)] = &[
+    (
+        "<!-- PENGJ_TEMPLATE_START -->",
+        "<!-- PENGJ_TEMPLATE_END -->",
+    ),
+    ("// PENGJ_TEMPLATE_START", "// PENGJ_TEMPLATE_END"),
+    ("# PENGJ_TEMPLATE_START", "# PENGJ_TEMPLATE_END"),
+    ("/* PENGJ_TEMPLATE_START */", "/* PENGJ_TEMPLATE_END */"),
+];
+
+/// 尝试按锚点标记将模板中的受保护区间合并入磁盘现有文件。
+///
+/// 逻辑：
+/// 若模板内容与磁盘文件均包含同一种合法配对的锚点标记 `(start_marker, end_marker)`，
+/// 则将磁盘文件中从 `start_marker` 到 `end_marker`（含标记本身）的区间替换为
+/// 模板中对应区间的完整内容，保留磁盘文件在标记外部的所有用户定制代码/文字。
+pub fn try_merge_slots(disk_bytes: &[u8], template_bytes: &[u8]) -> Option<Vec<u8>> {
+    let disk_str = std::str::from_utf8(disk_bytes).ok()?;
+    let template_str = std::str::from_utf8(template_bytes).ok()?;
+
+    for &(start_m, end_m) in SLOT_MARKERS {
+        if let (Some(t_start), Some(d_start)) = (template_str.find(start_m), disk_str.find(start_m))
+        {
+            let t_end_rel = template_str[t_start..].find(end_m)?;
+            let t_end = t_start + t_end_rel + end_m.len();
+
+            let d_end_rel = disk_str[d_start..].find(end_m)?;
+            let d_end = d_start + d_end_rel + end_m.len();
+
+            let template_section = &template_str[t_start..t_end];
+
+            let mut merged = String::with_capacity(disk_str.len() + template_section.len());
+            merged.push_str(&disk_str[..d_start]);
+            merged.push_str(template_section);
+            merged.push_str(&disk_str[d_end..]);
+
+            return Some(merged.into_bytes());
+        }
+    }
+
+    None
+}
+
 // ---------- 更新 ----------
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -715,13 +869,26 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
                         new_files.insert(rel_str.clone(), new_sha);
                         updated.push(rel_str);
                     }
-                    Some(_) => {
-                        // 本地被用户改过，保留记录，跳过
-                        new_files.insert(rel_str.clone(), old_sha.clone());
-                        conflicted.push(ConflictInfo {
-                            path: rel_str,
-                            reason: "文件已被本地修改，跳过更新".to_string(),
-                        });
+                    Some(cur) => {
+                        // 本地被用户改过：优先尝试锚点插槽合并（保留锚点外用户代码）
+                        if let Some(merged_bytes) = try_merge_slots(&cur, bytes) {
+                            if merged_bytes == cur {
+                                unchanged += 1;
+                                new_files.insert(rel_str, sha256_hex(&cur));
+                            } else {
+                                write_file(&target, &merged_bytes)?;
+                                let merged_sha = sha256_hex(&merged_bytes);
+                                new_files.insert(rel_str.clone(), merged_sha);
+                                updated.push(rel_str);
+                            }
+                        } else {
+                            // 无锚点或锚点不匹配，保持冲突跳过
+                            new_files.insert(rel_str.clone(), old_sha.clone());
+                            conflicted.push(ConflictInfo {
+                                path: rel_str,
+                                reason: "文件已被本地修改，跳过更新".to_string(),
+                            });
+                        }
                     }
                 }
             }
@@ -729,10 +896,23 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
                 // 模板新增的文件
                 let target = project_dir.join(rel);
                 if target.exists() {
-                    conflicted.push(ConflictInfo {
-                        path: rel_str.clone(),
-                        reason: "文件已存在但未被模板托管，跳过".to_string(),
-                    });
+                    let cur = std::fs::read(&target).unwrap_or_default();
+                    if let Some(merged_bytes) = try_merge_slots(&cur, bytes) {
+                        if merged_bytes == cur {
+                            unchanged += 1;
+                            new_files.insert(rel_str, sha256_hex(&cur));
+                        } else {
+                            write_file(&target, &merged_bytes)?;
+                            let merged_sha = sha256_hex(&merged_bytes);
+                            new_files.insert(rel_str.clone(), merged_sha);
+                            updated.push(rel_str);
+                        }
+                    } else {
+                        conflicted.push(ConflictInfo {
+                            path: rel_str.clone(),
+                            reason: "文件已存在但未被模板托管，跳过".to_string(),
+                        });
+                    }
                 } else {
                     write_file(&target, bytes)?;
                     new_files.insert(rel_str.clone(), new_sha);
@@ -1571,6 +1751,71 @@ mod tests {
         assert!(content.contains("* text=auto eol=lf"));
         assert!(content.contains("# --- layer_b 层 ---"));
         assert!(content.contains("*.rs text eol=lf diff=rust"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn try_merge_slots_preserves_surrounding_custom_content() {
+        let disk = b"# Header\n\n<!-- PENGJ_TEMPLATE_START -->\nold template\n<!-- PENGJ_TEMPLATE_END -->\n\n## Custom User Rules\n- Rule 1\n";
+        let tmpl =
+            b"<!-- PENGJ_TEMPLATE_START -->\nnew updated template\n<!-- PENGJ_TEMPLATE_END -->\n";
+        let merged = try_merge_slots(disk, tmpl).expect("should merge slot");
+        let merged_str = String::from_utf8(merged).unwrap();
+        assert!(merged_str.starts_with("# Header\n\n"));
+        assert!(merged_str.contains("new updated template"));
+        assert!(merged_str.ends_with("\n\n## Custom User Rules\n- Rule 1\n"));
+
+        // Shell/TOML 风格 # 注释
+        let disk_hash = b"# PENGJ_TEMPLATE_START\nold cfg\n# PENGJ_TEMPLATE_END\ncustom = 1\n";
+        let tmpl_hash = b"# PENGJ_TEMPLATE_START\nnew cfg\n# PENGJ_TEMPLATE_END\n";
+        let merged_hash = try_merge_slots(disk_hash, tmpl_hash).expect("should merge # slot");
+        assert_eq!(
+            String::from_utf8(merged_hash).unwrap(),
+            "# PENGJ_TEMPLATE_START\nnew cfg\n# PENGJ_TEMPLATE_END\ncustom = 1\n"
+        );
+    }
+
+    #[test]
+    fn adopt_project_initializes_manifest_for_existing_directory() {
+        let tmp = std::env::temp_dir().join(format!("pengj-adopt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        let common = tpl.join("common");
+        std::fs::create_dir_all(&common).unwrap();
+        std::fs::write(
+            common.join("layer.toml"),
+            "name = \"Common\"\ndescription = \"Common\"\n",
+        )
+        .unwrap();
+        std::fs::write(common.join(".gitignore"), "target/\n").unwrap();
+
+        let existing_project = tmp.join("my-existing-app");
+        std::fs::create_dir_all(&existing_project).unwrap();
+        std::fs::write(existing_project.join("README.md"), "# Existing").unwrap();
+        std::fs::write(
+            existing_project.join(".gitignore"),
+            "target/\nlocal_custom/\n",
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let report = adopt_project(
+            &templates,
+            &existing_project,
+            &["common".to_string()],
+            BTreeMap::new(),
+            false,
+        )
+        .expect("adopt should succeed");
+
+        assert_eq!(report.project_name, "my-existing-app");
+        assert!(existing_project.join(".pengj-templates.json").exists());
+        let manifest = ProjectManifest::load(&existing_project).unwrap();
+        assert_eq!(manifest.layers, vec!["common".to_string()]);
+        assert!(manifest.files.contains_key(".gitignore"));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

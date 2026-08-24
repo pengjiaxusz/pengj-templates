@@ -11,10 +11,10 @@ pub mod manifest;
 pub mod render;
 
 pub use engine::{
-    default_templates_dir, generate, list_workspace_files, sync_workspace_file, update_project,
-    Templates,
+    adopt_project, default_templates_dir, generate, list_workspace_files, sync_workspace_file,
+    update_project, Templates,
 };
-pub use engine::{ConflictInfo, GenerateReport, UpdateReport};
+pub use engine::{AdoptReport, ConflictInfo, GenerateReport, UpdateReport};
 pub use error::{CoreError, Result};
 pub use layer::{LayerInfo, SkillInfo};
 pub use manifest::{ProjectManifest, MANIFEST_FILE};
