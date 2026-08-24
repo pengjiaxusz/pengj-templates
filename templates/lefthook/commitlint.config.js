@@ -1,24 +1,10 @@
+import base from './commitlint.base.js';
+
 export default {
-  extends: ['@commitlint/config-conventional'],
+  ...base,
   rules: {
-    'body-max-line-length': [0], // 禁用正文行长度限制
-    'subject-case': [0, 'always'], // 禁用 subject 大小写检查（允许中文标题）
-    'type-enum': [
-      2,
-      'always',
-      [
-        'feat',
-        'fix',
-        'docs',
-        'style',
-        'refactor',
-        'perf',
-        'test',
-        'build',
-        'ci',
-        'chore',
-        'revert',
-      ],
-    ],
+    ...base.rules,
+    // 在此处扩展项目特有的 scope 白名单（例如 ['core', 'cli', 'app']）
+    // 本文件受 update_ignore 保护，模板更新时不会被覆盖
   },
 };

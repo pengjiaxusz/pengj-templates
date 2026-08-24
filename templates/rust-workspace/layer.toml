@@ -1,0 +1,3 @@
+name = "Rust 工作区"
+description = "Rust 多 Crate 工作区：工作区 Cargo.toml、clippy/rustfmt 统一规范、sccache/lld 优化、工作区 justfile"
+depends = ["common"]

@@ -1,0 +1,3 @@
+[toolchain]
+channel = "{{ options["channel"] or "stable" }}"
+components = ["rustfmt", "clippy"]

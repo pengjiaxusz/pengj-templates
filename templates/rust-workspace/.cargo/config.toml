@@ -1,0 +1,15 @@
+# 构建配置（由模板生成，sccache / lld 按选项开关）
+{% if options["use_sccache"] %}
+# 统一使用 sccache 编译缓存
+[build]
+rustc-wrapper = "sccache"
+{% endif %}
+{% if options["use_lld"] %}
+# 使用 lld 链接器
+[target.x86_64-pc-windows-msvc]
+linker = "lld"
+rustflags = ["-C", "link-arg=/OPT:REF"]
+
+[target.x86_64-unknown-linux-gnu]
+linker = "lld"
+{% endif %}

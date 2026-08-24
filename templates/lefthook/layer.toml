@@ -1,3 +1,4 @@
 name = "Lefthook"
 description = "Git hooks（lefthook）+ commitlint 约定式提交校验"
 depends = ["common"]
+update_ignore = ["commitlint.config.js"]

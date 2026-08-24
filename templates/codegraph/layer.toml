@@ -1,0 +1,3 @@
+name = "CodeGraph"
+description = "CodeGraph 代码知识图谱支持：依赖与索引初始化脚本"
+depends = ["common"]

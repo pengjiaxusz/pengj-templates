@@ -1,3 +1,4 @@
+<!-- PENGJ_TEMPLATE_START -->
 {% if options["skill_lang"] == "en" %}
 # {{ project_name }} Coding Standards
 
@@ -17,7 +18,13 @@
 {% endfor %}
 {% endif %}
 
-{% if 'rust' in layers %}
+{% if 'codegraph' in layers %}
+## CodeGraph conventions
+
+- All code exploration and searching should prioritize the CodeGraph CLI (`codegraph explore`, `query`, `callers`, `callees`) over raw search.
+{% endif %}
+
+{% if 'rust' in layers or 'rust-workspace' in layers %}
 ## Rust conventions
 
 - Format: `cargo fmt`; CI uses `just fmt` (`cargo fmt --check`).
@@ -58,7 +65,13 @@
 {% endfor %}
 {% endif %}
 
-{% if 'rust' in layers %}
+{% if 'codegraph' in layers %}
+## CodeGraph 知识图谱约定
+
+- 代码探索与搜索优先使用 CodeGraph CLI（`codegraph explore`、`query`、`callers`、`callees`），提升结构理解效率。
+{% endif %}
+
+{% if 'rust' in layers or 'rust-workspace' in layers %}
 ## Rust 编码规范
 
 - 格式化：`cargo fmt`；CI 用 `just fmt`（`cargo fmt --check`）。
@@ -81,3 +94,6 @@
 {% endif %}
 {% endif %}
 {% endif %}
+<!-- PENGJ_TEMPLATE_END -->
+
+<!-- 项目专属规范可写在下方（锚点之外），模板更新时将完整保留用户内容 -->

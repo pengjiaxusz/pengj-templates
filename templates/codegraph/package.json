@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "postinstall": "node scripts/ensure-codegraph.mjs"
+  },
+  "devDependencies": {
+    "@colbymchenry/codegraph": "^1.5.0"
+  }
+}

@@ -1,0 +1,28 @@
+# justfile — 工作区常用任务
+# 跨平台 shell：unix 用 sh，Windows 用 PowerShell，不强制 bash
+[unix]
+set shell := ["sh", "-uc"]
+[windows]
+set shell := ["powershell", "-NoProfile", "-Command"]
+
+default:
+    @just --list
+
+# 全工作区构建
+build:
+    cargo build --workspace
+
+# 全工作区检查（clippy 警告视为错误）
+check:
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+# 全工作区测试
+test:
+    cargo test --workspace --all-features
+
+# 格式化检查
+fmt:
+    cargo fmt --check
+
+# 一键全检查（CI 用）
+ci: fmt check test
