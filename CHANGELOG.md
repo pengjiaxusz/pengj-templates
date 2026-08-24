@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.9.0-beta.1...v0.9.1-beta.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **core:** 规范 Manifest 文件名为 .pengj-templates.json ([708b19f](https://github.com/pengjiaxusz/pengj-templates/commit/708b19fc1783e14bc3e36af6b796cc5ec60e90d4))
+
 ## [0.9.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.8.1-beta.1...v0.9.0-beta.1) (2026-08-24)
 
 
