@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.10.0-beta.1...v0.11.0-beta.1) (2026-08-24)
+
+
+### Features
+
+* **agent:** 为当前项目安装渲染版 arch-align 架构对齐技能 ([fb5dade](https://github.com/pengjiaxusz/pengj-templates/commit/fb5dade20edd8ef67f6af4d1bfbe10b2c973180f))
+
+
+### Bug Fixes
+
+* **cli:** 统一 CLI 二进制与命令名称为 pengj-templates-cli ([74cce8d](https://github.com/pengjiaxusz/pengj-templates/commit/74cce8d54d934cac6fef19b237c69d8f28184691))
+
 ## [0.10.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.9.1-beta.1...v0.10.0-beta.1) (2026-08-24)
 
 
