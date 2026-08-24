@@ -5,9 +5,17 @@
 
 ## General conventions
 
-- Commits follow Conventional Commits — {% if options["commit_zh"] %}type/scope in English, subject/body in Chinese{% else %}titles in English{% endif %} (see `.agents/skills/commit`).
+- Commits follow Conventional Commits — {% if options["commit_zh"] %}type/scope in English, subject/body in Chinese{% else %}titles in English{% endif %}{% if options["skills"] is undefined or 'commit' in options["skills"] %} (see `.agents/skills/commit`){% endif %}.
 - Keep changes minimal and readable; match the existing style; reuse over reinvent.
 - When touching build/deps, docs, or public naming, self-check before finishing.
+
+{% if options["skills"] is defined and options["skills"] | length > 0 %}
+### Enabled skills
+
+{% for skill in options["skills"] %}
+- `{{ skill }}` — see `.agents/skills/{{ skill }}/SKILL.md`
+{% endfor %}
+{% endif %}
 
 {% if 'rust' in layers %}
 ## Rust conventions
@@ -38,9 +46,17 @@
 
 ## 通用约定
 
-- 提交信息遵守约定式提交：`type(scope): 标题`{% if options["commit_zh"] %}，type 用英文、标题正文用中文{% else %}，标题用英文{% endif %}（见 `.agents/skills/commit`）。
+- 提交信息遵守约定式提交：`type(scope): 标题`{% if options["commit_zh"] %}，type 用英文、标题正文用中文{% else %}，标题用英文{% endif %}{% if options["skills"] is undefined or 'commit' in options["skills"] %}（见 `.agents/skills/commit`）{% endif %}。
 - 改动遵循最小化与可读性，先对齐仓库现有风格；能复用不新造。
 - 涉及构建/依赖、文档、公开命名时，改完先自检再收尾。
+
+{% if options["skills"] is defined and options["skills"] | length > 0 %}
+### 启用的技能
+
+{% for skill in options["skills"] %}
+- `{{ skill }}` —— 见 `.agents/skills/{{ skill }}/SKILL.md`
+{% endfor %}
+{% endif %}
 
 {% if 'rust' in layers %}
 ## Rust 编码规范
