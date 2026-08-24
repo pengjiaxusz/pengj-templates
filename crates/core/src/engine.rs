@@ -676,6 +676,25 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
             continue;
         }
 
+        // `.vscode/settings.json`：增量合并（与 `.code-workspace` 同一语义），不走
+        // SHA 冲突判定——模板的 fileNesting / rust-analyzer.clippy 并入用户文件，
+        // 用户自定义规则不丢失且能收到模板新规则。
+        if rel == Path::new(VSCODE_SETTINGS_REL) {
+            let target = project_dir.join(rel);
+            match sync_settings_file(&target, &ctx, &fm, project_dir)? {
+                SettingsSyncOutcome::Updated => updated.push(rel_str.clone()),
+                SettingsSyncOutcome::Created => created.push(rel_str.clone()),
+                SettingsSyncOutcome::Unchanged => unchanged += 1,
+            }
+            // 记录写盘后（或现有）内容的 sha，避免下次误判冲突
+            let disk_sha = std::fs::read(&target)
+                .ok()
+                .map(|b| sha256_hex(&b))
+                .unwrap_or(new_sha);
+            new_files.insert(rel_str, disk_sha);
+            continue;
+        }
+
         match manifest.files.get(&rel_str) {
             Some(old_sha) if *old_sha == new_sha => {
                 unchanged += 1;
@@ -799,60 +818,36 @@ fn json_set_if_changed(
     true
 }
 
-/// 把一个 `*.code-workspace` 文件与模板的 VS Code 配置同步。
-///
-/// 读取 workspace 的 JSON，把 `.vscode/settings.json` 渲染结果里的 fileNesting 配置
-/// 写入其顶层 `settings` 节点（顶层 `folders` / `extensions` 等其它字段原样保留）：
-/// - `explorer.fileNesting.enabled` / `expand`：按模板值直接设值
-/// - `explorer.fileNesting.patterns`：对象合并，模板值覆盖同名 key，其余 key 保留
-/// - `rust-analyzer.cargo.checkOnSave.command = "clippy"`：仅当「中文编程 + rust 层」时写入
-///
-/// 配置来源优先取模板渲染出的 `.vscode/settings.json`（模板优先）；模板未提供时
-/// （未选 vscode 层）回退到磁盘上项目既有的 settings 文件，保证独立调用也能工作。
-/// 仅在内容真正变化时写盘并返回 `true`；workspace 读取/JSON 解析失败时静默返回
-/// `Ok(false)` 跳过，不阻断更新流程。
-///
-/// 注：不写入 `rust-analyzer.linkedProjects`。VS Code 的 rust-analyzer 默认 `[]`
-/// 会自动发现工作区内的 Cargo 项目；显式列出反而会禁用自动发现，冗余且有害，
-/// 因此模板与同步逻辑都不维护该字段。
-pub fn sync_workspace_file(
-    path: &Path,
+/// 取 VS Code settings 配置来源：模板渲染出的 `.vscode/settings.json`（经 RenderContext）
+/// 优先；模板未提供时（未选 vscode 层）回退到磁盘上项目既有的 settings 文件。
+/// 模板/磁盘文件缺失或 JSON 解析失败时返回空对象（`{}`），不阻断调用方。
+fn vscode_settings_source(
     ctx: &RenderContext,
     fm: &FileMap,
     project_dir: &Path,
-) -> Result<bool> {
-    // 配置来源：模板渲染出的 `.vscode/settings.json`，缺失时回退磁盘文件
-    let settings_value: serde_json::Value = match fm.normal.get(Path::new(VSCODE_SETTINGS_REL)) {
+) -> Result<serde_json::Value> {
+    let value = match fm.normal.get(Path::new(VSCODE_SETTINGS_REL)) {
         Some(bytes) => serde_json::from_slice(&render_bytes(bytes, ctx)?).unwrap_or_default(),
         None => std::fs::read_to_string(project_dir.join(VSCODE_SETTINGS_REL))
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default(),
     };
-    let Some(src) = settings_value.as_object() else {
-        // 无可用配置来源（未选 vscode 层且磁盘无 settings）
-        return Ok(false);
-    };
+    Ok(value)
+}
 
-    // 读取 workspace：失败即跳过（不 panic）
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return Ok(false);
-    };
-    let Ok(mut ws) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Ok(false);
-    };
-    let Some(ws_obj) = ws.as_object_mut() else {
-        return Ok(false);
-    };
-    // 确保顶层有 `settings` 对象；已存在但非对象时跳过（避免覆盖用户数据）
-    let Some(settings) = ws_obj
-        .entry("settings")
-        .or_insert_with(|| serde_json::json!({}))
-        .as_object_mut()
-    else {
-        return Ok(false);
-    };
-
+/// 把模板 settings 的 VS Code 配置合并进 `settings` 对象（settings.json 顶层
+/// 或 `.code-workspace` 的 `settings` 节点共用同一语义）：
+/// - `explorer.fileNesting.enabled` / `expand`：模板有则直接设值
+/// - `explorer.fileNesting.patterns`：对象合并，模板值覆盖同名 key，其余 key 保留
+/// - `rust-analyzer.cargo.checkOnSave.command = "clippy"`：仅当「中文编程 + rust 层」时写入
+///
+/// 其余 key 原样保留（用户的自定义设置不动）。返回是否发生变更。
+fn merge_vscode_settings(
+    settings: &mut serde_json::Map<String, serde_json::Value>,
+    src: &serde_json::Map<String, serde_json::Value>,
+    ctx: &RenderContext,
+) -> bool {
     let mut changed = false;
 
     // fileNesting 开关：直接设值
@@ -904,6 +899,59 @@ pub fn sync_workspace_file(
         );
     }
 
+    changed
+}
+
+/// 把一个 `*.code-workspace` 文件与模板的 VS Code 配置同步。
+///
+/// 读取 workspace 的 JSON，把 `.vscode/settings.json` 渲染结果里的 fileNesting 配置
+/// 写入其顶层 `settings` 节点（顶层 `folders` / `extensions` 等其它字段原样保留）：
+/// - `explorer.fileNesting.enabled` / `expand`：按模板值直接设值
+/// - `explorer.fileNesting.patterns`：对象合并，模板值覆盖同名 key，其余 key 保留
+/// - `rust-analyzer.cargo.checkOnSave.command = "clippy"`：仅当「中文编程 + rust 层」时写入
+///
+/// 配置来源优先取模板渲染出的 `.vscode/settings.json`（模板优先）；模板未提供时
+/// （未选 vscode 层）回退到磁盘上项目既有的 settings 文件，保证独立调用也能工作。
+/// 仅在内容真正变化时写盘并返回 `true`；workspace 读取/JSON 解析失败时静默返回
+/// `Ok(false)` 跳过，不阻断更新流程。
+///
+/// 注：不写入 `rust-analyzer.linkedProjects`。VS Code 的 rust-analyzer 默认 `[]`
+/// 会自动发现工作区内的 Cargo 项目；显式列出反而会禁用自动发现，冗余且有害，
+/// 因此模板与同步逻辑都不维护该字段。
+pub fn sync_workspace_file(
+    path: &Path,
+    ctx: &RenderContext,
+    fm: &FileMap,
+    project_dir: &Path,
+) -> Result<bool> {
+    // 配置来源：模板渲染出的 `.vscode/settings.json`，缺失时回退磁盘文件
+    let settings_value = vscode_settings_source(ctx, fm, project_dir)?;
+    let Some(src) = settings_value.as_object() else {
+        // 无可用配置来源（未选 vscode 层且磁盘无 settings）
+        return Ok(false);
+    };
+
+    // 读取 workspace：失败即跳过（不 panic）
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Ok(false);
+    };
+    let Ok(mut ws) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Ok(false);
+    };
+    let Some(ws_obj) = ws.as_object_mut() else {
+        return Ok(false);
+    };
+    // 确保顶层有 `settings` 对象；已存在但非对象时跳过（避免覆盖用户数据）
+    let Some(settings) = ws_obj
+        .entry("settings")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+    else {
+        return Ok(false);
+    };
+
+    let changed = merge_vscode_settings(settings, src, ctx);
+
     if !changed {
         return Ok(false);
     }
@@ -912,6 +960,71 @@ pub fn sync_workspace_file(
     out.push('\n');
     std::fs::write(path, out)?;
     Ok(true)
+}
+
+/// `.vscode/settings.json` 增量合并的结果分类（复用 `update_project` 的统计口径）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsSyncOutcome {
+    /// 内容已变更并写盘（文件原本存在）
+    Updated,
+    /// 文件原本不存在，本次创建
+    Created,
+    /// 无实质变更（含模板源缺失/非对象、磁盘 JSON 解析失败等保守跳过）
+    Unchanged,
+}
+
+/// 把 `.vscode/settings.json` 与模板的 VS Code 配置增量合并。
+///
+/// 复用 `merge_vscode_settings` 的合并语义（与 `.code-workspace` 同步一致）：
+/// - 配置来源：模板渲染出的 settings 优先，缺失时回退磁盘既有文件
+/// - 模板源非对象 -> 保守跳过（`Unchanged`），不误伤用户文件
+/// - 以磁盘现有 JSON 为底（不存在或解析失败视为 `{}`），模板的 fileNesting /
+///   rust-analyzer.clippy 并入，用户其它 key 原样保留
+/// - 仅真正变更才写盘；幂等（二次调用无变更返回 `Unchanged`）
+pub fn sync_settings_file(
+    path: &Path,
+    ctx: &RenderContext,
+    fm: &FileMap,
+    project_dir: &Path,
+) -> Result<SettingsSyncOutcome> {
+    let settings_value = vscode_settings_source(ctx, fm, project_dir)?;
+    let Some(src) = settings_value.as_object() else {
+        // 模板源非对象：保守跳过
+        return Ok(SettingsSyncOutcome::Unchanged);
+    };
+
+    let existed = path.exists();
+    // 现有文件：不存在或 JSON 解析失败时视为空对象（保守，不覆盖用户数据）
+    let disk: serde_json::Value = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let mut merged = if disk.is_object() {
+        disk
+    } else {
+        serde_json::json!({})
+    };
+    let changed = match merged.as_object_mut() {
+        Some(base) => merge_vscode_settings(base, src, ctx),
+        None => false,
+    };
+
+    if existed && !changed {
+        return Ok(SettingsSyncOutcome::Unchanged);
+    }
+    if !existed && merged.as_object().is_some_and(|o| o.is_empty()) {
+        // 无任何可写内容（模板与磁盘均为空）：不创建空文件
+        return Ok(SettingsSyncOutcome::Unchanged);
+    }
+
+    let mut out = serde_json::to_string_pretty(&merged)?;
+    out.push('\n');
+    write_file(path, out.as_bytes())?;
+    Ok(if existed {
+        SettingsSyncOutcome::Updated
+    } else {
+        SettingsSyncOutcome::Created
+    })
 }
 
 // ---------- 时间 ----------
@@ -1155,6 +1268,258 @@ mod tests {
         let plain = tmp.join("plain.code-workspace");
         std::fs::write(&plain, r#"{ "folders": [{ "path": "." }] }"#).unwrap();
         assert!(!sync_workspace_file(&plain, &ctx, &empty_fm, &proj).unwrap());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_settings_file_merges_filenesting_and_preserves_user_keys() {
+        let tmp = std::env::temp_dir().join(format!("pengj-st-sync-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(proj.join(".vscode")).unwrap();
+        let (fm, ctx) = ws_test_fixture();
+
+        let settings = proj.join(".vscode").join("settings.json");
+        std::fs::write(
+            &settings,
+            r#"{
+  "editor.fontSize": 14,
+  "explorer.fileNesting.enabled": false,
+  "explorer.fileNesting.patterns": { "Cargo.toml": "user", "README.md": "keep-me" }
+}"#,
+        )
+        .unwrap();
+
+        // 首次同步发生变更，第二次幂等（不再写盘）
+        assert_eq!(
+            sync_settings_file(&settings, &ctx, &fm, &proj).unwrap(),
+            SettingsSyncOutcome::Updated
+        );
+        assert_eq!(
+            sync_settings_file(&settings, &ctx, &fm, &proj).unwrap(),
+            SettingsSyncOutcome::Unchanged
+        );
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(
+            parsed["explorer.fileNesting.enabled"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            parsed["explorer.fileNesting.expand"],
+            serde_json::json!(false)
+        );
+        assert_eq!(
+            parsed["editor.fontSize"],
+            serde_json::json!(14),
+            "用户标量保留"
+        );
+        assert_eq!(
+            parsed["explorer.fileNesting.patterns"]["Cargo.toml"],
+            serde_json::json!("tpl"),
+            "模板覆盖同名 key"
+        );
+        assert_eq!(
+            parsed["explorer.fileNesting.patterns"]["README.md"],
+            serde_json::json!("keep-me"),
+            "用户其它 key 保留"
+        );
+        assert_eq!(
+            parsed["rust-analyzer.cargo.checkOnSave.command"],
+            serde_json::json!("clippy"),
+            "中文编程 + rust 层写入 clippy"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_settings_file_creates_missing_file() {
+        let tmp = std::env::temp_dir().join(format!("pengj-st-create-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        let (fm, ctx) = ws_test_fixture();
+
+        let settings = proj.join(".vscode").join("settings.json");
+        // 首次为项目补 vscode 层：创建文件；二次调用幂等
+        assert_eq!(
+            sync_settings_file(&settings, &ctx, &fm, &proj).unwrap(),
+            SettingsSyncOutcome::Created
+        );
+        assert_eq!(
+            sync_settings_file(&settings, &ctx, &fm, &proj).unwrap(),
+            SettingsSyncOutcome::Unchanged
+        );
+        let parsed: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(
+            parsed["explorer.fileNesting.enabled"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            parsed["rust-analyzer.cargo.checkOnSave.command"],
+            serde_json::json!("clippy")
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_settings_file_skips_without_template_or_disk_source() {
+        let tmp = std::env::temp_dir().join(format!("pengj-st-skip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        let empty_fm = FileMap {
+            normal: BTreeMap::new(),
+            concat: BTreeMap::new(),
+            json: BTreeMap::new(),
+        };
+        let ctx = RenderContext::new("proj", vec!["vscode".to_string()], BTreeMap::new());
+
+        // 无模板来源且磁盘无 settings：不创建空文件
+        let settings = proj.join(".vscode").join("settings.json");
+        assert_eq!(
+            sync_settings_file(&settings, &ctx, &empty_fm, &proj).unwrap(),
+            SettingsSyncOutcome::Unchanged
+        );
+        assert!(!settings.exists());
+
+        // 模板源非对象：保守跳过，不改动用户文件
+        let mut arr_fm = FileMap {
+            normal: BTreeMap::new(),
+            concat: BTreeMap::new(),
+            json: BTreeMap::new(),
+        };
+        arr_fm
+            .normal
+            .insert(PathBuf::from(".vscode/settings.json"), b"[1, 2]".to_vec());
+        std::fs::create_dir_all(proj.join(".vscode")).unwrap();
+        std::fs::write(&settings, r#"{ "editor.fontSize": 14 }"#).unwrap();
+        assert_eq!(
+            sync_settings_file(&settings, &ctx, &arr_fm, &proj).unwrap(),
+            SettingsSyncOutcome::Unchanged
+        );
+        let parsed: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(
+            parsed["editor.fontSize"],
+            serde_json::json!(14),
+            "用户文件未被改动"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn update_project_merges_vscode_settings_incrementally() {
+        let tmp = std::env::temp_dir().join(format!("pengj-upd-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 模板：common + vscode（settings.json 带 fileNesting）
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tpl.join("vscode").join(".vscode")).unwrap();
+        std::fs::write(
+            tpl.join("vscode").join("layer.toml"),
+            "name = \"VS Code\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("vscode").join(".vscode").join("settings.json"),
+            r#"{
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": { "Cargo.toml": "tpl" }
+}"#,
+        )
+        .unwrap();
+
+        // 项目：磁盘 settings 已有用户自定义，manifest 已记录 vscode 层
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(proj.join(".vscode")).unwrap();
+        std::fs::write(
+            proj.join(".vscode").join("settings.json"),
+            r#"{
+  "editor.fontSize": 14,
+  "explorer.fileNesting.enabled": false,
+  "explorer.fileNesting.patterns": { "Cargo.toml": "user", "README.md": "keep-me" }
+}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            proj.join(".pengj.json"),
+            serde_json::json!({
+                "tool": "pengj-templates",
+                "version": "0.0.0",
+                "project_name": "proj",
+                "layers": ["common", "vscode"],
+                "options": { "chinese_programming": true },
+                "generated_at": "2026-01-01T00:00:00Z",
+                "files": {},
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        // 报告/manifest 中的路径使用平台分隔符，比较时统一经 Path 归一化
+        let settings_rel = Path::new(".vscode/settings.json");
+        let report = update_project(&templates, &proj).unwrap();
+        assert!(
+            report.updated.iter().any(|f| Path::new(f) == settings_rel),
+            "模板变更应合并写入 settings.json"
+        );
+
+        let parsed: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(proj.join(".vscode").join("settings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            parsed["explorer.fileNesting.enabled"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            parsed["explorer.fileNesting.patterns"]["Cargo.toml"],
+            serde_json::json!("tpl"),
+            "模板覆盖同名 key"
+        );
+        assert_eq!(
+            parsed["explorer.fileNesting.patterns"]["README.md"],
+            serde_json::json!("keep-me"),
+            "用户其它 key 保留"
+        );
+        assert_eq!(
+            parsed["editor.fontSize"],
+            serde_json::json!(14),
+            "用户标量保留"
+        );
+
+        // 幂等：二次更新不再变更 settings.json
+        let report2 = update_project(&templates, &proj).unwrap();
+        assert!(!report2.updated.iter().any(|f| Path::new(f) == settings_rel));
+        assert!(!report2.created.iter().any(|f| Path::new(f) == settings_rel));
+
+        // manifest 记录的 sha 与磁盘内容一致，避免下次误判冲突
+        let manifest = ProjectManifest::load(&proj).unwrap();
+        let disk = std::fs::read(proj.join(settings_rel)).unwrap();
+        let key = manifest
+            .files
+            .keys()
+            .find(|k| Path::new(k) == settings_rel)
+            .expect("manifest 应记录 settings.json");
+        assert_eq!(manifest.files[key], sha256_hex(&disk));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
