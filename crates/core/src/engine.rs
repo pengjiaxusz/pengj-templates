@@ -1459,7 +1459,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(
-            proj.join(".pengj.json"),
+            proj.join(crate::manifest::MANIFEST_FILE),
             serde_json::json!({
                 "tool": "pengj-templates",
                 "version": "0.0.0",

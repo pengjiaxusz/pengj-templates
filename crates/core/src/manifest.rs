@@ -18,7 +18,7 @@ pub struct ProjectManifest {
     pub files: BTreeMap<String, String>,
 }
 
-pub const MANIFEST_FILE: &str = ".pengj.json";
+pub const MANIFEST_FILE: &str = ".pengj-templates.json";
 
 impl ProjectManifest {
     pub fn load(dir: &std::path::Path) -> Result<Self, crate::error::CoreError> {

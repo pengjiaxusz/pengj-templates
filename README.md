@@ -35,7 +35,7 @@ cargo run -p pengj-cli -- create my-app --layers agent --skills commit,caveman  
 cargo run -p pengj-cli -- update --dir ./my-app                # 同步模板更新
 ```
 
-`create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2021）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--no-sccache` 关闭编译缓存、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj.json`，`update` 同步时按各项目当年的选项重新渲染。
+`create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2021）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--no-sccache` 关闭编译缓存、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates.json`，`update` 同步时按各项目当年的选项重新渲染。
 
 `agent` 层的技能选项（选 agent 层时生效）：`--skills commit,caveman,grill-me` 决定生成哪些技能（逗号分隔，默认全部；GUI 里用勾选框选择）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `commit`（约定式提交）、`caveman`（超压缩通信）、`grill-me`（设计质询）三个，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可。三个中文概念互相独立：**中文编程**（代码标识符）、**技能用中文写**（文档语言，`skill_lang`）、**提交信息是中文**（提交信息语言，`commit_zh`）。
 
@@ -72,7 +72,7 @@ pnpm --dir crates/app install
 pnpm --dir crates/app tauri dev
 ```
 
-生成项目时写入 `.pengj.json` manifest（记录层与模板托管文件哈希），`update` 依据它只更新模板托管文件：本地未改动的文件直接覆盖、被改过的报冲突跳过、模板新增的自动创建。
+生成项目时写入 `.pengj-templates.json` manifest（记录层与模板托管文件哈希），`update` 依据它只更新模板托管文件：本地未改动的文件直接覆盖、被改过的报冲突跳过、模板新增的自动创建。
 
 ## 目录结构
 

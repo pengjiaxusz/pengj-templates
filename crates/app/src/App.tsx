@@ -462,7 +462,7 @@ function UpdateTab() {
         <CardHeader>
           <CardTitle>目标项目</CardTitle>
           <CardDescription>
-            选择由 pengj-templates 生成的项目目录（含 .pengj.json）
+            选择由 pengj-templates 生成的项目目录（含 .pengj-templates.json）
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

@@ -9,7 +9,7 @@
 
 分层模板生成与同步更新工具：把仓库模板按「层（layer）」组织，勾选所需层即可生成新仓库；模板更新后，一键同步到所有基于它生成的项目。
 
-- **引擎**（Rust）：`crates/core` — 层发现、依赖排序、合并渲染、生成/更新、`.pengj.json` manifest
+- **引擎**（Rust）：`crates/core` — 层发现、依赖排序、合并渲染、生成/更新、`.pengj-templates.json` manifest
 - **CLI**（Rust/clap）：`crates/cli`，命令 `pengj`
 - **GUI**（Tauri 2 + React + Vite + TypeScript + Tailwind v4 + shadcn/ui）：`crates/app`（`src-tauri/` 为 Rust 壳，`src/` 为前端）
 - **模板**：`templates/<layer>/`，运行时读取（改模板无需重编译，直接 re-run 生效）
@@ -48,7 +48,7 @@
 - **新增层** = `templates/<layer>/` 目录 + `layer.toml`（`name` / `description` / `depends` / `update_ignore`），自动发现、无需注册。
 - **合并规则**：按依赖顺序合并、后层覆盖前层；`.gitignore`、`.gitattributes` 按层累加拼接（`ACCUMULATE_FILES`）；`package.json` 结构化并集（`MERGE_JSON_FILES`）。
 - **占位符**：minijinja（`{{ project_name }}`、`{{ project_slug }}`、`{{ year }}`、`layers`、`options`），渲染逻辑在 `crates/core/src/render.rs`。
-- **选项**：生成时用户选项（edition、skills、skill_lang 等）固化进 `.pengj.json` manifest；`update` 按同一批选项重渲染。
+- **选项**：生成时用户选项（edition、skills、skill_lang 等）固化进 `.pengj-templates.json` manifest；`update` 按同一批选项重渲染。
 - **技能过滤**：`options["skills"]`（字符串数组）决定生成哪些技能文件；缺失时包含全部（向后兼容），过滤逻辑在 `crates/core/src/engine.rs`（`skill_name_of` / `selected_skills`）。
 - 层内「种子文件、后续归用户」的文件在 `layer.toml` 的 `update_ignore` 声明，`update` 时跳过。
 

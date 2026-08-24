@@ -10,4 +10,4 @@
 - 生成时按依赖顺序合并：先 `common`，再依赖它的各层
 - 后合并的层覆盖先合并层的同名文件（`toolchain.toml` 等仅存在于 rust 层的文件只发给 rust 项目）
 - `.gitignore`、`.gitattributes` 例外：按层**累积拼接**而不是覆盖——每个层各贡献一段规则，生成的项目拿到合并后的完整清单（各段带来源层注释）
-- 生成后会在项目根写入 `.pengj.json` manifest，记录使用的层与模板托管文件的哈希，供 `update` 使用
+- 生成后会在项目根写入 `.pengj-templates.json` manifest，记录使用的层与模板托管文件的哈希，供 `update` 使用

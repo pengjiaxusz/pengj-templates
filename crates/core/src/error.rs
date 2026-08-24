@@ -14,7 +14,7 @@ pub enum CoreError {
     #[error("目标目录已存在且非空: {0}")]
     DirExists(String),
 
-    #[error("未找到 .pengj.json manifest，目录可能不是由 pengj-templates 生成: {0}")]
+    #[error("未找到 .pengj-templates.json manifest，目录可能不是由 pengj-templates 生成: {0}")]
     MissingManifest(String),
 
     #[error("模板渲染失败: {0}")]
