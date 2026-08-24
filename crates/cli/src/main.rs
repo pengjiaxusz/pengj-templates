@@ -80,6 +80,42 @@ enum Command {
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
     },
+    /// 纳管存量已有项目（初始化 .pengj-templates.json 并建立基线）
+    Adopt {
+        /// 目标项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 选择的层，逗号分隔，如 common,lefthook,agent,rust-workspace
+        #[arg(short, long, value_delimiter = ',')]
+        layers: Vec<String>,
+        /// 强制覆盖已有 manifest
+        #[arg(short, long)]
+        force: bool,
+        /// Rust edition（仅 rust/rust-workspace 层生效；允许 2015/2018/2021/2024）
+        #[arg(long, default_value = "2024")]
+        edition: String,
+        /// Rust toolchain channel（允许 stable/beta/nightly 或版本号）
+        #[arg(long, default_value = "stable")]
+        channel: String,
+        /// 使用 sccache 编译缓存（默认开；传 --no-sccache 关闭）
+        #[arg(long = "no-sccache", action = clap::ArgAction::SetFalse, default_value_t = true)]
+        sccache: bool,
+        /// 使用 lld 链接器（默认开；传 --no-lld 关闭）
+        #[arg(long = "no-lld", action = clap::ArgAction::SetFalse, default_value_t = true)]
+        lld: bool,
+        /// 中文编程：允许中文标识符/字面量，关闭相关命名 lint
+        #[arg(long)]
+        chinese: bool,
+        /// 技能书写语言：zh 中文 / en 英文
+        #[arg(long, default_value = "zh")]
+        skill_lang: String,
+        /// 提交信息是否用中文（默认开，传 --no-commit-zh 关闭）
+        #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
+        commit_zh: bool,
+        /// 选择的技能，逗号分隔如 commit,caveman；默认全部
+        #[arg(long, value_delimiter = ',')]
+        skills: Option<Vec<String>>,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -114,6 +150,32 @@ fn main() -> anyhow::Result<()> {
             &output,
         ),
         Command::Update { dir } => cmd_update(&templates, &dir),
+        Command::Adopt {
+            dir,
+            layers,
+            force,
+            edition,
+            channel,
+            sccache,
+            lld,
+            chinese,
+            skill_lang,
+            commit_zh,
+            skills,
+        } => cmd_adopt(
+            &templates,
+            &dir,
+            &layers,
+            force,
+            &edition,
+            &channel,
+            sccache,
+            lld,
+            chinese,
+            &skill_lang,
+            commit_zh,
+            skills.as_deref(),
+        ),
     }
 }
 
@@ -253,6 +315,84 @@ fn cmd_update(templates: &pengj_core::Templates, dir: &Path) -> anyhow::Result<(
     }
     for f in &report.removed {
         println!("  [移除] {} （模板已删除，本地文件保留）", f);
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_adopt(
+    templates: &pengj_core::Templates,
+    dir: &Path,
+    layers: &[String],
+    force: bool,
+    edition: &str,
+    channel: &str,
+    sccache: bool,
+    lld: bool,
+    chinese: bool,
+    skill_lang: &str,
+    commit_zh: bool,
+    skills: Option<&[String]>,
+) -> anyhow::Result<()> {
+    if layers.is_empty() {
+        anyhow::bail!("必须指定至少一个层，如 --layers common,lefthook,agent");
+    }
+    let mut selected_skills: Vec<String> = Vec::new();
+    if let Some(s_list) = skills {
+        let available = templates.list_skills().context("读取可用技能列表失败")?;
+        let avail_set: std::collections::HashSet<&str> =
+            available.iter().map(|s| s.name.as_str()).collect();
+        for s in s_list {
+            let s_trimmed = s.trim();
+            if s_trimmed.is_empty() {
+                continue;
+            }
+            if avail_set.contains(s_trimmed) {
+                selected_skills.push(s_trimmed.to_string());
+            } else {
+                let avail_str = available
+                    .iter()
+                    .map(|k| k.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                anyhow::bail!("未知的技能: \"{}\"。当前可用技能: {}", s_trimmed, avail_str);
+            }
+        }
+    }
+    let mut options: std::collections::BTreeMap<String, serde_json::Value> = [
+        ("edition", serde_json::Value::String(edition.to_string())),
+        ("channel", serde_json::Value::String(channel.to_string())),
+        ("use_sccache", serde_json::Value::Bool(sccache)),
+        ("use_lld", serde_json::Value::Bool(lld)),
+        ("chinese_programming", serde_json::Value::Bool(chinese)),
+        (
+            "skill_lang",
+            serde_json::Value::String(skill_lang.to_string()),
+        ),
+        ("commit_zh", serde_json::Value::Bool(commit_zh)),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect();
+    if !selected_skills.is_empty() {
+        options.insert("skills".to_string(), serde_json::json!(selected_skills));
+    }
+
+    let report = pengj_core::adopt_project(templates, dir, layers, options, force)
+        .context("纳管存量项目失败")?;
+
+    println!("项目已纳管: {}", report.project_name);
+    println!("层顺序: {}", report.layers.join(" -> "));
+    println!(
+        "新增 {} 个模板文件，纳管 {} 个已有文件",
+        report.created.len(),
+        report.adopted.len()
+    );
+    for f in &report.created {
+        println!("  [新增] {f}");
+    }
+    for f in &report.adopted {
+        println!("  [纳管] {f}");
     }
     Ok(())
 }

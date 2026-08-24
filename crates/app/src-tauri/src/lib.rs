@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use pengj_core::{generate, list_workspace_files, update_project, Templates};
+use pengj_core::{adopt_project, generate, list_workspace_files, update_project, Templates};
 use tauri::Manager;
 
 /// 定位模板目录：环境 PENGJ_TEMPLATES > app 资源目录 templates/ > 默认位置
@@ -60,6 +60,26 @@ fn cmd_update_project(
     update_project(&templates, Path::new(&project_dir)).map_err(|e| e.to_string())
 }
 
+/// 纳管已有存量项目
+#[tauri::command]
+fn cmd_adopt_project(
+    app: tauri::AppHandle,
+    project_dir: String,
+    layers: Vec<String>,
+    options: HashMap<String, serde_json::Value>,
+    force: Option<bool>,
+) -> Result<pengj_core::AdoptReport, String> {
+    let templates = resolve_templates(&app)?;
+    adopt_project(
+        &templates,
+        Path::new(&project_dir),
+        &layers,
+        options.into_iter().collect(),
+        force.unwrap_or(false),
+    )
+    .map_err(|e| e.to_string())
+}
+
 /// 列出项目根目录下的工作区文件（`*.code-workspace`，非递归，按文件名排序）。
 ///
 /// 供前端在更新前展示可选的 workspace。core 的 `update_project` 会自动同步全部
@@ -82,6 +102,7 @@ pub fn run() {
             cmd_list_skills,
             cmd_create_project,
             cmd_update_project,
+            cmd_adopt_project,
             cmd_list_workspaces
         ])
         .run(tauri::generate_context!())
