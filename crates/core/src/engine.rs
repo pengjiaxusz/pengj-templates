@@ -326,19 +326,29 @@ fn dummy_skill_ctx() -> RenderContext {
 
 /// 需要做结构化 JSON 并集合并的文件。
 /// 典型用途如 `package.json`：
-/// - 生成时：各层按依赖顺序并集合并（模板版本覆盖同名依赖，用户自加项不冲突）
-/// - 更新时：以用户现有文件为底，模板只补缺失的依赖/脚本/字段；
-///   同名项一律保留用户的（版本钉、脚本内容都不被模板覆盖），
+/// - 生成时：各层按依赖顺序并集合并（后层覆盖同名依赖，用户自加项不冲突）
+/// - 更新/纳管时：依赖类字段的同名包**版本以模板为准**（含模板未定版的 `latest`；
+///   实际解析版本由项目 lockfile 锁定，升级走 `pnpm update --latest`）；
+///   脚本与其余字段仍以用户为底、模板只补缺失，
 ///   用户自己加的库与其余标量（name/version 等）同样原样保留
 const MERGE_JSON_FILES: &[&str] = &["package.json"];
 
-/// package.json 里「并集合并」的字段（依赖与脚本），同名键更新时以用户为准
+/// package.json 里「并集合并」的字段（依赖与脚本）
 const MERGE_JSON_UNION_KEYS: &[&str] = &[
     "dependencies",
     "devDependencies",
     "peerDependencies",
     "optionalDependencies",
     "scripts",
+];
+
+/// 并集字段中的「依赖类」字段：更新/纳管时同名包版本以模板为准（脚本除外）。
+/// 用户显式钉住旧版本的需求让位于「依赖集合由模板统一维护」。
+const MERGE_JSON_DEP_KEYS: &[&str] = &[
+    "dependencies",
+    "devDependencies",
+    "peerDependencies",
+    "optionalDependencies",
 ];
 
 /// 模板渲染出的 VS Code 配置文件在项目内的相对路径。
@@ -430,8 +440,8 @@ impl Templates {
 }
 
 /// 把 `incoming` 并按规则并入 `base`（JSON 并集合并）。
-/// - 依赖/脚本字段：并集。生成（`overwrite_other=true`，层间合并）同名项后来者覆盖；
-///   更新（`overwrite_other=false`，base 为用户文件）只补缺失键，用户值永不覆盖
+/// - 依赖类字段：生成与更新/纳管时同名包版本**一律以模板为准**
+/// - 脚本字段：更新/纳管时同名键保留用户的（脚本内容是用户定制面），缺失才补
 /// - 其余字段：仅当 `overwrite_other` 为真（生成时）或 base 缺该项时写入
 fn merge_json(base: &mut serde_json::Value, incoming: &serde_json::Value, overwrite_other: bool) {
     let Some(obj) = incoming.as_object() else {
@@ -446,11 +456,13 @@ fn merge_json(base: &mut serde_json::Value, incoming: &serde_json::Value, overwr
             match base_map {
                 Some(bm) => {
                     if let Some(iv) = v.as_object() {
+                        let is_dep = MERGE_JSON_DEP_KEYS.contains(&k.as_str());
                         for (ik, ivv) in iv {
-                            if overwrite_other {
+                            if overwrite_other || is_dep {
+                                // 生成：层间覆盖；更新/纳管：依赖版本一律跟随模板
                                 bm.insert(ik.clone(), ivv.clone());
                             } else {
-                                // 更新语义：用户已有该键（版本钉/脚本）→ 保留用户值
+                                // 更新语义：用户已有该键 → 保留用户值
                                 bm.entry(ik.clone()).or_insert(ivv.clone());
                             }
                         }
@@ -701,6 +713,209 @@ pub fn generate(
 
 // ---------- 存量纳管 (Adopt) ----------
 
+/// `commitlint.config.js` 接线到 `commitlint.base.js` 的结果
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommitlintWireOutcome {
+    /// 本次完成自动接线（config 文件已改写）
+    Wired,
+    /// config 已引用 base，无需处理
+    AlreadyWired,
+    /// 项目没有 commitlint.config.js，无需接线
+    NoConfig,
+    /// 无法安全改写的形态（非 ESM、`export default` 后不是对象字面量等），
+    /// 需要人工接线
+    ManualRequired,
+}
+
+/// 把既有 `commitlint.config.js` 自动接线到 `commitlint.base.js`。
+///
+/// 仅保守处理可安全改写的 ESM 对象字面量形态（首个 `export default` 后紧跟 `{`）：
+/// - 顶部补 `import base from './commitlint.base.js';`
+/// - 原 `export default` 改名为 `const pengjUserConfig =`
+/// - 末尾追加 `export default { ...base, ...pengjUserConfig, rules: { ...base.rules,
+///   ...pengjUserConfig.rules } }` —— base 规则铺底、项目专属规则同名覆盖，
+///   此后模板对 base 的更新才能真正生效
+/// - 接线的同时做**去重**：与 base 等价（规范化比较）的 rules 条目及其他成员
+///   （如相同的 `extends`）从用户配置中删除，只保留真正的项目差异
+///
+/// 其余形态（CJS `module.exports`、工厂函数等）一律不动文件，返回
+/// [`CommitlintWireOutcome::ManualRequired`] 由调用方给出手动指引。
+fn try_wire_commitlint_base(project_dir: &Path) -> Result<CommitlintWireOutcome> {
+    let path = project_dir.join("commitlint.config.js");
+    if !path.is_file() {
+        return Ok(CommitlintWireOutcome::NoConfig);
+    }
+    let text = String::from_utf8_lossy(&std::fs::read(&path)?).into_owned();
+    if text.contains("commitlint.base") {
+        return Ok(CommitlintWireOutcome::AlreadyWired);
+    }
+    let Some(idx) = text.find("export default") else {
+        return Ok(CommitlintWireOutcome::ManualRequired);
+    };
+    // `export default` 后必须直接跟对象字面量（跳过空白），否则改写不安全
+    let rest = text[idx + "export default".len()..]
+        .trim_start()
+        .chars()
+        .next();
+    if rest != Some('{') {
+        return Ok(CommitlintWireOutcome::ManualRequired);
+    }
+
+    let mut out = String::with_capacity(text.len() + 256);
+    out.push_str("import base from './commitlint.base.js';\n");
+    if !text.starts_with(['\n', '\r']) {
+        out.push('\n');
+    }
+    out.push_str(&text.replacen("export default", "const pengjUserConfig =", 1));
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(
+        "\nexport default {\n  ...base,\n  ...pengjUserConfig,\n  rules: {\n    ...base.rules,\n    ...pengjUserConfig.rules,\n  },\n};\n",
+    );
+
+    // 去重：无法安全比较时保持原样（保守）
+    let out = dedupe_wired_config(project_dir, &out).unwrap_or(out);
+
+    std::fs::write(&path, out)?;
+    Ok(CommitlintWireOutcome::Wired)
+}
+
+/// 定位第一个平衡花括号对象 `{...}` 的 `(起始下标, 结束下标（含花括号）)`，
+/// 字符串字面量整体消费。未找到配对时返回 `None`。
+fn first_braced_object_span(text: &str) -> Option<(usize, usize)> {
+    let b = text.as_bytes();
+    let mut i = 0usize;
+    while i < b.len() {
+        if b[i] == b'{' {
+            let first_open = i;
+            let mut depth: usize = 0;
+            let mut escaped = false;
+            let mut in_string: Option<char> = None;
+            while i < b.len() {
+                let c = b[i] as char;
+                if let Some(q) = in_string {
+                    if escaped {
+                        escaped = false;
+                    } else if c == '\\' {
+                        escaped = true;
+                    } else if c == q {
+                        in_string = None;
+                    }
+                } else {
+                    match c {
+                        '"' | '\'' => in_string = Some(c),
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                return Some((first_open, i + 1));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                i += 1;
+            }
+            return None;
+        }
+        i += 1;
+    }
+    None
+}
+
+/// 接线去重：把 `wired` 文本中与 base.js 等价的用户成员/规则条目删除。
+/// 任一步无法安全解析时返回 `None`（调用方保持原文本不改动）。
+fn dedupe_wired_config(project_dir: &Path, wired: &str) -> Option<String> {
+    let base_text = std::fs::read_to_string(project_dir.join("commitlint.base.js")).ok()?;
+    let (base_open, base_close) = first_braced_object_span(&base_text)?;
+    let base_inner = base_text.get(base_open + 1..base_close - 1)?;
+    // base 对象的成员名 -> 规范化全文（如 extends），以及 rules 条目名 -> 规范化值
+    let mut base_member_norm: Vec<(String, String)> = Vec::new();
+    let mut base_rules_norm: Vec<(String, String)> = Vec::new();
+    for m in split_object_members(base_inner)? {
+        if m.name == "rules" {
+            let (open, close) = first_braced_object_span(&m.source)?;
+            let rules_inner = m.source.get(open + 1..close - 1)?;
+            for r in split_object_members(rules_inner)? {
+                // 条目规范化只取值部分（去掉 `key:` 前缀），键名单独存
+                let (_, value) = r.source.split_once(':')?;
+                let norm_value = normalize_js_literal(value)?;
+                base_rules_norm.push((r.name.clone(), norm_value));
+            }
+        } else {
+            base_member_norm.push((m.name.clone(), m.normalized.clone()));
+        }
+    }
+
+    // 用户侧 pengjUserConfig 对象
+    let marker_pos = wired.find("const pengjUserConfig")?;
+    let (obj_open, obj_close) = first_braced_object_span(&wired[marker_pos..])?;
+    let obj_open = marker_pos + obj_open;
+    let obj_close = marker_pos + obj_close;
+    let user_inner = wired.get(obj_open + 1..obj_close - 1)?;
+    let members = split_object_members(user_inner)?;
+
+    let mut kept_sources: Vec<String> = Vec::new();
+    let mut changed = false;
+    for m in &members {
+        if m.name == "rules" {
+            // rules：条目级去重——与 base 同名且等价的条目删除，其余保留作覆盖
+            let (open, close) = first_braced_object_span(&m.source)?;
+            let rules_inner = m.source.get(open + 1..close - 1)?;
+            let entries = split_object_members(rules_inner)?;
+            let kept: Vec<&JsObjectEntry> = entries
+                .iter()
+                .filter(|e| {
+                    let Some((_, value)) = e.source.split_once(':') else {
+                        return true;
+                    };
+                    match normalize_js_literal(value) {
+                        Some(nv) => !base_rules_norm
+                            .iter()
+                            .any(|(n, v)| *n == e.name && *v == nv),
+                        None => true,
+                    }
+                })
+                .collect();
+            if kept.len() != entries.len() {
+                changed = true;
+            }
+            let rebuilt_rules = if kept.is_empty() {
+                "rules: {}".to_string()
+            } else {
+                format!(
+                    "rules: {{\n    {}\n  }}",
+                    kept.iter()
+                        .map(|e| e.source.clone())
+                        .collect::<Vec<_>>()
+                        .join(",\n    ")
+                )
+            };
+            kept_sources.push(rebuilt_rules);
+        } else if base_member_norm
+            .iter()
+            .any(|(n, v)| *n == m.name && *v == m.normalized)
+        {
+            // 其他成员与 base 等价（如相同的 extends）：整员去重
+            changed = true;
+        } else {
+            kept_sources.push(m.source.clone());
+        }
+    }
+    if !changed {
+        return None;
+    }
+
+    let rebuilt = format!(
+        "{}const pengjUserConfig = {{\n  {}\n}}{}",
+        &wired[..marker_pos],
+        kept_sources.join(",\n  "),
+        &wired[obj_close..]
+    );
+    Some(rebuilt)
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AdoptReport {
     pub project_name: String,
@@ -780,6 +995,26 @@ pub fn adopt_project(
                 created.push(rel_str.clone());
             }
             continue;
+        }
+
+        // VS Code settings：项目根已有 `*.code-workspace` 时，模板配置并入工作区文件
+        // 的 `settings` 节点，不再新建独立 `.vscode/settings.json`（工作区同步复用
+        // update 同一语义；settings 相对路径计入 adopted 代表「配置已同步」）
+        if rel == Path::new(VSCODE_SETTINGS_REL) {
+            let workspaces = list_workspace_files(project_dir);
+            if !workspaces.is_empty() {
+                let mut ws_changed = false;
+                for ws_path in workspaces {
+                    ws_changed |= sync_workspace_file(&ws_path, &ctx, &fm, project_dir)?;
+                }
+                if ws_changed {
+                    needs_review.push(format!(
+                        "{rel_str}：VS Code 配置已并入 *.code-workspace 文件的 settings 节点，请复核"
+                    ));
+                }
+                adopted.push(rel_str);
+                continue;
+            }
         }
 
         if target.exists() {
@@ -876,15 +1111,18 @@ pub fn adopt_project(
         }
     }
 
-    // commitlint 接线检查：新落了 commitlint.base.js，但项目已有自己的
-    // commitlint.config.js 且未引用它 → base 永远不会生效，给出明确接线指引
+    // commitlint 自动接线：base 落地后（本轮新建或既有），把未接线的既有
+    // commitlint.config.js 自动改写为继承 base；无法安全改写的形态保留手动指引
     let mut manual_steps = Vec::new();
-    let base_created = created
-        .iter()
-        .any(|f| Path::new(f) == Path::new("commitlint.base.js"));
-    if base_created {
-        match std::fs::read_to_string(project_dir.join("commitlint.config.js")) {
-            Ok(text) if !text.contains("commitlint.base") => {
+    if project_dir.join("commitlint.base.js").is_file() {
+        match try_wire_commitlint_base(project_dir)? {
+            CommitlintWireOutcome::Wired => {
+                needs_review.push(
+                    "commitlint.config.js：已自动接入 commitlint.base.js（base 规则铺底、项目规则同名覆盖，等价重复项已去除），请复核规则优先级"
+                        .to_string(),
+                );
+            }
+            CommitlintWireOutcome::ManualRequired => {
                 manual_steps.push(
                     "检测到既有 commitlint.config.js 未继承 commitlint.base.js：\
                      请在其顶部加 `import base from './commitlint.base.js';`，\
@@ -893,7 +1131,7 @@ pub fn adopt_project(
                         .to_string(),
                 );
             }
-            _ => {}
+            CommitlintWireOutcome::AlreadyWired | CommitlintWireOutcome::NoConfig => {}
         }
     }
 
@@ -1000,7 +1238,12 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
         // `.vscode/settings.json`：增量合并（与 `.code-workspace` 同一语义），不走
         // SHA 冲突判定——模板的 fileNesting / rust-analyzer.clippy 并入用户文件，
         // 用户自定义规则不丢失且能收到模板新规则。
+        // 项目根已有 `*.code-workspace` 且尚无独立 settings 文件时：配置并入工作区
+        // 文件（循环末统一执行），不再新建 `.vscode/settings.json`。
         if rel == Path::new(VSCODE_SETTINGS_REL) {
+            if !target.exists() && !list_workspace_files(project_dir).is_empty() {
+                continue;
+            }
             match sync_settings_file(&target, &ctx, &fm, project_dir)? {
                 SettingsSyncOutcome::Updated => updated.push(rel_str.clone()),
                 SettingsSyncOutcome::Created => created.push(rel_str.clone()),
@@ -1167,6 +1410,18 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
         }
     }
 
+    // commitlint 自动接线兜底：模板提供 base 而项目 config 尚未接线时补上
+    //（adopt 已接线的会命中 AlreadyWired，保持幂等）
+    if bytes_map.contains_key(Path::new("commitlint.base.js"))
+        && try_wire_commitlint_base(project_dir)? == CommitlintWireOutcome::Wired
+    {
+        updated.push("commitlint.config.js".to_string());
+        needs_review.push(
+            "commitlint.config.js：已自动接入 commitlint.base.js（base 规则铺底、项目规则同名覆盖，等价重复项已去除），请复核规则优先级"
+                .to_string(),
+        );
+    }
+
     manifest.files = new_files;
     manifest.save(project_dir)?;
 
@@ -1321,6 +1576,11 @@ fn merge_vscode_settings(
 /// 仅在内容真正变化时写盘并返回 `true`；workspace 读取/JSON 解析失败时静默返回
 /// `Ok(false)` 跳过，不阻断更新流程。
 ///
+/// **JSONC 容错 + 原格式保留**：workspace 文件常带注释与尾随逗号（VS Code 官方
+/// 允许），严格解析失败时剥离注释/尾逗号后再解析。写回时**统一只替换顶层
+/// `settings` 节点区间**（按原文档缩进重排），folders、注释与其余排版逐字节保留，
+/// 不会整文档重序列化破坏用户风格；文档没有 `settings` 成员时才回退整文档重写。
+///
 /// 注：不写入 `rust-analyzer.linkedProjects`。VS Code 的 rust-analyzer 默认 `[]`
 /// 会自动发现工作区内的 Cargo 项目；显式列出反而会禁用自动发现，冗余且有害，
 /// 因此模板与同步逻辑都不维护该字段。
@@ -1337,12 +1597,19 @@ pub fn sync_workspace_file(
         return Ok(false);
     };
 
-    // 读取 workspace：失败即跳过（不 panic）
+    // 读取 workspace：失败即跳过（不 panic）；严格解析失败回退 JSONC 剥离后再解析
     let Ok(text) = std::fs::read_to_string(path) else {
         return Ok(false);
     };
-    let Ok(mut ws) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Ok(false);
+    let mut ws = match serde_json::from_str::<serde_json::Value>(&text) {
+        Ok(v) => v,
+        Err(_) => {
+            let stripped = strip_jsonc_comments_and_trailing_commas(&text);
+            match serde_json::from_str::<serde_json::Value>(&stripped) {
+                Ok(v) => v,
+                Err(_) => return Ok(false),
+            }
+        }
     };
     let Some(ws_obj) = ws.as_object_mut() else {
         return Ok(false);
@@ -1362,11 +1629,19 @@ pub fn sync_workspace_file(
         return Ok(false);
     }
 
+    // 统一只替换顶层 `settings` 节点区间（按原文档缩进重排），其余原文
+    // （folders、注释、格式）逐字节保留——严格 JSON 与 JSONC 一视同仁，
+    // 避免整文档重序列化破坏用户的排版风格。
+    let settings_text = serde_json::to_string_pretty(&ws["settings"])?;
+    if let Some(final_text) = replace_top_level_member_value(&text, "settings", &settings_text) {
+        std::fs::write(path, final_text)?;
+        return Ok(true);
+    }
+
+    // 原文档没有顶层 `settings` 成员（合并是 entry 兜底造出来的）：回退整文档
+    // 重序列化；含受管块时以原文件为底做原位替换，保留块外用户内容。
     let mut out = serde_json::to_string_pretty(&ws)?;
     out.push('\n');
-    // 原文件含受管块时，以原文件为底、合并结果为 incoming 做原位替换，保留块外的
-    // 用户内容。若替换结果与原文一致（块位于 JSON 字符串值内、未被 JSON 合并改动），
-    // 仍以合并后的 JSON 为准，避免丢掉 JSON 合并结果。
     let final_text = match crate::block::extract_managed_block(&text) {
         Some(_) => {
             let replaced = crate::block::replace_managed_block(&text, &out);
@@ -1380,6 +1655,382 @@ pub fn sync_workspace_file(
     };
     std::fs::write(path, final_text)?;
     Ok(true)
+}
+
+/// 剥离 JSONC 的 `//` 行注释、`/* */` 块注释与尾随逗号（仅用于解析，不用于回写）。
+/// 字符串字面量内的引号、反斜杠与注释记号一律原样保留。
+fn strip_jsonc_comments_and_trailing_commas(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
+            '/' => match chars.peek() {
+                Some('/') => {
+                    while let Some(&n) = chars.peek() {
+                        if n == '\n' {
+                            break;
+                        }
+                        chars.next();
+                    }
+                }
+                Some('*') => {
+                    chars.next();
+                    while let Some(n) = chars.next() {
+                        if n == '*' && chars.peek() == Some(&'/') {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => out.push('/'),
+            },
+            ',' => {
+                // 尾随逗号：跳过空白后若紧跟 } 或 ] 则省略该逗号
+                let mut lookahead = chars.clone();
+                let next_significant = loop {
+                    match lookahead.next() {
+                        Some(' ' | '\t' | '\r' | '\n') => continue,
+                        other => break other,
+                    }
+                };
+                if next_significant != Some('}') && next_significant != Some(']') {
+                    out.push(',');
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// 在 JSON 文本中定位顶层成员 `key` 的值区间并替换为 `replacement`，返回新全文。
+///
+/// 采用字符串感知的平衡花括号扫描：字符串字面量整体作为一个 token 消费，
+/// 只在深度 1（根对象直下）匹配 `"key":`，值以 `{` 开始时扫描到与之配对的 `}`。
+/// 其余成员的文本（含注释、格式）逐字节保留。未找到匹配或值不是对象时返回 `None`。
+/// 在文本中定位顶层成员 `"key": <value>` 的区间（字符串感知的平衡括号扫描）。
+/// 返回 `(键起始下标, 值起始下标, 值结束下标（不含）)`；未找到或值不是对象时返回 `None`。
+fn find_top_level_member_span(text: &str, key: &str) -> Option<(usize, usize, usize)> {
+    let target = format!("\"{key}\"");
+    let b = text.as_bytes();
+    let len = b.len();
+
+    /// 从 `start`（引号处）读取完整字符串 token，返回收尾引号下标
+    fn string_token_end(b: &[u8], start: usize) -> usize {
+        let mut j = start + 1;
+        let mut escaped = false;
+        while j < b.len() {
+            let c = b[j];
+            if escaped {
+                escaped = false;
+            } else if c == b'\\' {
+                escaped = true;
+            } else if c == b'"' {
+                return j;
+            }
+            j += 1;
+        }
+        b.len()
+    }
+
+    let mut i = 0usize;
+    let mut depth: usize = 0;
+    while i < len {
+        match b[i] {
+            b'"' => {
+                let close = string_token_end(b, i);
+                if depth == 1
+                    && text.get(i..=(close.min(len.saturating_sub(1)))) == Some(target.as_str())
+                {
+                    let mut k = close + 1;
+                    while matches!(
+                        b.get(k),
+                        Some(b' ') | Some(b'\t') | Some(b'\r') | Some(b'\n')
+                    ) {
+                        k += 1;
+                    }
+                    if b.get(k) == Some(&b':') {
+                        k += 1;
+                        while matches!(
+                            b.get(k),
+                            Some(b' ') | Some(b'\t') | Some(b'\r') | Some(b'\n')
+                        ) {
+                            k += 1;
+                        }
+                        if b.get(k) == Some(&b'{') {
+                            // 平衡扫描到配对的 '}'
+                            let mut local_depth: usize = 0;
+                            let mut m = k;
+                            while m < len {
+                                match b[m] {
+                                    b'"' => m = string_token_end(b, m),
+                                    b'{' => local_depth += 1,
+                                    b'}' => {
+                                        local_depth -= 1;
+                                        if local_depth == 0 {
+                                            return Some((i, k, m + 1));
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                                m += 1;
+                            }
+                            return None;
+                        }
+                    }
+                }
+                i = close + 1;
+            }
+            b'{' | b'[' => {
+                depth += 1;
+                i += 1;
+            }
+            b'}' | b']' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    None
+}
+
+/// 在 JSON 文本中定位顶层成员 `key` 的值区间并替换为 `replacement`，返回新全文。
+///
+/// 替换文本会按原文档的缩进重排：以 `key` 所在行的缩进为基准、以文档首层子成员的
+/// 缩进宽度为单位，对 `replacement` 的各行重新缩进，避免破坏原文档的排版风格。
+/// 其余成员的文本（含注释、格式）逐字节保留。未找到匹配或值不是对象时返回 `None`。
+fn replace_top_level_member_value(text: &str, key: &str, replacement: &str) -> Option<String> {
+    let (key_start, value_start, value_end) = find_top_level_member_span(text, key)?;
+    let replacement = reindent_block(text, key_start, value_start, replacement);
+    Some(format!(
+        "{}{}{}",
+        &text[..value_start],
+        replacement,
+        &text[value_end..]
+    ))
+}
+
+/// 把多行替换文本按原文档缩进重排：
+/// - 首行原样（它紧跟在 `"key": ` 之后）
+/// - 其余行按其在替换文本中的相对深度（serde_json 固定 2 空格一级）加上
+///   「key 行缩进 + 单位宽度」的前缀；单位宽度取文档首个根级子成员的缩进，
+///   推断失败时回退 2 空格
+fn reindent_block(text: &str, key_start: usize, value_start: usize, replacement: &str) -> String {
+    // key 所在行缩进
+    let line_start = text[..key_start].rfind('\n').map(|p| p + 1).unwrap_or(0);
+    let key_indent = &text[line_start..key_start];
+
+    // 单位宽度：value 首行之后第一个子成员行的缩进减去 key 行缩进
+    let unit = text
+        .get(value_start..)
+        .and_then(|rest| rest.find('\n'))
+        .and_then(|nl| {
+            text.get(value_start + nl + 1..).and_then(|tail| {
+                let ind = tail.len() - tail.trim_start_matches([' ', '\t']).len();
+                let non_ws = tail.trim_start_matches([' ', '\t']).chars().next()?;
+                (non_ws != '}' && non_ws != ']').then_some(ind.saturating_sub(key_indent.len()))
+            })
+        })
+        .filter(|&u| u > 0)
+        .unwrap_or(2);
+
+    let mut out = String::with_capacity(replacement.len() + 64);
+    for (idx, line) in replacement.lines().enumerate() {
+        if idx == 0 {
+            out.push_str(line);
+        } else {
+            let trimmed = line.trim_start_matches(' ');
+            let lead = line.len() - trimmed.len();
+            let depth = lead / 2;
+            out.push('\n');
+            out.push_str(key_indent);
+            for _ in 0..depth * unit {
+                out.push(' ');
+            }
+            out.push_str(trimmed);
+        }
+    }
+    out
+}
+
+/// 规范化 JS 对象字面量片段用于等价比较：去注释、单引号统一为双引号、
+/// 去尾随逗号、压缩字符串外空白。含模板字符串等无法安全处理的构造时返回 `None`
+/// （调用方应保守跳过去重）。
+fn normalize_js_literal(text: &str) -> Option<String> {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut in_string: Option<char> = None; // None | Some('"') | Some('\'')
+    let mut escaped = false;
+    while let Some(c) = chars.next() {
+        if let Some(q) = in_string {
+            out.push(c);
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == q {
+                if q == '\'' {
+                    // 结束的单引号已统一写成双引号
+                    out.pop();
+                    out.push('"');
+                }
+                in_string = None;
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => {
+                in_string = Some(c);
+                out.push('"');
+            }
+            '`' => return None,
+            '/' => match chars.peek() {
+                Some('/') => {
+                    while let Some(&n) = chars.peek() {
+                        if n == '\n' {
+                            break;
+                        }
+                        chars.next();
+                    }
+                }
+                Some('*') => {
+                    chars.next();
+                    while let Some(n) = chars.next() {
+                        if n == '*' && chars.peek() == Some(&'/') {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => out.push('/'),
+            },
+            ',' => {
+                let next_significant = loop {
+                    match chars.peek().copied() {
+                        Some(' ' | '\t' | '\r' | '\n') => {
+                            chars.next();
+                        }
+                        other => break other,
+                    }
+                };
+                if next_significant != Some('}') && next_significant != Some(']') {
+                    out.push(',');
+                }
+            }
+            ' ' | '\t' | '\r' | '\n' => {}
+            _ => out.push(c),
+        }
+    }
+    // 引号统一后需保持成对结构：双引号数量为偶数才可信
+    if !out.matches('"').count().is_multiple_of(2) {
+        return None;
+    }
+    Some(out)
+}
+
+/// 对象字面量的一个顶层成员
+struct JsObjectEntry {
+    /// 成员名（去引号后的裸名）
+    name: String,
+    /// 成员在源文本中的原始切片（不含结尾逗号）
+    source: String,
+    /// 规范化形式（用于与模板侧比较是否等价）
+    normalized: String,
+}
+
+/// 拆分对象字面量花括号内的顶层成员；无法安全解析时返回 `None`。
+fn split_object_members(inner: &str) -> Option<Vec<JsObjectEntry>> {
+    let b = inner.as_bytes();
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    let mut depth: usize = 0;
+    let mut start: Option<usize> = None;
+    let mut in_string: Option<char> = None;
+    let mut escaped = false;
+    let mut i = 0usize;
+    while i < b.len() {
+        let c = b[i] as char;
+        if let Some(q) = in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == q {
+                in_string = None;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            '"' | '\'' => {
+                in_string = Some(c);
+                if start.is_none() {
+                    start = Some(i);
+                }
+                i += 1;
+            }
+            '{' | '[' => {
+                depth += 1;
+                i += 1;
+            }
+            '}' | ']' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+            }
+            ',' if depth == 0 => {
+                if let Some(s) = start.take() {
+                    spans.push((s, i));
+                }
+                i += 1;
+            }
+            _ => {
+                if !c.is_whitespace() && start.is_none() {
+                    start = Some(i);
+                }
+                i += 1;
+            }
+        }
+    }
+    if let Some(s) = start.take() {
+        spans.push((s, b.len()));
+    }
+
+    spans
+        .into_iter()
+        .map(|(s, e)| {
+            let raw = inner.get(s..e)?.trim_end();
+            let raw = raw.strip_suffix(',').unwrap_or(raw);
+            let norm = normalize_js_literal(raw)?;
+            // 成员名：`name:` 之前的键部分，去掉引号
+            let colon = norm.find(':')?;
+            let key_part = norm[..colon].trim();
+            if key_part.is_empty() {
+                return None;
+            }
+            Some(JsObjectEntry {
+                name: key_part.trim_matches('"').to_string(),
+                source: raw.to_string(),
+                normalized: norm,
+            })
+        })
+        .collect()
 }
 
 /// `.vscode/settings.json` 增量合并的结果分类（复用 `update_project` 的统计口径）
@@ -1656,6 +2307,99 @@ mod tests {
         );
         // 顶层 folders / extensions 不被覆盖
         assert!(parsed["folders"].is_array());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn strip_jsonc_keeps_strings_and_drops_trailing_commas() {
+        let src = "{\n  // 行注释\n  \"a\": \"http://x // 不是注释\", /* 块\n注释 */\n  \"b\": [1, 2,],\n  \"c\": {\"d\": true,}\n}\n";
+        let out = strip_jsonc_comments_and_trailing_commas(src);
+        let v: serde_json::Value = serde_json::from_str(&out).expect("剥离后必须是合法 JSON");
+        assert_eq!(v["a"], "http://x // 不是注释", "字符串内记号原样保留");
+        assert_eq!(v["b"], serde_json::json!([1, 2]));
+        assert_eq!(v["c"]["d"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn sync_workspace_file_merges_jsonc_workspace_preserving_rest_of_file() {
+        let tmp = std::env::temp_dir().join(format!("pengj-ws-jsonc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        let (fm, ctx) = ws_test_fixture();
+
+        // 模仿真实 VS Code 工程的 JSONC：尾随逗号 + 注释
+        let ws = tmp.join("app.code-workspace");
+        let original = "// 根级注释\n{\n  \"folders\": [\n    { \"path\": \".\" },\n  ],\n  \"settings\": {\n    \"editor.fontSize\": 14,\n    \"explorer.fileNesting.patterns\": {\n      \"README.md\": \"keep-me\",\n    },\n  },\n}\n";
+        std::fs::write(&ws, original).unwrap();
+
+        assert!(sync_workspace_file(&ws, &ctx, &fm, &proj).unwrap());
+        let merged = std::fs::read_to_string(&ws).unwrap();
+        // 其余部分逐字节保留：根注释与 folders 段
+        assert!(merged.starts_with("// 根级注释"));
+        assert!(merged.contains("{ \"path\": \".\" },"));
+        assert!(merged.contains("\"editor.fontSize\": 14"), "用户设置保留");
+        // settings 节点已合并模板内容
+        let sanitized = strip_jsonc_comments_and_trailing_commas(&merged);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&sanitized).expect("结果仍是合法 JSONC");
+        let s = &parsed["settings"];
+        assert_eq!(s["explorer.fileNesting.enabled"], serde_json::json!(true));
+        assert_eq!(
+            s["explorer.fileNesting.patterns"]["Cargo.toml"],
+            serde_json::json!("tpl"),
+            "模板 patterns 并入"
+        );
+        assert_eq!(
+            s["explorer.fileNesting.patterns"]["README.md"],
+            serde_json::json!("keep-me")
+        );
+
+        // 幂等：二次同步无变更、不写盘
+        let before = std::fs::read_to_string(&ws).unwrap();
+        assert!(!sync_workspace_file(&ws, &ctx, &fm, &proj).unwrap());
+        assert_eq!(std::fs::read_to_string(&ws).unwrap(), before);
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn sync_workspace_file_reindents_settings_to_document_style() {
+        let tmp = std::env::temp_dir().join(format!("pengj-ws-indent-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        let (fm, ctx) = ws_test_fixture();
+
+        // 4 空格缩进风格的文档
+        let ws = tmp.join("app.code-workspace");
+        std::fs::write(
+            &ws,
+            "{\n    \"folders\": [\n        { \"path\": \".\" }\n    ],\n    \"settings\": {\n        \"editor.fontSize\": 14\n    }\n}\n",
+        )
+        .unwrap();
+
+        assert!(sync_workspace_file(&ws, &ctx, &fm, &proj).unwrap());
+        let merged = std::fs::read_to_string(&ws).unwrap();
+        // 合并结果仍可被严格解析，值正确
+        let parsed: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(
+            parsed["settings"]["explorer.fileNesting.enabled"],
+            serde_json::json!(true)
+        );
+        assert_eq!(parsed["folders"][0]["path"], serde_json::json!("."));
+        // settings 子成员行使用「key 缩进(4) + 单位(4)」= 8 空格
+        let enabled_line = merged
+            .lines()
+            .find(|l| l.contains("\"explorer.fileNesting.enabled\""))
+            .expect("应包含合并进来的 fileNesting 开关");
+        assert!(
+            enabled_line.starts_with("        \"explorer.fileNesting.enabled\""),
+            "settings 子成员应按 4 空格单位重排，实际: {enabled_line:?}"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -2559,16 +3303,27 @@ mod tests {
         let report = adopt_project(&templates, &proj, &layers, BTreeMap::new(), false)
             .expect("adopt should succeed");
 
-        // -- commitlint 接线指引 --
+        // -- commitlint 自动接线：config 被改写为继承 base，无需手动步骤 --
         assert!(report.created.iter().any(|f| f == "commitlint.base.js"));
         assert!(
-            report
-                .manual_steps
-                .iter()
-                .any(|s| s.contains("commitlint.config.js")),
-            "应给出手动接线指引，实际: {:?}",
+            report.manual_steps.is_empty(),
+            "ESM 对象字面量应自动接线，不应有手动步骤，实际: {:?}",
             report.manual_steps
         );
+        let wired_cfg = std::fs::read_to_string(proj.join("commitlint.config.js")).unwrap();
+        assert!(wired_cfg.contains("import base from './commitlint.base.js';"));
+        assert!(wired_cfg.contains("const pengjUserConfig ="));
+        assert!(wired_cfg.contains("...base.rules"));
+        assert!(
+            report
+                .needs_review
+                .iter()
+                .any(|s| s.starts_with("commitlint.config.js")),
+            "自动接线应标记复核，实际: {:?}",
+            report.needs_review
+        );
+        // 用户原有规则保留在 pengjUserConfig 中
+        assert!(wired_cfg.contains("'scope-enum'"));
 
         // -- TOML 结构化合并：合法、去重、保用户键 --
         let cfg_text = std::fs::read_to_string(proj.join(".cargo").join("config.toml")).unwrap();
@@ -2602,18 +3357,21 @@ mod tests {
             report.needs_review
         );
 
-        // -- package.json 用户优先并集 + 键序保持 --
+        // -- package.json 模板优先并集 + 键序保持 --
         let pkg_text = std::fs::read_to_string(proj.join("package.json")).unwrap();
         assert!(
             pkg_text.starts_with("{\n  \"name\": \"legacy-app\""),
             "首键必须仍是用户的 name（键序保持），实际: {pkg_text}"
         );
         assert!(
-            pkg_text.contains("\"@commitlint/cli\": \"^20.5.3\""),
-            "用户版本钉不被 latest 覆盖"
+            pkg_text.contains("\"@commitlint/cli\": \"latest\""),
+            "同名依赖版本一律以模板为准（模板 latest 覆盖用户 ^20.5.3），实际: {pkg_text}"
         );
-        assert!(pkg_text.contains("\"lefthook\": \"^2.1.10\""));
-        assert!(pkg_text.contains("\"user-only-lib\": \"^1.0.0\""));
+        assert!(pkg_text.contains("\"lefthook\": \"latest\""));
+        assert!(
+            pkg_text.contains("\"user-only-lib\": \"^1.0.0\""),
+            "用户独有依赖保留"
+        );
         assert!(
             pkg_text.contains("\"prepare\": \"lefthook install\""),
             "用户脚本不被模板覆盖"
@@ -2661,6 +3419,252 @@ mod tests {
     }
 
     #[test]
+    fn merge_json_update_dep_versions_follow_template_pins() {
+        // 更新/纳管语义：依赖类字段同名包版本一律以模板为准（含模板未定版的
+        // latest）；脚本仍用户优先
+        let mut base: serde_json::Value = serde_json::from_str(
+            r#"{"scripts":{"prepare":"user-prepare"},"devDependencies":{"lefthook":"^2.1.10","@commitlint/cli":"^20.5.3"}}"#,
+        )
+        .unwrap();
+        let incoming: serde_json::Value = serde_json::from_str(
+            r#"{"scripts":{"prepare":"tpl-prepare"},"devDependencies":{"lefthook":"latest","@commitlint/cli":"^21.2.2"}}"#,
+        )
+        .unwrap();
+
+        merge_json(&mut base, &incoming, false);
+        assert_eq!(
+            base["devDependencies"]["@commitlint/cli"], "^21.2.2",
+            "模板固定版本覆盖用户旧版本钉"
+        );
+        assert_eq!(
+            base["devDependencies"]["lefthook"], "latest",
+            "模板 latest 同样覆盖用户版本钉（解析版本由 lockfile 决定）"
+        );
+        assert_eq!(base["scripts"]["prepare"], "user-prepare", "脚本保持用户值");
+    }
+
+    #[test]
+    fn try_wire_commitlint_base_dedupes_rules_and_members_matching_base() {
+        let tmp = std::env::temp_dir().join(format!("pengj-wire-dedupe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(
+            tmp.join("commitlint.base.js"),
+            "export default {\n  extends: ['@commitlint/config-conventional'],\n  rules: {\n    'body-max-line-length': [0],\n    'type-enum': [2, 'always', ['feat', 'fix']],\n  },\n};\n",
+        )
+        .unwrap();
+        // 用户配置：body-max-line-length / type-enum 与 base 完全等价（仅格式不同），
+        // scope-enum 是项目差异；extends 也与 base 相同
+        std::fs::write(
+            tmp.join("commitlint.config.js"),
+            "export default {\n  extends: [\"@commitlint/config-conventional\"],\n  rules: {\n    'body-max-line-length': [0],\n    'scope-enum': [2, 'always', ['core']],\n    \"type-enum\": [\n      2,\n      'always',\n      ['feat', 'fix'],\n    ],\n  },\n};\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            try_wire_commitlint_base(&tmp).unwrap(),
+            CommitlintWireOutcome::Wired
+        );
+
+        let wired = std::fs::read_to_string(tmp.join("commitlint.config.js")).unwrap();
+        assert!(wired.contains("import base from './commitlint.base.js';"));
+        assert!(wired.contains("const pengjUserConfig ="));
+        // 项目差异保留
+        assert!(wired.contains("'scope-enum'"));
+        // 等价条目已从用户配置中删除（全文只应出现在 base 引用与展开处，不再有字面量）
+        assert!(
+            !wired.contains("'body-max-line-length'"),
+            "等价 rules 条目应被去重，实际:\n{wired}"
+        );
+        assert!(
+            !wired.contains("@commitlint/config-conventional"),
+            "等价 extends 应被去重，实际:\n{wired}"
+        );
+        // 展开结构完整，仍是合法导出
+        assert!(wired.contains("...base.rules"));
+        assert!(wired.trim_end().ends_with("};"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn try_wire_commitlint_base_transforms_esm_object_config() {
+        let tmp = std::env::temp_dir().join(format!("pengj-wire-esm-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("commitlint.base.js"), "export default {};\n").unwrap();
+        std::fs::write(
+            tmp.join("commitlint.config.js"),
+            "export default {\n  extends: ['@commitlint/config-conventional'],\n  rules: { 'scope-enum': [2, 'always', ['core']] },\n};\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            try_wire_commitlint_base(&tmp).unwrap(),
+            CommitlintWireOutcome::Wired
+        );
+        // 二次调用幂等：已引用 base
+        assert_eq!(
+            try_wire_commitlint_base(&tmp).unwrap(),
+            CommitlintWireOutcome::AlreadyWired
+        );
+
+        let wired = std::fs::read_to_string(tmp.join("commitlint.config.js")).unwrap();
+        assert!(wired.starts_with("import base from './commitlint.base.js';"));
+        assert!(wired.contains("const pengjUserConfig ="));
+        assert!(wired.contains("'scope-enum'"), "用户规则保留");
+        assert!(wired.contains("...base.rules"));
+        assert!(wired.trim_end().ends_with("};"));
+        // 改写结果仍是合法 JS 导出结构：base 铺底在前、用户配置展开在后
+        let export_pos = wired.rfind("export default").unwrap();
+        let tail = &wired[export_pos..];
+        assert!(tail.find("...base,").unwrap() < tail.find("...pengjUserConfig,").unwrap());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn try_wire_commitlint_base_requires_manual_for_cjs_or_non_literal() {
+        let tmp = std::env::temp_dir().join(format!("pengj-wire-cjs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("commitlint.base.js"), "export default {};\n").unwrap();
+
+        // CJS module.exports：不动文件，报 ManualRequired
+        std::fs::write(
+            tmp.join("commitlint.config.js"),
+            "module.exports = { rules: {} };\n",
+        )
+        .unwrap();
+        assert_eq!(
+            try_wire_commitlint_base(&tmp).unwrap(),
+            CommitlintWireOutcome::ManualRequired
+        );
+        assert_eq!(
+            std::fs::read_to_string(tmp.join("commitlint.config.js")).unwrap(),
+            "module.exports = { rules: {} };\n",
+            "无法改写时不得动用户文件"
+        );
+
+        // export default 后不是对象字面量（工厂函数）：同样保守跳过
+        std::fs::write(
+            tmp.join("commitlint.config.js"),
+            "export default makeConfig();\n",
+        )
+        .unwrap();
+        assert_eq!(
+            try_wire_commitlint_base(&tmp).unwrap(),
+            CommitlintWireOutcome::ManualRequired
+        );
+
+        // 无 config 文件：NoConfig
+        std::fs::remove_file(tmp.join("commitlint.config.js")).unwrap();
+        assert_eq!(
+            try_wire_commitlint_base(&tmp).unwrap(),
+            CommitlintWireOutcome::NoConfig
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn adopt_merges_settings_into_workspace_file_instead_of_creating_settings() {
+        let tmp = std::env::temp_dir().join(format!("pengj-adopt-ws-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 模板：common + vscode 层
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tpl.join("vscode").join(".vscode")).unwrap();
+        std::fs::write(
+            tpl.join("vscode").join("layer.toml"),
+            "name = \"VS Code\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("vscode").join(".vscode").join("settings.json"),
+            r#"{
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": { "Cargo.toml": "tpl" }
+}"#,
+        )
+        .unwrap();
+
+        // 存量项目：已有 *.code-workspace（含用户自定义 settings），没有 .vscode/settings.json
+        let proj = tmp.join("legacy-ws-app");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(
+            proj.join("my.code-workspace"),
+            r#"{
+  "folders": [{ "path": "." }],
+  "settings": {
+    "editor.fontSize": 14,
+    "explorer.fileNesting.patterns": { "README.md": "keep-me" }
+  }
+}"#,
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let report = adopt_project(
+            &templates,
+            &proj,
+            &["common".to_string(), "vscode".to_string()],
+            BTreeMap::new(),
+            false,
+        )
+        .expect("adopt should succeed");
+
+        // 不新建独立 settings 文件；配置并入 workspace 文件
+        assert!(
+            !proj.join(".vscode").join("settings.json").exists(),
+            "有工作区文件时不得新建 .vscode/settings.json"
+        );
+        assert!(
+            report
+                .needs_review
+                .iter()
+                .any(|s| s.contains("code-workspace")),
+            "并入工作区文件应标记复核，实际: {:?}",
+            report.needs_review
+        );
+        let ws: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(proj.join("my.code-workspace")).unwrap())
+                .unwrap();
+        assert_eq!(
+            ws["settings"]["editor.fontSize"],
+            serde_json::json!(14),
+            "用户标量保留"
+        );
+        assert_eq!(
+            ws["settings"]["explorer.fileNesting.enabled"],
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            ws["settings"]["explorer.fileNesting.patterns"]["Cargo.toml"],
+            serde_json::json!("tpl")
+        );
+        assert_eq!(
+            ws["settings"]["explorer.fileNesting.patterns"]["README.md"],
+            serde_json::json!("keep-me"),
+            "用户 patterns 其它 key 保留"
+        );
+
+        // 后续 update：不创建独立 settings 文件、workspace 合并幂等
+        let upd = update_project(&templates, &proj).expect("update should succeed");
+        assert!(!upd.created.iter().any(|f| f.contains("settings.json")));
+        assert!(!proj.join(".vscode").join("settings.json").exists());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
     fn merge_json_update_keeps_user_values_and_fills_missing_only() {
         let mut base: serde_json::Value = serde_json::from_str(
             "{\"aaa\":\"keep\",\"scripts\":{\"build\":\"user-build\",\"prepare\":\"user-prepare\"},\"devDependencies\":{\"lefthook\":\"^2.1.10\"}}",
@@ -2671,15 +3675,22 @@ mod tests {
         )
         .unwrap();
 
-        // 更新语义（overwrite_other=false）：同名键用户优先，缺失才补
+        // 更新语义（overwrite_other=false）：脚本同名键用户优先、缺失才补；
+        // 依赖类字段同名包版本一律以模板为准
         merge_json(&mut base, &incoming, false);
         assert_eq!(base["aaa"], "keep");
         assert_eq!(base["bbb"], "tpl");
         assert_eq!(base["scripts"]["prepare"], "user-prepare");
         assert_eq!(base["scripts"]["build"], "user-build");
         assert_eq!(base["scripts"]["test"], "tpl-test");
-        assert_eq!(base["devDependencies"]["lefthook"], "^2.1.10");
-        assert_eq!(base["devDependencies"]["@commitlint/cli"], "latest");
+        assert_eq!(
+            base["devDependencies"]["lefthook"], "latest",
+            "依赖版本跟随模板"
+        );
+        assert_eq!(
+            base["devDependencies"]["@commitlint/cli"], "latest",
+            "用户缺失的依赖补齐"
+        );
 
         // 生成语义（overwrite_other=true，层间合并）：后来层覆盖
         let mut fresh = serde_json::json!({});
