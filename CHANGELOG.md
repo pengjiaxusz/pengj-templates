@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.14.0-beta.1...v0.15.0-beta.1) (2026-08-25)
+
+
+### Features
+
+* **core:** 固化技能扩展规范，存量全自定义技能不接管 ([10d88db](https://github.com/pengjiaxusz/pengj-templates/commit/10d88db9cadef10b032c1aa38948e204f08973dd))
+
 ## [0.14.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.13.1-beta.1...v0.14.0-beta.1) (2026-08-25)
 
 
