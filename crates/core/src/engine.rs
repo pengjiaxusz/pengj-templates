@@ -276,10 +276,58 @@ fn skill_name_of(rel: &Path) -> Option<String> {
 /// 是否为技能主文档 `<技能名>/SKILL.md`（相对 `.agents/skills/` 的直接子文件）。
 ///
 /// 技能主文档有特殊的纳管策略：存量项目的 SKILL.md 常见「整文件全自定义」的
-/// 旧形态（无托管块），直接追加模板框架会造成双流程，因此这类文件不注入、
-/// 不入托管清单（见 adopt/update 循环中的守卫）。
+/// 旧形态（无托管块），纳管/更新时执行「接管」——框架插入 frontmatter 之后、
+/// 原文整体下移为纳管过渡区（见 [`take_over_legacy_skill`]）。
 fn is_skill_doc(rel: &Path) -> bool {
     rel.file_name().is_some_and(|n| n == "SKILL.md") && skill_name_of(rel).is_some()
+}
+
+/// 把文本拆为 `(frontmatter 含闭合行, 其余正文)`。
+/// 非 `---` 开头或缺少闭合标记时返回 `("", 全文)`。假定 LF 行尾。
+fn split_frontmatter(text: &str) -> (&str, &str) {
+    let Some(rest) = text.strip_prefix("---") else {
+        return ("", text);
+    };
+    // 找闭合 `---` 所在行（其前必为换行）
+    let Some(rel_close) = rest.find("\n---") else {
+        return ("", text);
+    };
+    let close_nl = 3 + rel_close;
+    let body_start = text[close_nl + 1..]
+        .find('\n')
+        .map(|p| close_nl + 1 + p + 1)
+        .unwrap_or(text.len());
+    (&text[..body_start], &text[body_start..])
+}
+
+/// 接管存量全自定义技能主文档：
+/// 1. 原文件拆出 frontmatter（无则视为空）
+/// 2. 模板渲染结果（托管框架 + 项目专属区骨架）紧随 frontmatter 之后
+/// 3. 原正文整体下移到「纳管过渡区」注释之后——短暂双流程，
+///    由用户把领域差异合并进上方骨架后删除过渡区
+fn take_over_legacy_skill(disk_bytes: &[u8], rendered_bytes: &[u8]) -> Vec<u8> {
+    let disk = String::from_utf8_lossy(disk_bytes);
+    let rendered = String::from_utf8_lossy(rendered_bytes);
+    let (frontmatter, body) = split_frontmatter(&disk);
+
+    let mut out = String::with_capacity(disk.len() + rendered.len() + 320);
+    if !frontmatter.is_empty() {
+        out.push_str(frontmatter);
+        if !out.ends_with("\n\n") {
+            out.push('\n');
+        }
+    }
+    out.push_str(rendered.trim_end());
+    out.push_str(
+        "\n\n<!-- ⚠️ 纳管过渡区：以下为接管前的原始技能全文（暂时双流程）。\
+         请把其中的领域差异合并进上方「项目专属提交流程与红线」，然后删除本段至文末。 -->\n\n",
+    );
+    let trimmed = body.trim();
+    if !trimmed.is_empty() {
+        out.push_str(trimmed);
+        out.push('\n');
+    }
+    out.into_bytes()
 }
 
 /// 从 SKILL.md 的 frontmatter（`---` 与 `---` 之间）解析 `description` 字段。
@@ -1092,16 +1140,20 @@ pub fn adopt_project(
                 let legacy_without_block =
                     crate::block::extract_managed_block(&String::from_utf8_lossy(&cur)).is_none();
 
-                // 技能主文档为全自定义 legacy 形态（无托管块且非空）时不追加框架块：
-                // 追加会造成双流程。保持用户文件原样、不入托管清单，给出迁移指引；
-                // 后续 update 会持续以「未被模板托管」提示，直至用户显式迁移。
+                // 技能主文档为全自定义 legacy 形态（无托管块且非空）时执行「接管」：
+                // 模板框架插入 frontmatter 之后，原全文整体下移到纳管过渡区（归用户）。
+                // 短暂存在双流程，由用户把领域差异合并进项目专属区后删除过渡区；
+                // 接管后文件含托管块、入托管清单，后续 update 走正常的块替换路径。
                 if legacy_without_block
                     && is_skill_doc(rel)
                     && !String::from_utf8_lossy(&cur).trim().is_empty()
                 {
+                    let merged_bytes = take_over_legacy_skill(&cur, bytes);
+                    write_file(&target, &merged_bytes)?;
+                    manifest_files.insert(rel_str.clone(), sha256_hex(&merged_bytes));
                     needs_review.push(format!(
-                        "{rel_str}：既有技能为全自定义形态，已保持原样、模板未接管。\
-                         如需纳入模板更新：把领域差异挪入托管块外的项目专属区后，以模板版覆盖本文件"
+                        "{rel_str}：已接管——模板框架已插入 frontmatter 之后，原全文下移至纳管过渡区\
+                         （暂时双流程）。请把领域差异合并进上方项目专属区后删除过渡区"
                     ));
                     adopted.push(rel_str);
                     continue;
@@ -1350,19 +1402,21 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
                 let legacy_without_block =
                     crate::block::extract_managed_block(&String::from_utf8_lossy(&cur)).is_none();
 
-                // 技能主文档为全自定义 legacy 形态且未被模板托管：与 adopt 同策略，
-                // 不追加框架块，保持原样并以「未托管冲突」持续提示直至显式迁移
-                // （不写 new_files，保持 manifest 无该键的状态）
+                // 技能主文档为全自定义 legacy 形态：与 adopt 同策略执行「接管」——
+                // 框架插入 frontmatter 之后、原全文下移为纳管过渡区（暂时双流程），
+                // 接管后入托管清单，后续 update 走正常的块替换路径。
                 if legacy_without_block
                     && is_skill_doc(rel)
                     && !String::from_utf8_lossy(&cur).trim().is_empty()
                 {
-                    conflicted.push(ConflictInfo {
-                        path: rel_str,
-                        reason: "技能文档为全自定义形态且未被模板托管，已保持原样；\
-                                 迁移方式见技能扩展规范（差异挪入托管块外项目专属区后换用模板版）"
-                            .to_string(),
-                    });
+                    let merged_bytes = take_over_legacy_skill(&cur, bytes);
+                    write_file(&target, &merged_bytes)?;
+                    new_files.insert(rel_str.clone(), sha256_hex(&merged_bytes));
+                    updated.push(rel_str.clone());
+                    needs_review.push(format!(
+                        "{rel_str}：已接管——模板框架已插入 frontmatter 之后，原全文下移至纳管过渡区\
+                         （暂时双流程）。请把领域差异合并进上方项目专属区后删除过渡区"
+                    ));
                     continue;
                 }
 
@@ -3254,10 +3308,10 @@ mod tests {
     }
 
     /// 存量项目的技能主文档是「整文件全自定义」旧形态（无托管块）时：
-    /// adopt 不追加框架（避免双流程）、不入托管清单，报迁移指引；
-    /// 后续 update 持续以「未被模板托管」冲突提示，文件始终原样。
+    /// adopt 自动接管——框架插入 frontmatter 之后、原文下移到纳管过渡区
+    /// （暂时双流程）；文件入托管清单，后续 update 走正常替换且无冲突。
     #[test]
-    fn adopt_preserves_legacy_custom_skill_and_update_reports_unhosted() {
+    fn adopt_takes_over_legacy_custom_skill_with_transition_zone() {
         let tmp = std::env::temp_dir().join(format!("pengj-adopt-skill-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
@@ -3306,38 +3360,55 @@ mod tests {
         )
         .expect("adopt should succeed");
 
-        // 文件逐字节原样，不入托管清单，报迁移指引
-        assert_eq!(
-            std::fs::read_to_string(user_skill.join("SKILL.md")).unwrap(),
-            user_content,
-            "legacy 全自定义技能不得被追加框架"
+        // 接管结果：frontmatter 在最前，框架随后，原正文保留在过渡区下方
+        let merged_text = std::fs::read_to_string(user_skill.join("SKILL.md")).unwrap();
+        assert!(
+            merged_text.starts_with("---\nname: commit\ndescription: 我自己的提交规范\n---"),
+            "frontmatter 应原样保留在最前，实际:\n{merged_text}"
         );
+        let block_start = merged_text
+            .find("PENGJ_TEMPLATE_START")
+            .expect("应注入模板框架");
+        assert!(merged_text.contains("模板流程 v1"));
+        assert!(
+            merged_text.contains("纳管过渡区") && merged_text.contains("# 我的流程"),
+            "原全文应整体下移到过渡区下方"
+        );
+        assert!(
+            block_start > merged_text.find("---\nname: commit").unwrap(),
+            "框架应在 frontmatter 之后"
+        );
+        // 入托管清单 + 报双流程复核提示
         let manifest = ProjectManifest::load(&proj).unwrap();
         assert!(
-            !manifest.files.keys().any(|k| k.contains("SKILL.md")),
-            "未接管的技能不应入托管清单"
+            manifest
+                .files
+                .keys()
+                .any(|k| k.replace('\\', "/").contains("commit/SKILL.md")),
+            "接管后应入托管清单"
         );
         assert!(
             report
                 .needs_review
                 .iter()
-                .any(|s| s.contains("SKILL.md") && s.contains("未接管")),
-            "应给出未接管指引，实际: {:?}",
+                .any(|s| s.contains("SKILL.md") && s.contains("双流程")),
+            "应报双流程复核提示，实际: {:?}",
             report.needs_review
         );
 
-        // 后续 update：持续以「未被模板托管」冲突提示，文件仍原样
+        // 后续 update：走正常块替换路径——无冲突、幂等
         let upd = update_project(&templates, &proj).expect("update should succeed");
         assert!(
-            upd.conflicted
-                .iter()
-                .any(|c| c.path.contains("SKILL.md") && c.reason.contains("未被模板托管")),
-            "应报未托管冲突，实际: {:?}",
+            !upd.conflicted.iter().any(|c| c.path.contains("SKILL.md")),
+            "接管后不应再报冲突，实际: {:?}",
             upd.conflicted
         );
+        let again = update_project(&templates, &proj).unwrap();
+        assert!(!again.updated.iter().any(|f| f.contains("SKILL.md")));
         assert_eq!(
             std::fs::read_to_string(user_skill.join("SKILL.md")).unwrap(),
-            user_content
+            merged_text,
+            "二次 update 不应改动文件"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
