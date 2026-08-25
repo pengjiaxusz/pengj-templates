@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.13.1-beta.1...v0.14.0-beta.1) (2026-08-25)
+
+
+### Features
+
+* **app:** 生成页默认 edition 与 CLI 对齐为 2024 ([3633522](https://github.com/pengjiaxusz/pengj-templates/commit/36335223996548e727311dc7c50fcae8473e57cd))
+* **cli:** create 默认 Rust edition 调整为 2024 ([4afeba3](https://github.com/pengjiaxusz/pengj-templates/commit/4afeba3a3be725e739f831cc27073605ddf35243))
+* **core:** 纳管与更新合并语义增强 ([526f651](https://github.com/pengjiaxusz/pengj-templates/commit/526f651d5fff1958aa28d5a7ac1f0803f73cb6b2))
+
 ## [0.13.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.13.0-beta.1...v0.13.1-beta.1) (2026-08-25)
 
 
