@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.17.0-beta.1...v0.17.1-beta.1) (2026-08-25)
+
+
+### Bug Fixes
+
+* **core:** 技能接管剥离渲染页自身 frontmatter，避免双 frontmatter ([e6e7e75](https://github.com/pengjiaxusz/pengj-templates/commit/e6e7e75dfd12b7f0726d0008fbd950d6b5b9977d))
+
 ## [0.17.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.16.0-beta.1...v0.17.0-beta.1) (2026-08-25)
 
 
