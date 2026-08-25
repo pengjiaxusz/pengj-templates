@@ -47,7 +47,7 @@ enum Command {
         #[arg(short, long, value_delimiter = ',')]
         layers: Vec<String>,
         /// Rust edition（仅 rust 层生效；允许 2015/2018/2021/2024）
-        #[arg(long, default_value = "2021")]
+        #[arg(long, default_value = "2024")]
         edition: String,
         /// Rust toolchain channel（仅 rust 层生效；允许 stable/beta/nightly 或版本号如 1.82.0）
         #[arg(long, default_value = "stable")]
