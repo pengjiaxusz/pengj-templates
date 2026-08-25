@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.17.1-beta.1...v0.18.0-beta.1) (2026-08-25)
+
+
+### Features
+
+* **core:** 技能接管以模板整页为准，description 一并覆盖 ([4c49c85](https://github.com/pengjiaxusz/pengj-templates/commit/4c49c852b341f0804c4c47b41388849aff5e605f))
+
 ## [0.17.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.17.0-beta.1...v0.17.1-beta.1) (2026-08-25)
 
 
