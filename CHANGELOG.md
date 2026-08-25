@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.13.0-beta.1...v0.13.1-beta.1) (2026-08-25)
+
+
+### Bug Fixes
+
+* **app:** 修复 tauri dev 启动时 beforeDevCommand 路径错误 ([6095d39](https://github.com/pengjiaxusz/pengj-templates/commit/6095d39139cf3507a5dcf7f2e7910563aaec9f3f))
+
 ## [0.13.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.12.0-beta.1...v0.13.0-beta.1) (2026-08-25)
 
 
