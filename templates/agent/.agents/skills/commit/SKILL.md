@@ -90,37 +90,67 @@ Only when explicitly asked, for the just-made, unpushed commit with no dependenc
 <!-- PENGJ_TEMPLATE_END -->
 
 {% if options["skill_lang"] == "en" %}
-<!-- Below is the project-specific area: template updates replace only the managed block above; this area is preserved. -->
+<!-- Below is the project-specific area: template updates replace only the managed block above; this area belongs to the project and is fully preserved. -->
 ## Project-specific workflow & red lines
 
-> This area sits outside the managed block above: template updates replace only the block, so everything below is preserved.
+> This section belongs to the **project**: template updates only maintain the managed block above; rewrite this freely without losing anything.
+> Relation to step 2 above: the script (if present) provides check output; THIS section defines how to judge and what to complete when a check hits.
 
-Two extension points feed step 2 of the flow above (keep at least one):
+### Domain completeness checks (rewrite for your repo)
 
-### Slot A: pre-commit check script (recommended)
+Replace the example skeleton below with your repo's real principles and judgment table:
 
-Create `.agents/skills/commit/pre-commit-check.ps1`. It becomes step 2 automatically — no need to edit the flow text when your checks change, and template updates never touch it. Suggested output: worktree status + staged/unstaged stat overview (+ any repo-specific gates); avoid dumping full diffs to save context.
+| # | Principle question | Hit → verify |
+| --- | --- | --- |
+| 1 | (example) Touched core module contracts? | Corresponding `AGENTS.md` / `docs/` synced |
+| 2 | (example) Added public API/args? | Docs & `--help` fully self-describing |
+| 3 | (example) Touched build/deps? | Build verified |
 
-### Slot B: project checklist (editable)
+Judgment quick table:
 
-- [ ] Custom pre-commit checks beyond the script (regenerate mocks, update golden files, run a specific test suite, ...)
-- [ ] Domain principles / red lines (e.g. CLI `--help` must fully self-describe new args)
-- [ ] Anything agents must never do when committing
+| Change seen | Check hit |
+| --- | --- |
+| (example) `src/core/**` | Core contract docs |
+| Pure tests, formatting, behavior-preserving fixes | None (fast path) |
+
+### Red lines (an agent must never)
+
+- (example) Commit before completing the completeness check
+- (example) Mix multiple domains into one commit
+
+### Optional: pre-commit check script
+
+For executable gates, create `.agents/skills/commit/pre-commit-check.ps1` (any `pre-commit-check.*`) — it automatically feeds step 2 above and is never touched by template updates.
 {% else %}
-<!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域内容完整保留。 -->
+<!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
 ## 项目专属提交流程与红线
 
-> 本区域位于上方托管块之外：模板更新只替换托管块，下方内容完整保留。
+> 本节归**项目**所有：模板更新只维护上方托管块，这里可以随意改写，不会丢失。
+> 与上文第 2 步的关系：脚本（若存在）提供检查输出，**本节**定义「怎么判定、命中了要补什么」。
 
-两个扩展点共同支撑上文第 2 步（至少保留一个）：
+### 领域完整性检查（按仓库领域改写本节）
 
-### 插槽 A：pre-commit 检查脚本（推荐）
+把下面的示例骨架替换为本仓库真实的三问与判定表：
 
-创建 `.agents/skills/commit/pre-commit-check.ps1`。它会自动成为第 2 步——之后调整项目检查只改脚本、不动流程文本，模板更新也永不覆盖它。建议输出：工作树状态 + 未暂存/已暂存 stat 概览（+ 本仓库特有门禁）；避免全量输出 diff 浪费上下文。
+| # | 原则问题 | 命中 → 要查 |
+| --- | --- | --- |
+| 1 | （示例）是否触及核心模块契约？ | 对应 `AGENTS.md` / `docs/` 是否同步 |
+| 2 | （示例）是否新增对外接口/参数？ | 文档与 `--help` 是否完全自解释 |
+| 3 | （示例）是否改动构建/依赖？ | 构建是否验证通过 |
 
-### 插槽 B：项目专属检查清单（可编辑）
+判定表速查：
 
-- [ ] 脚本之外的提交前检查（重新生成 mock、更新 golden 文件、跑指定测试套件等）
-- [ ] 领域原则 / 红线（如 CLI `--help` 必须完全自解释新参数）
-- [ ] 提交时 agent 绝不能做的事项
+| 改动 | 命中的检查 |
+| --- | --- |
+| （示例）`src/core/**` | 核心契约文档 |
+| 纯测试、纯格式化、修 bug 不改行为 | 无（快速路径） |
+
+### 红线（agent 绝不能做）
+
+- （示例）跳过完整性检查直接提交
+- （示例）把多个领域混进一次提交
+
+### 可选：提交前检查脚本
+
+需要可执行门禁时，创建 `.agents/skills/commit/pre-commit-check.ps1`（或任意 `pre-commit-check.*`）——它会自动成为上文第 2 步的输入源，模板更新永不覆盖。
 {% endif %}

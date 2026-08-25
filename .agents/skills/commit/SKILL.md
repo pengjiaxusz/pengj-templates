@@ -1,128 +1,79 @@
 ---
 name: commit
 description: >-
-  模板仓库提交：提交/amend 前 MUST 先按本 skill 的「提交前完整性检查」扫 diff 自主判定（构建验证 / 文档同步 / 格式与命名），
-  再按约定式提交写中文 message 并拆分无关改动；scope 需要新增时按本 skill 流程自主更新 commitlint.config.js。
-  支持切发 pre-release（beta/preview/rc）：用户提出"切 beta/preview/rc/预发布"时自动按 §5b 推算并写入 Release-As。
-  每次提交成功后 MUST 立即 push。
-  Triggers: commit, 提交, amend, push, commit message, conventional commits, Commitlint, 拆分提交, scope, 切 beta, 切 preview, 切 rc, 预发布, prerelease, Release-As.
+
+  约定式提交流程。提交信息用中文撰写（type/scope 除外）。提交前先跑项目约定的检查（约定脚本 > 项目清单 > 兜底扫 diff）、拆分无关改动、提交后立即 push。
+  Triggers: commit, 提交, amend, push, commit message, conventional commits.
+
 ---
 
 <!-- PENGJ_TEMPLATE_START -->
-# commit 提交流程
+# Commit 提交流程
 
-中文提交信息 + PowerShell 兼容执行。除 type/scope 外一律中文。**提交后立即 push**（防止本机故障丢失最新提交）。
 
-## 流程
+按约定式提交写提交信息。提交后立即 push，防止丢失。
 
-### 1. 收集提交上下文（标准 git 命令，跨平台）
+## 1. 收集提交上下文（标准 git 命令，跨平台）
+仓库根运行：
+`git status` · `git diff --stat` · `git diff --cached --stat`（必要时看完整 diff）
 
-在仓库根目录运行，一次性拿到全部分区信息，便于拆分提交与完整性检查：
+## 2. 提交前完整性检查 —— 项目自定义，按优先级取第一个命中
+本步骤归**项目**所有，模板不硬编码具体检查。按顺序解析：
 
-```powershell
-git status
-git diff --stat
-git diff --cached --stat
-```
+1. **约定脚本**：存在 `.agents/skills/commit/pre-commit-check.ps1`（或本技能目录下任意 `pre-commit-check.*`）→ MUST 先运行，以其输出（status/stat 概览等）为判定依据。脚本定义了本仓库「完整」的含义。
+2. **项目清单**：下方托管块外的「项目专属提交流程与红线」已填写 → 按清单执行。
+3. **兜底自检**（以上都没有）：扫 diff——改动构建/依赖、文档/AGENTS.md/配置、公开命名时对应校验构建、更新文档、跑格式化。
 
-需要看完整内容时再补：
+不要在本流程里发明仓库专属检查；需要扩展时改脚本或清单（见下方插槽）。
 
-```powershell
-git diff          # 未暂存完整 diff
-git diff --cached # 已暂存完整 diff
-```
+## 3. 拆分无关改动
+不相关领域拆多次提交（文档与功能、构建与业务分开）。
 
-### 2. 提交前完整性检查（扫 diff 自主判定）
+## 4. 提交信息格式
+`type(scope): 标题`
 
-扫上一步的 status / diff / 未跟踪列表，按**原则三问**判定命中哪些检查——**判定以 diff 实际内容为准**：
+- 标题用中文短句、不加句号。
+- type/scope 用英文：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`。
+- scope 参考项目 `commitlint.config.js` 的 scope-enum 白名单，无合适则省略。
 
-**原则三问**（每次提交都问，只看 diff）：
 
-| # | 问题 | 命中 → 要查 |
-| --- | --- | --- |
-| 1 | 是否改动构建/依赖？（`Cargo.toml`、`.cargo/config.toml`、`justfile`、`package.json`、`pnpm-workspace.yaml`、新依赖） | **构建验证** |
-| 2 | 是否触及已文档化模块/契约，或新增/修改了配置、技能、脚本？ | **文档与 AGENTS.md 同步** |
-| 3 | 是否新增/修改了公开 API、类型、命名，或改动需要新的 commit scope？ | **格式与命名 + scope 增补** |
+## 5. 提交与 Push（PowerShell 兼容）
+`git commit -m "<type>: 标题"` 后立即 `git push`；远端有更新先 `git pull --rebase` 再 push。
 
-**判定表（常见触发条件，速查参考）**
+## 6. Amend
+仅当用户明确要求、且是刚提交未 push、无人依赖时。Amend 前仍跑完整性检查，完成后立即 push。
 
-| diff 里看到 | 命中的检查 |
-| --- | --- |
-| 改了 `Cargo.toml` / `.cargo/` / `justfile` / pnpm 相关 | 构建验证 |
-| 新增/修改了模块结构、`AGENTS.md`、`.agents/` 技能、配置 | 文档与 AGENTS.md 同步 |
-| 改了公开 API/类型/命名，或需新 scope | 格式与命名 + `commitlint.config.js` scope-enum |
-| 纯测试、纯格式化、纯注释、配置微调、修 bug 不改行为 | **无（快速路径）** |
-
-**命中后的核对与补齐**（缺则补，补完才算通过）：
-- **构建验证**：在仓库根目录 `just build`（或按 `AGENTS.md` 指定命令）验证通过；禁止裸 `cargo build`。
-- **文档同步**：核对 `AGENTS.md` 是否准确，新增模块/配置/技能补说明。
-- **格式与命名**：`just fmt`；scope 白名单缺失时按本 skill 流程更新 `commitlint.config.js`。
-
-*注：文档/杂项更新可放独立提交（如 `docs(scope)` / `chore(agent)`），但工作树里必须全部补齐。*
-
-### 3. 判断是否拆分提交
-
-一律不相关领域拆多次提交（例如：功能改动与文档改动不要混合提交；构建配置改动与业务逻辑分开提交）。
-
-### 4. 选 type 与 scope 并撰写 commit message
-
-`type(scope): 中文标题`
-
-#### type 速记
-`feat`新能力 `fix`修错 `docs`文档 `style`格式命名 `refactor`重构不改行为 `perf`性能 `test`测试 `build`构建依赖 `ci`CI `chore`杂项 `revert`回滚
-
-#### scope 规则
-- 读 `commitlint.config.js` 的 `scope-enum` 白名单；文件不存在时跳过。
-- 无合适 scope 则省略（例如 `chore: ...`）。
-
-### 5. 执行提交与 Push（PowerShell 兼容）
-
-```powershell
-git commit -m "fix: 中文标题" -m "正文。`n`n变更：`n- 点1`n- 点2"
-git push
-```
-
-- **必须使用 PowerShell 兼容语法**：每个 `-m` 一段，正文内 `` `n `` 换行。禁止使用 bash heredoc（`<<'EOF'`）。
-- 提交成功后**必须立即执行 `git push`**。
-- 若远端有更新，先 `git pull --rebase` 再 `git push`。
-
-### 5b. 可选：切发 pre-release（beta / preview / rc）
-
-默认**发稳定版**（无需任何额外操作，release-please 自动 bump）。仅当用户明确要求"切 beta / preview / rc / 预发布"时才走本节。
-
-1. **读当前版本号**：从 `.github/release-please-manifest.json` 的 `"."` 字段读取当前版本（如 `0.5.0`）——这是 release-please 的权威版本源，**不要**从 `Cargo.toml`/`package.json`/`tauri.conf.json` 读（它们可能滞后）。
-2. **推算目标 pre-release 号**（`n` 为当前 `minor`，`p` 为当前 `patch`）：
-   - 稳定版 → beta / preview / rc：取 `major.(n+1).0-<type>.1`（如 `0.5.0` → `0.6.0-beta.1`）。
-   - 已在同阶段 pre-release（如 `0.6.0-beta.2`）且用户指同一类型：不加 `Release-As`，release-please 会自动 +1（`beta.2`→`beta.3`）。
-   - 切到**另一类型**（如 `beta`→`rc`）：取 `major.minor.patch-<新type>.1`（如 `0.6.0-beta.3` → `0.6.0-rc.1`）。
-   - 用户显式报了版本号：直接用用户给的号。
-3. **写提交信息时**在正文末尾追加 footer 行（PowerShell 多 `-m` 传一段）：
-   `Release-As: <推算的 pre-release 号>`
-4. 后续流程不变（push 后 release-please 会据此创建 pre-release PR，GitHub 自动标 **Prerelease**）。
-
-*注：`Release-As:` 只在"切换通道"那一次需要；同阶段之后的普通 `feat`/`fix` 会自动递增 pre-release 号，无需再带。*
-
-### 6. Amend
-
-仅当用户明确要求且符合「只改刚提交、未 push、无他人依赖」时。Amend 前仍跑「提交前完整性检查」；amend 成功后同样立即 push。
-
-## 质量要求
-
-- 标题中文短句、不加句号、不空泛。
-- 提交失败重试时带上 `git add`。
-- 收尾确认 `git status` 干净且本地无未推送提交。
 <!-- PENGJ_TEMPLATE_END -->
 
+
+<!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
 ## 项目专属提交流程与红线
 
-> 本区域位于上方托管块之外：模板更新只替换托管块，下方内容完整保留，可放心补充本项目独有的提交规范。
+> 本节归**项目**所有：模板更新只维护上方托管块，这里可以随意改写，不会丢失。
+> 与上文第 2 步的关系：脚本（若存在）提供检查输出，**本节**定义「怎么判定、命中了要补什么」。
 
-建议插槽：
+### 领域完整性检查（按仓库领域改写本节）
 
-- **自定义 pre-commit 校验** —— 提交前运行的脚本，如 `scripts/pre-commit-check.ps1`（在上方流程第 2 步调用）。
-- **领域原则 / 检查清单** —— 本仓库不可妥协的要点（重新生成 mock、更新 golden 文件、跑指定测试套件等）。
-- **CLI `--help` 一致性** —— 改动 CLI 命令/参数后，提交前确认 `--help` 输出与文档一致。
+把下面的示例骨架替换为本仓库真实的三问与判定表：
 
-### 项目专属检查清单（可编辑）
+| # | 原则问题 | 命中 → 要查 |
+| --- | --- | --- |
+| 1 | （示例）是否触及核心模块契约？ | 对应 `AGENTS.md` / `docs/` 是否同步 |
+| 2 | （示例）是否新增对外接口/参数？ | 文档与 `--help` 是否完全自解释 |
+| 3 | （示例）是否改动构建/依赖？ | 构建是否验证通过 |
 
-- [ ] ...
+判定表速查：
+
+| 改动 | 命中的检查 |
+| --- | --- |
+| （示例）`src/core/**` | 核心契约文档 |
+| 纯测试、纯格式化、修 bug 不改行为 | 无（快速路径） |
+
+### 红线（agent 绝不能做）
+
+- （示例）跳过完整性检查直接提交
+- （示例）把多个领域混进一次提交
+
+### 可选：提交前检查脚本
+
+需要可执行门禁时，创建 `.agents/skills/commit/pre-commit-check.ps1`（或任意 `pre-commit-check.*`）——它会自动成为上文第 2 步的输入源，模板更新永不覆盖。

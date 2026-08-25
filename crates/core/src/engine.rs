@@ -273,6 +273,15 @@ fn skill_name_of(rel: &Path) -> Option<String> {
     }
 }
 
+/// 是否为技能主文档 `<技能名>/SKILL.md`（相对 `.agents/skills/` 的直接子文件）。
+///
+/// 技能主文档有特殊的纳管策略：存量项目的 SKILL.md 常见「整文件全自定义」的
+/// 旧形态（无托管块），直接追加模板框架会造成双流程，因此这类文件不注入、
+/// 不入托管清单（见 adopt/update 循环中的守卫）。
+fn is_skill_doc(rel: &Path) -> bool {
+    rel.file_name().is_some_and(|n| n == "SKILL.md") && skill_name_of(rel).is_some()
+}
+
 /// 从 SKILL.md 的 frontmatter（`---` 与 `---` 之间）解析 `description` 字段。
 /// 支持 `description: 值` 与 `description: >` / `>-` 折叠块。
 fn parse_skill_description(text: &str) -> String {
@@ -1082,6 +1091,22 @@ pub fn adopt_project(
 
                 let legacy_without_block =
                     crate::block::extract_managed_block(&String::from_utf8_lossy(&cur)).is_none();
+
+                // 技能主文档为全自定义 legacy 形态（无托管块且非空）时不追加框架块：
+                // 追加会造成双流程。保持用户文件原样、不入托管清单，给出迁移指引；
+                // 后续 update 会持续以「未被模板托管」提示，直至用户显式迁移。
+                if legacy_without_block
+                    && is_skill_doc(rel)
+                    && !String::from_utf8_lossy(&cur).trim().is_empty()
+                {
+                    needs_review.push(format!(
+                        "{rel_str}：既有技能为全自定义形态，已保持原样、模板未接管。\
+                         如需纳入模板更新：把领域差异挪入托管块外的项目专属区后，以模板版覆盖本文件"
+                    ));
+                    adopted.push(rel_str);
+                    continue;
+                }
+
                 let merged = merge_managed_block(project_dir, rel, bytes);
                 if merged.bytes != cur {
                     write_file(&target, &merged.bytes)?;
@@ -1324,6 +1349,23 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
             {
                 let legacy_without_block =
                     crate::block::extract_managed_block(&String::from_utf8_lossy(&cur)).is_none();
+
+                // 技能主文档为全自定义 legacy 形态且未被模板托管：与 adopt 同策略，
+                // 不追加框架块，保持原样并以「未托管冲突」持续提示直至显式迁移
+                // （不写 new_files，保持 manifest 无该键的状态）
+                if legacy_without_block
+                    && is_skill_doc(rel)
+                    && !String::from_utf8_lossy(&cur).trim().is_empty()
+                {
+                    conflicted.push(ConflictInfo {
+                        path: rel_str,
+                        reason: "技能文档为全自定义形态且未被模板托管，已保持原样；\
+                                 迁移方式见技能扩展规范（差异挪入托管块外项目专属区后换用模板版）"
+                            .to_string(),
+                    });
+                    continue;
+                }
+
                 let merged = merge_managed_block(project_dir, rel, bytes);
                 if merged.bytes == cur {
                     unchanged += 1;
@@ -3207,6 +3249,171 @@ mod tests {
         let manifest = ProjectManifest::load(&existing_project).unwrap();
         assert_eq!(manifest.layers, vec!["common".to_string()]);
         assert!(manifest.files.contains_key(".gitignore"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 存量项目的技能主文档是「整文件全自定义」旧形态（无托管块）时：
+    /// adopt 不追加框架（避免双流程）、不入托管清单，报迁移指引；
+    /// 后续 update 持续以「未被模板托管」冲突提示，文件始终原样。
+    #[test]
+    fn adopt_preserves_legacy_custom_skill_and_update_reports_unhosted() {
+        let tmp = std::env::temp_dir().join(format!("pengj-adopt-skill-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 模板：agent 层带一个含受管块的 commit 技能
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tpl.join("agent")).unwrap();
+        std::fs::write(
+            tpl.join("agent").join("layer.toml"),
+            "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        let tpl_skill = tpl
+            .join("agent")
+            .join(".agents")
+            .join("skills")
+            .join("commit");
+        std::fs::create_dir_all(&tpl_skill).unwrap();
+        std::fs::write(
+            tpl_skill.join("SKILL.md"),
+            "---\nname: commit\ndescription: x\n---\n\n<!-- PENGJ_TEMPLATE_START -->\n模板流程 v1\n<!-- PENGJ_TEMPLATE_END -->\n",
+        )
+        .unwrap();
+
+        // 存量项目：全自定义技能（无托管块、非空）
+        let proj = tmp.join("legacy-app");
+        let user_skill = proj.join(".agents").join("skills").join("commit");
+        std::fs::create_dir_all(&user_skill).unwrap();
+        let user_content =
+            "---\nname: commit\ndescription: 我自己的提交规范\n---\n\n# 我的流程\n- 领域三问\n";
+        std::fs::write(user_skill.join("SKILL.md"), user_content).unwrap();
+
+        let templates = Templates::new(&tpl);
+        let report = adopt_project(
+            &templates,
+            &proj,
+            &["common".to_string(), "agent".to_string()],
+            BTreeMap::new(),
+            false,
+        )
+        .expect("adopt should succeed");
+
+        // 文件逐字节原样，不入托管清单，报迁移指引
+        assert_eq!(
+            std::fs::read_to_string(user_skill.join("SKILL.md")).unwrap(),
+            user_content,
+            "legacy 全自定义技能不得被追加框架"
+        );
+        let manifest = ProjectManifest::load(&proj).unwrap();
+        assert!(
+            !manifest.files.keys().any(|k| k.contains("SKILL.md")),
+            "未接管的技能不应入托管清单"
+        );
+        assert!(
+            report
+                .needs_review
+                .iter()
+                .any(|s| s.contains("SKILL.md") && s.contains("未接管")),
+            "应给出未接管指引，实际: {:?}",
+            report.needs_review
+        );
+
+        // 后续 update：持续以「未被模板托管」冲突提示，文件仍原样
+        let upd = update_project(&templates, &proj).expect("update should succeed");
+        assert!(
+            upd.conflicted
+                .iter()
+                .any(|c| c.path.contains("SKILL.md") && c.reason.contains("未被模板托管")),
+            "应报未托管冲突，实际: {:?}",
+            upd.conflicted
+        );
+        assert_eq!(
+            std::fs::read_to_string(user_skill.join("SKILL.md")).unwrap(),
+            user_content
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 磁盘上的技能文档已含托管块（旧版模板生成）：守卫不得误触发，
+    /// adopt 仍走正常的「原位替换块区间」路径并纳入托管清单。
+    #[test]
+    fn adopt_still_replaces_managed_block_in_existing_skill() {
+        let tmp = std::env::temp_dir().join(format!("pengj-adopt-skill2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tpl.join("agent")).unwrap();
+        std::fs::write(
+            tpl.join("agent").join("layer.toml"),
+            "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        let tpl_skill = tpl
+            .join("agent")
+            .join(".agents")
+            .join("skills")
+            .join("caveman");
+        std::fs::create_dir_all(&tpl_skill).unwrap();
+        std::fs::write(
+            tpl_skill.join("SKILL.md"),
+            "---\nname: caveman\ndescription: x\n---\n\n<!-- PENGJ_TEMPLATE_START -->\n模板 v1\n<!-- PENGJ_TEMPLATE_END -->\n",
+        )
+        .unwrap();
+
+        // 项目：同结构旧版文件（含托管块 + 块外用户内容）
+        let proj = tmp.join("legacy-app");
+        let user_skill = proj.join(".agents").join("skills").join("caveman");
+        std::fs::create_dir_all(&user_skill).unwrap();
+        std::fs::write(
+            user_skill.join("SKILL.md"),
+            "---\nname: caveman\ndescription: x\n---\n\n<!-- PENGJ_TEMPLATE_START -->\n旧版 v0\n<!-- PENGJ_TEMPLATE_END -->\n\n## 用户备注\n- 保留\n",
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let report = adopt_project(
+            &templates,
+            &proj,
+            &["common".to_string(), "agent".to_string()],
+            BTreeMap::new(),
+            false,
+        )
+        .expect("adopt should succeed");
+
+        // 块区间被替换为模板 v1，块外用户内容保留；纳入托管清单
+        let merged = std::fs::read_to_string(user_skill.join("SKILL.md")).unwrap();
+        assert!(merged.contains("模板 v1"));
+        assert!(!merged.contains("旧版 v0"));
+        assert!(merged.contains("## 用户备注"));
+        let manifest = ProjectManifest::load(&proj).unwrap();
+        assert!(
+            manifest
+                .files
+                .keys()
+                .any(|k| k.replace('\\', "/").contains("caveman/SKILL.md")),
+            "已托管的技能应入清单，实际: {:?}",
+            manifest.files.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            !report.needs_review.iter().any(|s| s.contains("caveman")),
+            "正常替换不应报未接管"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
