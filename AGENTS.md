@@ -46,7 +46,7 @@
 ## 模板层规范 / Template layers (templates/)
 
 - **新增层** = `templates/<layer>/` 目录 + `layer.toml`（`name` / `description` / `depends` / `update_ignore`），自动发现、无需注册。
-- **合并规则**：按依赖顺序合并、后层覆盖前层；`.gitignore`、`.gitattributes` 按层累加拼接（`ACCUMULATE_FILES`）；`package.json` 结构化并集（`MERGE_JSON_FILES`，更新/纳管时同名键用户优先、模板只补缺失、键序保持）；`.cargo/config.toml` 走 TOML 结构化受管合并（表级并集、等值去重、冲突跳过并上报，见 `crates/core/src/toml_merge.rs`）。
+- **合并规则**：按依赖顺序合并、后层覆盖前层；`.gitignore`、`.gitattributes` 按层累加拼接（`ACCUMULATE_FILES`）；`package.json` 结构化并集（`MERGE_JSON_FILES`，更新/纳管时依赖类字段同名包版本一律以模板为准，脚本与其余字段用户优先、键序保持）；`.cargo/config.toml` 走 TOML 结构化受管合并（表级并集、等值去重、冲突跳过并上报，见 `crates/core/src/toml_merge.rs`）。
 - **占位符**：minijinja（`{{ project_name }}`、`{{ project_slug }}`、`{{ year }}`、`layers`、`options`），渲染逻辑在 `crates/core/src/render.rs`。
 - **选项**：生成时用户选项（edition、skills、skill_lang 等）固化进 `.pengj-templates.json` manifest；`update` 按同一批选项重渲染。
 - **技能过滤**：`options["skills"]`（字符串数组）决定生成哪些技能文件；缺失时包含全部（向后兼容），过滤逻辑在 `crates/core/src/engine.rs`（`skill_name_of` / `selected_skills`）。

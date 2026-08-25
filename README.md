@@ -35,7 +35,7 @@ cargo run -p pengj-templates-cli -- create my-app --layers agent --skills commit
 cargo run -p pengj-templates-cli -- update --dir ./my-app                # 同步模板更新
 ```
 
-`create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2021）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--sccache` 开启编译缓存（默认关）、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates.json`，`update` 同步时按各项目当年的选项重新渲染。
+`create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2024）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--sccache` 开启编译缓存（默认关）、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates.json`，`update` 同步时按各项目当年的选项重新渲染。
 
 `agent` 层的技能选项（选 agent 层时生效）：`--skills commit,caveman,grill-me,arch-align` 决定生成哪些技能（逗号分隔，默认全部；GUI 里用勾选框选择）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `commit`（约定式提交）、`caveman`（超压缩通信）、`grill-me`（设计质询）、`arch-align`（架构对齐）四个，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可。三个中文概念互相独立：**中文编程**（代码标识符）、**技能用中文写**（文档语言，`skill_lang`）、**提交信息是中文**（提交信息语言，`commit_zh`）。
 
@@ -61,9 +61,11 @@ cargo run -p pengj-templates-cli -- update --dir ./my-app                # 同�
 
 `rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。
 
-`package.json` 走**结构化并集合并**：生成时各层并集（后层覆盖同名项）；更新/纳管时以用户现有文件为底，模板只补缺失的依赖与脚本——同名键一律保留用户的值（版本钉、脚本内容都不会被模板覆盖），键顺序保持原样不产生噪声 diff。模板中依赖用 `latest` 仅供新项目首次落地，不会反向覆盖用户的版本约束。`layer.toml` 里用 `update_ignore` 声明黑名单文件。
+`package.json` 走**结构化并集合并**：生成时各层并集（后层覆盖同名项）；更新/纳管时以用户现有文件为底——**依赖类字段（dependencies/devDependencies 等）的同名包版本一律以模板为准**（依赖集合由模板统一维护；模板用 `latest` 时实际解析版本由项目 lockfile 锁定，升级走 `pnpm update --latest`），`scripts` 与其余字段仍用户优先、模板只补缺失，键顺序保持原样不产生噪声 diff。`layer.toml` 里用 `update_ignore` 声明黑名单文件。
 
-`.cargo/config.toml` 走 **TOML 结构化受管合并**：受管块内的表与用户配置做表级并集、键级去重——用户已有的等价键自动去重（避免重复表定义炸掉 cargo），模板新增表进入受管块；同键不同值或需要往用户已有表里补新键时报冲突并跳过写盘，由用户手工对齐后重跑。文本类文件（AGENTS.md、技能 SKILL.md）走**受管块注入**：磁盘已有托管块则原位替换，无块的 legacy 文件则把托管块追加到末尾并计入 `needs_review` 提示人工复核；纳管时若发现既有 `commitlint.config.js` 未继承新生成的 `commitlint.base.js`，会在报告中给出明确接线指引。
+`.cargo/config.toml` 走 **TOML 结构化受管合并**：受管块内的表与用户配置做表级并集、键级去重——用户已有的等价键自动去重（避免重复表定义炸掉 cargo），模板新增表进入受管块；同键不同值或需要往用户已有表里补新键时报冲突并跳过写盘，由用户手工对齐后重跑。文本类文件（AGENTS.md、技能 SKILL.md）走**受管块注入**：磁盘已有托管块则原位替换，无块的 legacy 文件则把托管块追加到末尾并计入 `needs_review` 提示人工复核。纳管/更新时若既有 `commitlint.config.js` 未继承 `commitlint.base.js`，会自动改写为继承形态（base 规则铺底、项目规则同名覆盖，计入 `needs_review`）；无法安全改写的形态（CJS 等）才在报告中给出手动接线指引。
+
+`.vscode/settings.json` 的模板配置在**项目根已有 `*.code-workspace` 文件时并入工作区文件的 `settings` 节点**（不新建独立 settings 文件）；没有工作区文件时才创建/维护 `.vscode/settings.json`。
 
 lefthook 层用法：commitlint CLI 走本地依赖（`pnpm exec commitlint`），`pnpm-lock.yaml` 由 git 托管以保持可复现；生成项目时先 `git init` 再 `pnpm install`，`prepare` 自动装 lefthook git 钩子；升级用 `pnpm update --latest`。
 
