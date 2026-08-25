@@ -28,14 +28,14 @@
 ### CLI
 
 ```bash
-cargo run -p pengj-cli -- list-layers                          # 列出可用层
-cargo run -p pengj-cli -- create my-app --layers rust          # 生成 common + rust
-cargo run -p pengj-cli -- create my-app --layers rust --edition 2024 --channel nightly --no-sccache --no-lld
-cargo run -p pengj-cli -- create my-app --layers agent --skills commit,caveman   # 只生成选中的技能
-cargo run -p pengj-cli -- update --dir ./my-app                # 同步模板更新
+cargo run -p pengj-templates-cli -- list-layers                          # 列出可用层
+cargo run -p pengj-templates-cli -- create my-app --layers rust          # 生成 common + rust
+cargo run -p pengj-templates-cli -- create my-app --layers rust --edition 2024 --channel nightly --no-lld
+cargo run -p pengj-templates-cli -- create my-app --layers agent --skills commit,caveman   # 只生成选中的技能
+cargo run -p pengj-templates-cli -- update --dir ./my-app                # 同步模板更新
 ```
 
-`create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2021）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--no-sccache` 关闭编译缓存、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates.json`，`update` 同步时按各项目当年的选项重新渲染。
+`create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2021）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--sccache` 开启编译缓存（默认关）、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates.json`，`update` 同步时按各项目当年的选项重新渲染。
 
 `agent` 层的技能选项（选 agent 层时生效）：`--skills commit,caveman,grill-me,arch-align` 决定生成哪些技能（逗号分隔，默认全部；GUI 里用勾选框选择）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `commit`（约定式提交）、`caveman`（超压缩通信）、`grill-me`（设计质询）、`arch-align`（架构对齐）四个，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可。三个中文概念互相独立：**中文编程**（代码标识符）、**技能用中文写**（文档语言，`skill_lang`）、**提交信息是中文**（提交信息语言，`commit_zh`）。
 
@@ -61,7 +61,9 @@ cargo run -p pengj-cli -- update --dir ./my-app                # 同步模板更
 
 `rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。
 
-`package.json` 走**结构化并集合并**：生成时各层并集；更新时以用户现有文件为底，模板新增的依赖/脚本并入（同名依赖模板优先），用户自己加的库与 name/version 等字段保留不动。模板中依赖用 `latest`，用户 `pnpm install` 时自动拉最新。`layer.toml` 里用 `update_ignore` 声明黑名单文件。
+`package.json` 走**结构化并集合并**：生成时各层并集（后层覆盖同名项）；更新/纳管时以用户现有文件为底，模板只补缺失的依赖与脚本——同名键一律保留用户的值（版本钉、脚本内容都不会被模板覆盖），键顺序保持原样不产生噪声 diff。模板中依赖用 `latest` 仅供新项目首次落地，不会反向覆盖用户的版本约束。`layer.toml` 里用 `update_ignore` 声明黑名单文件。
+
+`.cargo/config.toml` 走 **TOML 结构化受管合并**：受管块内的表与用户配置做表级并集、键级去重——用户已有的等价键自动去重（避免重复表定义炸掉 cargo），模板新增表进入受管块；同键不同值或需要往用户已有表里补新键时报冲突并跳过写盘，由用户手工对齐后重跑。文本类文件（AGENTS.md、技能 SKILL.md）走**受管块注入**：磁盘已有托管块则原位替换，无块的 legacy 文件则把托管块追加到末尾并计入 `needs_review` 提示人工复核；纳管时若发现既有 `commitlint.config.js` 未继承新生成的 `commitlint.base.js`，会在报告中给出明确接线指引。
 
 lefthook 层用法：commitlint CLI 走本地依赖（`pnpm exec commitlint`），`pnpm-lock.yaml` 由 git 托管以保持可复现；生成项目时先 `git init` 再 `pnpm install`，`prepare` 自动装 lefthook git 钩子；升级用 `pnpm update --latest`。
 
@@ -72,7 +74,7 @@ pnpm --dir crates/app install
 pnpm --dir crates/app tauri dev
 ```
 
-生成项目时写入 `.pengj-templates.json` manifest（记录层与模板托管文件哈希），`update` 依据它只更新模板托管文件：本地未改动的文件直接覆盖、被改过的报冲突跳过、模板新增的自动创建。
+生成项目时写入 `.pengj-templates.json` manifest（记录层与模板托管文件哈希），`update` 依据它只更新模板托管文件：本地未改动的文件直接覆盖、被改过的报冲突跳过、含受管块的文件做块级合并（TOML 结构化合并 / 文本托管块注入）、模板新增的自动创建。报告中 `needs_review` 列出建议人工复核的合并结果，adopt 的 `manual_steps` 给出需要手动完成的接线步骤。
 
 ## 目录结构
 

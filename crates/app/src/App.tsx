@@ -53,6 +53,7 @@ interface UpdateReport {
   created: string[];
   conflicted: ConflictInfo[];
   removed: string[];
+  needs_review: string[];
   unchanged: number;
 }
 
@@ -93,7 +94,7 @@ function GenerateTab() {
   const [parentDir, setParentDir] = useState("");
   const [edition, setEdition] = useState("2021");
   const [channel, setChannel] = useState("stable");
-  const [useSccache, setUseSccache] = useState(true);
+  const [useSccache, setUseSccache] = useState(false);
   const [useLld, setUseLld] = useState(true);
   const [chinese, setChinese] = useState(false);
   const [skillLang, setSkillLang] = useState("zh");
@@ -543,7 +544,8 @@ function UpdateTab() {
               </p>
               <p className="text-sm text-muted-foreground">
                 更新 {report.updated.length} · 新增 {report.created.length} ·
-                冲突 {report.conflicted.length} · 移除 {report.removed.length} ·
+                冲突 {report.conflicted.length} · 待复核{" "}
+                {report.needs_review.length} · 移除 {report.removed.length} ·
                 未变 {report.unchanged}
               </p>
               {workspaces.length > 0 && (
@@ -583,6 +585,17 @@ function UpdateTab() {
                       </span>
                     </p>
                   ))}
+                  {report.needs_review.map((f) => (
+                    <p
+                      key={`n-${f}`}
+                      className="rounded border border-amber-500/50 bg-amber-500/10 p-2"
+                    >
+                      <Badge className="mr-2 bg-amber-500 hover:bg-amber-500">
+                        待复核
+                      </Badge>
+                      <span className="font-mono">{f}</span>
+                    </p>
+                  ))}
                   {report.removed.map((f) => (
                     <p key={`r-${f}`}>
                       <Badge variant="outline" className="mr-2">
@@ -597,7 +610,8 @@ function UpdateTab() {
                   {report.updated.length === 0 &&
                     report.created.length === 0 &&
                     report.conflicted.length === 0 &&
-                    report.removed.length === 0 && (
+                    report.removed.length === 0 &&
+                    report.needs_review.length === 0 && (
                       <p className="text-muted-foreground">
                         模板与项目完全同步，无需更新。
                       </p>

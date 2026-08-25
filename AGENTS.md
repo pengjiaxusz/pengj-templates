@@ -46,7 +46,7 @@
 ## 模板层规范 / Template layers (templates/)
 
 - **新增层** = `templates/<layer>/` 目录 + `layer.toml`（`name` / `description` / `depends` / `update_ignore`），自动发现、无需注册。
-- **合并规则**：按依赖顺序合并、后层覆盖前层；`.gitignore`、`.gitattributes` 按层累加拼接（`ACCUMULATE_FILES`）；`package.json` 结构化并集（`MERGE_JSON_FILES`）。
+- **合并规则**：按依赖顺序合并、后层覆盖前层；`.gitignore`、`.gitattributes` 按层累加拼接（`ACCUMULATE_FILES`）；`package.json` 结构化并集（`MERGE_JSON_FILES`，更新/纳管时同名键用户优先、模板只补缺失、键序保持）；`.cargo/config.toml` 走 TOML 结构化受管合并（表级并集、等值去重、冲突跳过并上报，见 `crates/core/src/toml_merge.rs`）。
 - **占位符**：minijinja（`{{ project_name }}`、`{{ project_slug }}`、`{{ year }}`、`layers`、`options`），渲染逻辑在 `crates/core/src/render.rs`。
 - **选项**：生成时用户选项（edition、skills、skill_lang 等）固化进 `.pengj-templates.json` manifest；`update` 按同一批选项重渲染。
 - **技能过滤**：`options["skills"]`（字符串数组）决定生成哪些技能文件；缺失时包含全部（向后兼容），过滤逻辑在 `crates/core/src/engine.rs`（`skill_name_of` / `selected_skills`）。
@@ -78,7 +78,7 @@
 
 - Rust / 模板 / 构建配置：`cargo fmt` → `cargo clippy --workspace --all-targets -- -D warnings` → `cargo test --workspace`。
 - 前端（`crates/app/src` 等）：`pnpm --dir crates/app build`。
-- 模板改动：临时目录端到端验证，如 `cargo run -q -p pengj-cli -- create demo --layers agent --skills commit,caveman --output <临时目录>`，检查生成文件与 AGENTS.md 渲染结果。
+- 模板改动：临时目录端到端验证，如 `cargo run -q -p pengj-templates-cli -- create demo --layers agent --skills commit,caveman --output <临时目录>`，检查生成文件与 AGENTS.md 渲染结果。
 - 全量 CI 校验：`just ci`（fmt check + 编译 + clippy + 测试 + 前端构建）。
 
 > EN: run the checks matching your change surface before committing (see above). Template changes: verify with an end-to-end CLI create into a temp dir. Full check: `just ci`.

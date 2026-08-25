@@ -52,8 +52,8 @@ enum Command {
         /// Rust toolchain channel（仅 rust 层生效；允许 stable/beta/nightly 或版本号如 1.82.0）
         #[arg(long, default_value = "stable")]
         channel: String,
-        /// 使用 sccache 编译缓存（默认开；传 --no-sccache 关闭）
-        #[arg(long = "no-sccache", action = clap::ArgAction::SetFalse, default_value_t = true)]
+        /// 使用 sccache 编译缓存（默认关；传 --sccache 开启）
+        #[arg(long, default_value_t = false)]
         sccache: bool,
         /// 使用 lld 链接器（默认开；传 --no-lld 关闭）
         #[arg(long = "no-lld", action = clap::ArgAction::SetFalse, default_value_t = true)]
@@ -97,8 +97,8 @@ enum Command {
         /// Rust toolchain channel（允许 stable/beta/nightly 或版本号）
         #[arg(long, default_value = "stable")]
         channel: String,
-        /// 使用 sccache 编译缓存（默认开；传 --no-sccache 关闭）
-        #[arg(long = "no-sccache", action = clap::ArgAction::SetFalse, default_value_t = true)]
+        /// 使用 sccache 编译缓存（默认关；传 --sccache 开启）
+        #[arg(long, default_value_t = false)]
         sccache: bool,
         /// 使用 lld 链接器（默认开；传 --no-lld 关闭）
         #[arg(long = "no-lld", action = clap::ArgAction::SetFalse, default_value_t = true)]
@@ -313,6 +313,9 @@ fn cmd_update(templates: &pengj_core::Templates, dir: &Path) -> anyhow::Result<(
     for c in &report.conflicted {
         println!("  [冲突] {} — {}", c.path, c.reason);
     }
+    for f in &report.needs_review {
+        println!("  [待复核] {f}");
+    }
     for f in &report.removed {
         println!("  [移除] {} （模板已删除，本地文件保留）", f);
     }
@@ -393,6 +396,15 @@ fn cmd_adopt(
     }
     for f in &report.adopted {
         println!("  [纳管] {f}");
+    }
+    for c in &report.conflicted {
+        println!("  [冲突] {} — {}", c.path, c.reason);
+    }
+    for f in &report.needs_review {
+        println!("  [待复核] {f}");
+    }
+    for s in &report.manual_steps {
+        println!("  [手动步骤] {s}");
     }
     Ok(())
 }

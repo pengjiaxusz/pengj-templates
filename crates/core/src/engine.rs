@@ -327,11 +327,12 @@ fn dummy_skill_ctx() -> RenderContext {
 /// 需要做结构化 JSON 并集合并的文件。
 /// 典型用途如 `package.json`：
 /// - 生成时：各层按依赖顺序并集合并（模板版本覆盖同名依赖，用户自加项不冲突）
-/// - 更新时：以用户现有文件为底，模板的依赖/脚本并入（同名依赖模板优先），
-///   用户自己加的库与其余字段（name/version 等标量）保留不动
+/// - 更新时：以用户现有文件为底，模板只补缺失的依赖/脚本/字段；
+///   同名项一律保留用户的（版本钉、脚本内容都不被模板覆盖），
+///   用户自己加的库与其余标量（name/version 等）同样原样保留
 const MERGE_JSON_FILES: &[&str] = &["package.json"];
 
-/// package.json 里「模板可覆盖/并集」的字段（依赖与脚本），其余标量以用户为准
+/// package.json 里「并集合并」的字段（依赖与脚本），同名键更新时以用户为准
 const MERGE_JSON_UNION_KEYS: &[&str] = &[
     "dependencies",
     "devDependencies",
@@ -429,7 +430,8 @@ impl Templates {
 }
 
 /// 把 `incoming` 并按规则并入 `base`（JSON 并集合并）。
-/// - 依赖/脚本字段：并集，同名项 `incoming` 优先
+/// - 依赖/脚本字段：并集。生成（`overwrite_other=true`，层间合并）同名项后来者覆盖；
+///   更新（`overwrite_other=false`，base 为用户文件）只补缺失键，用户值永不覆盖
 /// - 其余字段：仅当 `overwrite_other` 为真（生成时）或 base 缺该项时写入
 fn merge_json(base: &mut serde_json::Value, incoming: &serde_json::Value, overwrite_other: bool) {
     let Some(obj) = incoming.as_object() else {
@@ -445,7 +447,12 @@ fn merge_json(base: &mut serde_json::Value, incoming: &serde_json::Value, overwr
                 Some(bm) => {
                     if let Some(iv) = v.as_object() {
                         for (ik, ivv) in iv {
-                            bm.insert(ik.clone(), ivv.clone());
+                            if overwrite_other {
+                                bm.insert(ik.clone(), ivv.clone());
+                            } else {
+                                // 更新语义：用户已有该键（版本钉/脚本）→ 保留用户值
+                                bm.entry(ik.clone()).or_insert(ivv.clone());
+                            }
                         }
                     }
                 }
@@ -461,9 +468,10 @@ fn merge_json(base: &mut serde_json::Value, incoming: &serde_json::Value, overwr
 
 /// 渲染整个文件映射：普通文件直接渲染；`.gitignore` 拼接各层；`package.json` 做 JSON 并集合并
 ///
-/// `project_dir` 用于判断合并型文件是否已存在：
-/// - 不存在（生成空项目）-> 以各层为底并集
-/// - 已存在（更新）-> 以现有用户文件为底并集，保留用户字段
+/// 注意：普通文件的受管块合并不在这里做——adopt/update 需要结合磁盘状态区分
+/// 「替换既有块」「追加进 legacy 文件」「TOML 结构化合并」并上报 needs_review，
+/// 由两个入口各自调用 [`merge_managed_block`] / TOML 合并完成；generate 面向空目录，
+/// 直接写渲染结果即可。
 fn render_file_map(
     fm: &FileMap,
     ctx: &RenderContext,
@@ -472,7 +480,8 @@ fn render_file_map(
     let mut out: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
 
     for (rel, bytes) in &fm.normal {
-        out.insert(rel.clone(), render_bytes(bytes, ctx)?);
+        let rendered = render_bytes(bytes, ctx)?;
+        out.insert(rel.clone(), rendered);
     }
 
     for (rel, parts) in &fm.concat {
@@ -508,6 +517,90 @@ fn render_file_map(
     }
 
     Ok(out)
+}
+
+/// 受管块文本合并方式
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ManagedTextMergeKind {
+    /// 目标文件不存在、渲染结果非文本或不含受管块：原样使用渲染结果
+    Fresh,
+    /// 磁盘已有同风格托管块：仅替换块区间，块外内容保留
+    Replaced,
+    /// 磁盘是无托管块的既有文件（legacy）：模板托管块被追加到文件末尾
+    Appended,
+}
+
+/// 受管块文本合并结果
+pub(crate) struct ManagedTextMerge {
+    /// 合并后的完整文件内容
+    pub bytes: Vec<u8>,
+    /// 本次合并采用的方式
+    pub kind: ManagedTextMergeKind,
+}
+
+/// 受管块文本合并（纯文本版）：把 `incoming_text` 中的托管块并入 `target_text`。
+///
+/// - 目标含同风格托管块 → 仅替换该区间（`Replaced`）
+/// - 其余情况 → 托管块追加到末尾（`Appended`）
+fn merge_managed_block_texts(target_text: &str, incoming_text: &str) -> ManagedTextMerge {
+    let Some(incoming) = crate::block::extract_managed_block(incoming_text) else {
+        return ManagedTextMerge {
+            bytes: incoming_text.as_bytes().to_vec(),
+            kind: ManagedTextMergeKind::Fresh,
+        };
+    };
+    let kind = match crate::block::extract_managed_block(target_text) {
+        Some(t) if t.style == incoming.style => ManagedTextMergeKind::Replaced,
+        _ => ManagedTextMergeKind::Appended,
+    };
+    let out = crate::block::replace_managed_block(target_text, incoming_text);
+    ManagedTextMerge {
+        bytes: out.into_bytes(),
+        kind,
+    }
+}
+
+/// 受管块原位合并：把模板渲染结果写回磁盘前，若目标文件已存在、渲染结果是文本且
+/// 含受管块（`PENGJ_TEMPLATE_START`/`END`），则以磁盘文件为底、仅替换块区间，
+/// 保留块外的用户自定义内容。
+///
+/// 规则：
+/// - 目标文件不存在、渲染结果非文本、或渲染结果不含受管块 -> 原样返回渲染结果（`Fresh`）
+/// - 磁盘文件读取失败（权限等）-> 回退为渲染结果（`Fresh`）
+/// - 磁盘已有同风格受管块 -> 仅替换块区间（`Replaced`）
+/// - 磁盘是无块的 legacy 文件 -> 追加到末尾（`Appended`，调用方应标记 needs_review）
+///
+/// 磁盘内容 UTF-8 校验失败时按 lossy 处理，不 panic
+fn merge_managed_block(project_dir: &Path, rel: &Path, rendered: &[u8]) -> ManagedTextMerge {
+    let rendered_text = String::from_utf8_lossy(rendered);
+    if crate::block::extract_managed_block(&rendered_text).is_none() {
+        return ManagedTextMerge {
+            bytes: rendered.to_vec(),
+            kind: ManagedTextMergeKind::Fresh,
+        };
+    }
+    let path = project_dir.join(rel);
+    if !path.is_file() {
+        return ManagedTextMerge {
+            bytes: rendered.to_vec(),
+            kind: ManagedTextMergeKind::Fresh,
+        };
+    }
+    let Ok(disk_bytes) = std::fs::read(&path) else {
+        return ManagedTextMerge {
+            bytes: rendered.to_vec(),
+            kind: ManagedTextMergeKind::Fresh,
+        };
+    };
+    // 磁盘文件非文本时不做合并，避免把二进制内容按 lossy 文本处理后回写导致损坏
+    if !is_text(&disk_bytes) {
+        return ManagedTextMerge {
+            bytes: rendered.to_vec(),
+            kind: ManagedTextMergeKind::Fresh,
+        };
+    }
+    let disk_text = String::from_utf8_lossy(&disk_bytes).into_owned();
+    merge_managed_block_texts(&disk_text, &rendered_text)
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -614,6 +707,12 @@ pub struct AdoptReport {
     pub layers: Vec<String>,
     pub created: Vec<String>,
     pub adopted: Vec<String>,
+    /// TOML 结构化合并发现同名键值冲突、未写盘的文件
+    pub conflicted: Vec<ConflictInfo>,
+    /// 模板内容被追加/并入既有 legacy 文件、建议人工复核去重的路径
+    pub needs_review: Vec<String>,
+    /// 需要用户手动完成的接线步骤（如既有 commitlint.config.js 接入 base）
+    pub manual_steps: Vec<String>,
 }
 
 /// 纳管存量项目：为已有目录初始化 `.pengj-templates.json` manifest
@@ -623,8 +722,12 @@ pub struct AdoptReport {
 /// 2. 解析所选层与渲染选项，在内存中渲染出完整的模板 FileMap。
 /// 3. 对模板渲染出的每个文件：
 ///    - 若本地文件已存在：
-///      - 尝试通过锚点合并（`try_merge_slots`）同步受保护的模板区域；
-///      - 记录当前磁盘文件的哈希（或合并后哈希）作为初始基线，计入 `adopted`。
+///      - TOML 受管文件（`.cargo/config.toml`）：按表级并集 + 键级去重做结构化合并，
+///        同键不同值报冲突不写盘；
+///      - 其余含受管块（`PENGJ_TEMPLATE_START`/`END`）的文本文件：把模板受管块
+///        注入/替换进磁盘文件，块外用户内容原样保留；追加进无块 legacy 文件时计入
+///        `needs_review` 提示人工复核；
+///      - 记录合并后（或模板渲染）哈希作为初始基线，计入 `adopted`。
 ///    - 若本地文件不存在：
 ///      - 写入新文件，记录新哈希，计入 `created`。
 /// 4. 将层列表、持久化选项和文件哈希基线写入 `.pengj-templates.json`。
@@ -663,6 +766,8 @@ pub fn adopt_project(
 
     let mut created = Vec::new();
     let mut adopted = Vec::new();
+    let mut conflicted = Vec::new();
+    let mut needs_review = Vec::new();
     let mut manifest_files = BTreeMap::new();
 
     for (rel, bytes) in &bytes_map {
@@ -679,20 +784,116 @@ pub fn adopt_project(
 
         if target.exists() {
             let cur = std::fs::read(&target).unwrap_or_default();
-            if let Some(merged) = try_merge_slots(&cur, bytes) {
-                if merged != cur {
-                    write_file(&target, &merged)?;
+            let rendered_has_block =
+                crate::block::extract_managed_block(&String::from_utf8_lossy(bytes)).is_some();
+
+            // JSON 并集文件（如 package.json）：bytes 已由 render_file_map 以磁盘为底、
+            // 用户优先语义合并完成，这里直接写回，不让合并结果滞留到首次 update
+            if fm.json.contains_key(rel) {
+                if target.is_file() {
+                    if bytes != &cur {
+                        write_file(&target, bytes)?;
+                    }
+                } else {
+                    write_file(&target, bytes)?;
+                    created.push(rel_str.clone());
                 }
-                manifest_files.insert(rel_str.clone(), sha256_hex(&merged));
-            } else {
-                // 存量文件保留用户当前内容，基线记录当前磁盘文件的哈希
-                manifest_files.insert(rel_str.clone(), sha256_hex(&cur));
+                manifest_files.insert(rel_str.clone(), sha256_hex(bytes));
+                adopted.push(rel_str);
+                continue;
             }
+
+            // 普通文件（fm.normal）且渲染结果含受管块：结合磁盘状态做合并注入。
+            // 注意：concat 累加文件（.gitignore/.gitattributes）不走此分支，保持旧语义
+            // （记录模板渲染哈希、不覆盖用户文件），避免多受管块拼接丢内容。
+            if fm.normal.contains_key(rel)
+                && target.is_file()
+                && is_text(&cur)
+                && rendered_has_block
+            {
+                if crate::toml_merge::is_toml_managed(rel) {
+                    // TOML 结构化受管合并：表级并集、键级去重、冲突跳过
+                    let disk_text = String::from_utf8_lossy(&cur);
+                    match crate::toml_merge::merge_toml_managed(
+                        &disk_text,
+                        &String::from_utf8_lossy(bytes),
+                    ) {
+                        crate::toml_merge::TomlMergeOutcome::Merged(text) => {
+                            let merged_bytes = text.into_bytes();
+                            if merged_bytes != cur {
+                                write_file(&target, &merged_bytes)?;
+                            }
+                            if !cur.is_empty()
+                                && crate::block::extract_managed_block(&disk_text).is_none()
+                            {
+                                needs_review.push(format!(
+                                    "{rel_str}：模板配置已结构化并入受管块，请复核与用户既有配置的等价性"
+                                ));
+                            }
+                            manifest_files.insert(rel_str.clone(), sha256_hex(&merged_bytes));
+                        }
+                        crate::toml_merge::TomlMergeOutcome::Conflict(reason) => {
+                            // 冲突不写盘；基线记模板渲染哈希，后续 update 保持冲突保护
+                            conflicted.push(ConflictInfo {
+                                path: rel_str.clone(),
+                                reason,
+                            });
+                            manifest_files.insert(rel_str.clone(), sha256_hex(bytes));
+                        }
+                    }
+                    adopted.push(rel_str);
+                    continue;
+                }
+
+                let legacy_without_block =
+                    crate::block::extract_managed_block(&String::from_utf8_lossy(&cur)).is_none();
+                let merged = merge_managed_block(project_dir, rel, bytes);
+                if merged.bytes != cur {
+                    write_file(&target, &merged.bytes)?;
+                }
+                if merged.kind == ManagedTextMergeKind::Appended
+                    && legacy_without_block
+                    && !cur.is_empty()
+                {
+                    needs_review.push(format!(
+                        "{rel_str}：模板托管块已追加到既有文件末尾，请人工检查是否与原有内容重复"
+                    ));
+                }
+                manifest_files.insert(rel_str.clone(), sha256_hex(&merged.bytes));
+                adopted.push(rel_str);
+                continue;
+            }
+
+            // 模板无受管块（或 concat/非文本文件）：manifest 记录模板渲染的哈希，
+            // 这样后续 update 时，引擎能检测到 disk_sha != recorded_sha，从而触发
+            // 冲突保护并跳过覆盖，绝不发生静默全量覆盖。
+            manifest_files.insert(rel_str.clone(), sha256_hex(bytes));
             adopted.push(rel_str);
         } else {
             write_file(&target, bytes)?;
             manifest_files.insert(rel_str.clone(), sha256_hex(bytes));
             created.push(rel_str);
+        }
+    }
+
+    // commitlint 接线检查：新落了 commitlint.base.js，但项目已有自己的
+    // commitlint.config.js 且未引用它 → base 永远不会生效，给出明确接线指引
+    let mut manual_steps = Vec::new();
+    let base_created = created
+        .iter()
+        .any(|f| Path::new(f) == Path::new("commitlint.base.js"));
+    if base_created {
+        match std::fs::read_to_string(project_dir.join("commitlint.config.js")) {
+            Ok(text) if !text.contains("commitlint.base") => {
+                manual_steps.push(
+                    "检测到既有 commitlint.config.js 未继承 commitlint.base.js：\
+                     请在其顶部加 `import base from './commitlint.base.js';`，\
+                     并改为 `export default { ...base, rules: { ...base.rules, /* 项目专属规则 */ } }`。\
+                     接入后模板对 commitlint.base.js 的更新才会生效。"
+                        .to_string(),
+                );
+            }
+            _ => {}
         }
     }
 
@@ -712,52 +913,10 @@ pub fn adopt_project(
         layers: ordered,
         created,
         adopted,
+        conflicted,
+        needs_review,
+        manual_steps,
     })
-}
-
-// ---------- 锚点区域保护合并 (Slot / Anchor Merge) ----------
-
-const SLOT_MARKERS: &[(&str, &str)] = &[
-    (
-        "<!-- PENGJ_TEMPLATE_START -->",
-        "<!-- PENGJ_TEMPLATE_END -->",
-    ),
-    ("// PENGJ_TEMPLATE_START", "// PENGJ_TEMPLATE_END"),
-    ("# PENGJ_TEMPLATE_START", "# PENGJ_TEMPLATE_END"),
-    ("/* PENGJ_TEMPLATE_START */", "/* PENGJ_TEMPLATE_END */"),
-];
-
-/// 尝试按锚点标记将模板中的受保护区间合并入磁盘现有文件。
-///
-/// 逻辑：
-/// 若模板内容与磁盘文件均包含同一种合法配对的锚点标记 `(start_marker, end_marker)`，
-/// 则将磁盘文件中从 `start_marker` 到 `end_marker`（含标记本身）的区间替换为
-/// 模板中对应区间的完整内容，保留磁盘文件在标记外部的所有用户定制代码/文字。
-pub fn try_merge_slots(disk_bytes: &[u8], template_bytes: &[u8]) -> Option<Vec<u8>> {
-    let disk_str = std::str::from_utf8(disk_bytes).ok()?;
-    let template_str = std::str::from_utf8(template_bytes).ok()?;
-
-    for &(start_m, end_m) in SLOT_MARKERS {
-        if let (Some(t_start), Some(d_start)) = (template_str.find(start_m), disk_str.find(start_m))
-        {
-            let t_end_rel = template_str[t_start..].find(end_m)?;
-            let t_end = t_start + t_end_rel + end_m.len();
-
-            let d_end_rel = disk_str[d_start..].find(end_m)?;
-            let d_end = d_start + d_end_rel + end_m.len();
-
-            let template_section = &template_str[t_start..t_end];
-
-            let mut merged = String::with_capacity(disk_str.len() + template_section.len());
-            merged.push_str(&disk_str[..d_start]);
-            merged.push_str(template_section);
-            merged.push_str(&disk_str[d_end..]);
-
-            return Some(merged.into_bytes());
-        }
-    }
-
-    None
 }
 
 // ---------- 更新 ----------
@@ -776,6 +935,8 @@ pub struct UpdateReport {
     pub created: Vec<String>,
     pub conflicted: Vec<ConflictInfo>,
     pub removed: Vec<String>,
+    /// 模板内容被追加/并入既有 legacy 文件、建议人工复核去重的路径
+    pub needs_review: Vec<String>,
     pub unchanged: usize,
 }
 
@@ -785,6 +946,9 @@ pub struct UpdateReport {
 /// - 模板文件内容未变 -> 跳过
 /// - 模板变了、本地文件未动过 -> 覆盖
 /// - 模板变了、本地文件被改过 -> 冲突，跳过并上报
+/// - 含受管块的文本文件 -> 合并注入（替换既有块 / 追加进 legacy 文件并报 needs_review）
+/// - `.cargo/config.toml` 等 TOML 受管文件 -> 结构化合并（表级并集、键级去重、冲突跳过并上报）
+/// - `package.json` -> JSON 并集合并，同名键以用户为准、模板只补缺失
 /// - 模板新增文件 -> 创建（本地已有同名文件则跳过并上报）
 /// - 模板删除文件 -> 不动本地文件，仅上报
 /// - 层声明的 `update_ignore` 黑名单文件 -> 完全跳过（不覆盖/不冲突/不删除上报），归用户所有
@@ -803,6 +967,7 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
     let mut updated = Vec::new();
     let mut created = Vec::new();
     let mut conflicted = Vec::new();
+    let mut needs_review = Vec::new();
     let mut unchanged = 0usize;
     let mut new_files: BTreeMap<String, String> = BTreeMap::new();
     // package.json 等 JSON 并集文件走独立合并分支，不参与普通「哈希/冲突」判定
@@ -816,9 +981,11 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
         let rel_str = rel.to_string_lossy().into_owned();
         let new_sha = sha256_hex(bytes);
 
-        // JSON 并集文件：合并结果按构造保留了用户字段，直接写回，不再冲突跳过
+        let target = project_dir.join(rel);
+
+        // JSON 并集文件：合并结果按构造保留了用户字段（同名键用户优先），直接写回，
+        // 不再冲突跳过
         if json_merge_keys.contains(rel.as_path()) {
-            let target = project_dir.join(rel);
             let target_bytes = std::fs::read(&target).unwrap_or_default();
             if target_bytes == *bytes {
                 unchanged += 1;
@@ -834,7 +1001,6 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
         // SHA 冲突判定——模板的 fileNesting / rust-analyzer.clippy 并入用户文件，
         // 用户自定义规则不丢失且能收到模板新规则。
         if rel == Path::new(VSCODE_SETTINGS_REL) {
-            let target = project_dir.join(rel);
             match sync_settings_file(&target, &ctx, &fm, project_dir)? {
                 SettingsSyncOutcome::Updated => updated.push(rel_str.clone()),
                 SettingsSyncOutcome::Created => created.push(rel_str.clone()),
@@ -849,13 +1015,99 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
             continue;
         }
 
+        // TOML 结构化受管合并（如 `.cargo/config.toml`）：表级并集 + 键级去重 +
+        // 冲突跳过。文本追加对 TOML 不安全——同名表重复定义是非法 TOML，会让 cargo
+        // 直接解析失败，因此这类文件不走下面的通用受管块分支。
+        if fm.normal.contains_key(rel) && crate::toml_merge::is_toml_managed(rel) {
+            if !target.is_file() {
+                // 项目尚无该文件：直接写渲染结果
+                write_file(&target, bytes)?;
+                new_files.insert(rel_str.clone(), new_sha);
+                created.push(rel_str);
+                continue;
+            }
+            let cur = std::fs::read(&target).unwrap_or_default();
+            if is_text(&cur)
+                && crate::block::extract_managed_block(&String::from_utf8_lossy(bytes)).is_some()
+            {
+                let disk_text = String::from_utf8_lossy(&cur);
+                match crate::toml_merge::merge_toml_managed(
+                    &disk_text,
+                    &String::from_utf8_lossy(bytes),
+                ) {
+                    crate::toml_merge::TomlMergeOutcome::Merged(text) => {
+                        let merged_bytes = text.into_bytes();
+                        if merged_bytes == cur {
+                            unchanged += 1;
+                            new_files.insert(rel_str.clone(), sha256_hex(&cur));
+                        } else {
+                            write_file(&target, &merged_bytes)?;
+                            new_files.insert(rel_str.clone(), sha256_hex(&merged_bytes));
+                            updated.push(rel_str.clone());
+                        }
+                    }
+                    crate::toml_merge::TomlMergeOutcome::Conflict(reason) => {
+                        // 基线记模板渲染哈希：下次 update 检测到磁盘 != 基线时继续报
+                        // 冲突，直到用户手工对齐为止；绝不静默覆盖用户的差异值
+                        match manifest.files.get(&rel_str) {
+                            Some(old_sha) => {
+                                new_files.insert(rel_str.clone(), old_sha.clone());
+                            }
+                            None => {
+                                new_files.insert(rel_str.clone(), new_sha);
+                            }
+                        }
+                        conflicted.push(ConflictInfo {
+                            path: rel_str,
+                            reason,
+                        });
+                    }
+                }
+                continue;
+            }
+            // 磁盘内容非文本或渲染结果不含受管块：落入通用哈希/冲突判定
+        }
+
+        // 受管块文件：普通文件（fm.normal）且磁盘已有同名文件、模板渲染结果含受管块时，
+        // 合并/注入受管块：磁盘已有同风格托管块则仅替换块区间（块外用户内容原样保留）；
+        // 磁盘是无块的 legacy 文件则把托管块追加到末尾并计入 needs_review 提示人工复核。
+        // 与磁盘一致则记为未变；合并成功不视为冲突。
+        // 注意：concat 累加文件（.gitignore/.gitattributes）不走此分支——它们是逐层拼接、
+        // 可含多个受管块，replace_managed_block 只能处理单个块，会丢内容，仍走哈希/冲突判定。
+        if fm.normal.contains_key(rel) && target.is_file() {
+            let cur = std::fs::read(&target).unwrap_or_default();
+            if is_text(&cur)
+                && crate::block::extract_managed_block(&String::from_utf8_lossy(bytes)).is_some()
+            {
+                let legacy_without_block =
+                    crate::block::extract_managed_block(&String::from_utf8_lossy(&cur)).is_none();
+                let merged = merge_managed_block(project_dir, rel, bytes);
+                if merged.bytes == cur {
+                    unchanged += 1;
+                    new_files.insert(rel_str.clone(), sha256_hex(&cur));
+                } else {
+                    write_file(&target, &merged.bytes)?;
+                    new_files.insert(rel_str.clone(), sha256_hex(&merged.bytes));
+                    updated.push(rel_str.clone());
+                    if merged.kind == ManagedTextMergeKind::Appended
+                        && legacy_without_block
+                        && !cur.is_empty()
+                    {
+                        needs_review.push(format!(
+                            "{rel_str}：模板托管块已追加到既有文件末尾，请人工检查是否与原有内容重复"
+                        ));
+                    }
+                }
+                continue;
+            }
+        }
+
         match manifest.files.get(&rel_str) {
             Some(old_sha) if *old_sha == new_sha => {
                 unchanged += 1;
                 new_files.insert(rel_str, new_sha);
             }
             Some(old_sha) => {
-                let target = project_dir.join(rel);
                 let current = std::fs::read(&target).ok();
                 match current {
                     None => {
@@ -869,50 +1121,23 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
                         new_files.insert(rel_str.clone(), new_sha);
                         updated.push(rel_str);
                     }
-                    Some(cur) => {
-                        // 本地被用户改过：优先尝试锚点插槽合并（保留锚点外用户代码）
-                        if let Some(merged_bytes) = try_merge_slots(&cur, bytes) {
-                            if merged_bytes == cur {
-                                unchanged += 1;
-                                new_files.insert(rel_str, sha256_hex(&cur));
-                            } else {
-                                write_file(&target, &merged_bytes)?;
-                                let merged_sha = sha256_hex(&merged_bytes);
-                                new_files.insert(rel_str.clone(), merged_sha);
-                                updated.push(rel_str);
-                            }
-                        } else {
-                            // 无锚点或锚点不匹配，保持冲突跳过
-                            new_files.insert(rel_str.clone(), old_sha.clone());
-                            conflicted.push(ConflictInfo {
-                                path: rel_str,
-                                reason: "文件已被本地修改，跳过更新".to_string(),
-                            });
-                        }
+                    Some(_) => {
+                        // 本地被用户改过且无受管块可合并，保持冲突跳过
+                        new_files.insert(rel_str.clone(), old_sha.clone());
+                        conflicted.push(ConflictInfo {
+                            path: rel_str,
+                            reason: "文件已被本地修改，跳过更新".to_string(),
+                        });
                     }
                 }
             }
             None => {
                 // 模板新增的文件
-                let target = project_dir.join(rel);
                 if target.exists() {
-                    let cur = std::fs::read(&target).unwrap_or_default();
-                    if let Some(merged_bytes) = try_merge_slots(&cur, bytes) {
-                        if merged_bytes == cur {
-                            unchanged += 1;
-                            new_files.insert(rel_str, sha256_hex(&cur));
-                        } else {
-                            write_file(&target, &merged_bytes)?;
-                            let merged_sha = sha256_hex(&merged_bytes);
-                            new_files.insert(rel_str.clone(), merged_sha);
-                            updated.push(rel_str);
-                        }
-                    } else {
-                        conflicted.push(ConflictInfo {
-                            path: rel_str.clone(),
-                            reason: "文件已存在但未被模板托管，跳过".to_string(),
-                        });
-                    }
+                    conflicted.push(ConflictInfo {
+                        path: rel_str.clone(),
+                        reason: "文件已存在但未被模板托管，跳过".to_string(),
+                    });
                 } else {
                     write_file(&target, bytes)?;
                     new_files.insert(rel_str.clone(), new_sha);
@@ -952,6 +1177,7 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
         created,
         conflicted,
         removed,
+        needs_review,
         unchanged,
     })
 }
@@ -1138,7 +1364,21 @@ pub fn sync_workspace_file(
 
     let mut out = serde_json::to_string_pretty(&ws)?;
     out.push('\n');
-    std::fs::write(path, out)?;
+    // 原文件含受管块时，以原文件为底、合并结果为 incoming 做原位替换，保留块外的
+    // 用户内容。若替换结果与原文一致（块位于 JSON 字符串值内、未被 JSON 合并改动），
+    // 仍以合并后的 JSON 为准，避免丢掉 JSON 合并结果。
+    let final_text = match crate::block::extract_managed_block(&text) {
+        Some(_) => {
+            let replaced = crate::block::replace_managed_block(&text, &out);
+            if replaced == text {
+                out
+            } else {
+                replaced
+            }
+        }
+        None => out,
+    };
+    std::fs::write(path, final_text)?;
     Ok(true)
 }
 
@@ -1756,24 +1996,431 @@ mod tests {
     }
 
     #[test]
-    fn try_merge_slots_preserves_surrounding_custom_content() {
-        let disk = b"# Header\n\n<!-- PENGJ_TEMPLATE_START -->\nold template\n<!-- PENGJ_TEMPLATE_END -->\n\n## Custom User Rules\n- Rule 1\n";
-        let tmpl =
-            b"<!-- PENGJ_TEMPLATE_START -->\nnew updated template\n<!-- PENGJ_TEMPLATE_END -->\n";
-        let merged = try_merge_slots(disk, tmpl).expect("should merge slot");
-        let merged_str = String::from_utf8(merged).unwrap();
-        assert!(merged_str.starts_with("# Header\n\n"));
-        assert!(merged_str.contains("new updated template"));
-        assert!(merged_str.ends_with("\n\n## Custom User Rules\n- Rule 1\n"));
+    fn replace_managed_block_injects_into_legacy_file() {
+        // 存量文件没有受管块标记（旧版工具生成的 legacy 文件）：模板的受管块应被
+        // 追加到末尾，块前的全部用户内容逐字节保留。
+        let disk = "# Header\n\n[build]\nrustflags = [\"-C\", \"target-cpu=native\"]\n\n[alias]\nb = \"build\"\n";
+        let tmpl = "<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n";
+        let merged = crate::block::replace_managed_block(disk, tmpl);
+        assert_eq!(
+            merged,
+            "# Header\n\n[build]\nrustflags = [\"-C\", \"target-cpu=native\"]\n\n[alias]\nb = \"build\"\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n"
+        );
+
+        // 磁盘已有同风格受管块：仅替换块区间，块外用户内容原样保留
+        let disk_annotated = "# Header\n\n<!-- PENGJ_TEMPLATE_START -->\nold template\n<!-- PENGJ_TEMPLATE_END -->\n\n## Custom User Rules\n- Rule 1\n";
+        let tmpl2 =
+            "<!-- PENGJ_TEMPLATE_START -->\nnew updated template\n<!-- PENGJ_TEMPLATE_END -->\n";
+        let merged2 = crate::block::replace_managed_block(disk_annotated, tmpl2);
+        assert!(merged2.starts_with("# Header\n\n"));
+        assert!(merged2.contains("new updated template"));
+        assert!(merged2.ends_with("\n\n## Custom User Rules\n- Rule 1\n"));
+        assert!(!merged2.contains("old template"));
 
         // Shell/TOML 风格 # 注释
-        let disk_hash = b"# PENGJ_TEMPLATE_START\nold cfg\n# PENGJ_TEMPLATE_END\ncustom = 1\n";
-        let tmpl_hash = b"# PENGJ_TEMPLATE_START\nnew cfg\n# PENGJ_TEMPLATE_END\n";
-        let merged_hash = try_merge_slots(disk_hash, tmpl_hash).expect("should merge # slot");
+        let disk_hash = "# PENGJ_TEMPLATE_START\nold cfg\n# PENGJ_TEMPLATE_END\ncustom = 1\n";
+        let tmpl_hash = "# PENGJ_TEMPLATE_START\nnew cfg\n# PENGJ_TEMPLATE_END\n";
+        let merged_hash = crate::block::replace_managed_block(disk_hash, tmpl_hash);
         assert_eq!(
-            String::from_utf8(merged_hash).unwrap(),
+            merged_hash,
             "# PENGJ_TEMPLATE_START\nnew cfg\n# PENGJ_TEMPLATE_END\ncustom = 1\n"
         );
+    }
+
+    #[test]
+    fn render_file_map_returns_pure_rendered_normal_files() {
+        // render_file_map 不再做受管块合并（合并决策在 adopt/update 循环里，
+        // 以便区分替换/追加/TOML 结构化合并并上报 needs_review）：
+        // 无论磁盘是否存在同名文件，普通文件一律返回纯渲染结果
+        let tmp = std::env::temp_dir().join(format!("pengj-mblock-render-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+
+        let mut fm = FileMap {
+            normal: BTreeMap::new(),
+            concat: BTreeMap::new(),
+            json: BTreeMap::new(),
+        };
+        fm.normal.insert(
+            PathBuf::from("AGENTS.md"),
+            b"<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n".to_vec(),
+        );
+        let ctx = RenderContext::new("proj", vec!["agent".to_string()], BTreeMap::new());
+
+        // 磁盘已存在旧版本文件：渲染结果仍是纯模板，不受磁盘影响
+        std::fs::write(
+            proj.join("AGENTS.md"),
+            "# Header\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n\n## Custom\n- user content\n",
+        )
+        .unwrap();
+
+        let out = render_file_map(&fm, &ctx, &proj).unwrap();
+        let rendered = String::from_utf8(out[&PathBuf::from("AGENTS.md")].clone()).unwrap();
+        assert_eq!(
+            rendered,
+            "<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->"
+        );
+
+        // 磁盘不存在该文件：同样是纯渲染结果
+        let empty_proj = tmp.join("empty");
+        std::fs::create_dir_all(&empty_proj).unwrap();
+        let out2 = render_file_map(&fm, &ctx, &empty_proj).unwrap();
+        assert_eq!(
+            out2[&PathBuf::from("AGENTS.md")].as_slice(),
+            b"<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn update_project_preserves_user_content_outside_managed_block() {
+        let tmp = std::env::temp_dir().join(format!("pengj-upd-mblock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 模板：common + agent 层（AGENTS.md 含受管块，块内为模板托管内容）
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tpl.join("agent")).unwrap();
+        std::fs::write(
+            tpl.join("agent").join("layer.toml"),
+            "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("agent").join("AGENTS.md"),
+            "# {{ project_name }} 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n",
+        )
+        .unwrap();
+
+        // 项目：AGENTS.md 块外已有用户自定义内容，块内是旧版；manifest 记录的是
+        // 原始生成内容（不含用户追加部分）的哈希
+        let v1_template = "# proj 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n";
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(
+            proj.join("AGENTS.md"),
+            "# proj 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n\n## 项目专属\n- 用户规则\n",
+        )
+        .unwrap();
+        std::fs::write(
+            proj.join(crate::manifest::MANIFEST_FILE),
+            serde_json::json!({
+                "tool": "pengj-templates",
+                "version": "0.0.0",
+                "project_name": "proj",
+                "layers": ["common", "agent"],
+                "options": {},
+                "generated_at": "2026-01-01T00:00:00Z",
+                "files": { "AGENTS.md": sha256_hex(v1_template.as_bytes()) },
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let report = update_project(&templates, &proj).unwrap();
+        assert!(
+            report.updated.iter().any(|f| f == "AGENTS.md"),
+            "块内内容变更应更新 AGENTS.md"
+        );
+        assert!(report.conflicted.is_empty(), "含受管块的文件不应报冲突");
+
+        let merged = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
+        assert!(merged.starts_with("# proj 编码规范\n\n"));
+        assert!(merged.contains("managed v2"));
+        assert!(merged.ends_with("\n\n## 项目专属\n- 用户规则\n"));
+        assert!(!merged.contains("managed v1"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn update_project_injects_managed_block_into_legacy_file() {
+        let tmp = std::env::temp_dir().join(format!("pengj-upd-legacy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 模板：agent 层 AGENTS.md 含受管块（v2 内容）
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tpl.join("agent")).unwrap();
+        std::fs::write(
+            tpl.join("agent").join("layer.toml"),
+            "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("agent").join("AGENTS.md"),
+            "# {{ project_name }} 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n",
+        )
+        .unwrap();
+
+        // 存量项目：AGENTS.md 是旧版 adopt 生成的 legacy 文件，没有受管块标记；
+        // manifest 记录的是旧版模板渲染哈希（不含用户追加内容），模拟旧工具留下的状态
+        let v1_template = "# proj 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n";
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(
+            proj.join("AGENTS.md"),
+            "# proj 编码规范\n\n## 项目专属\n- 用户规则\n",
+        )
+        .unwrap();
+        std::fs::write(
+            proj.join(crate::manifest::MANIFEST_FILE),
+            serde_json::json!({
+                "tool": "pengj-templates",
+                "version": "0.0.0",
+                "project_name": "proj",
+                "layers": ["common", "agent"],
+                "options": {},
+                "generated_at": "2026-01-01T00:00:00Z",
+                "files": { "AGENTS.md": sha256_hex(v1_template.as_bytes()) },
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let report = update_project(&templates, &proj).unwrap();
+
+        // 合并成功：注入受管块、不视为冲突
+        assert!(
+            report.updated.iter().any(|f| f == "AGENTS.md"),
+            "legacy 文件应注入受管块并更新"
+        );
+        assert!(report.conflicted.is_empty(), "含受管块的文件不应报冲突");
+
+        // 磁盘内容 = 原用户内容 + 追加的受管块，用户内容不丢失
+        let merged = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
+        assert!(merged.starts_with("# proj 编码规范\n\n## 项目专属\n- 用户规则\n\n"));
+        assert!(merged
+            .contains("<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n"));
+        assert!(!merged.contains("managed v1"));
+
+        // manifest 记录合并后文件的哈希
+        let manifest = ProjectManifest::load(&proj).unwrap();
+        assert_eq!(
+            manifest.files["AGENTS.md"],
+            sha256_hex(merged.as_bytes()),
+            "manifest 应记录合并后文件哈希"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn update_project_injects_block_when_manifest_records_merged_hash() {
+        // 复现真实 bug：旧版 adopt 已把「磁盘 + 受管块」的合并哈希写进 manifest，却没把
+        // 合并结果写盘。即使 manifest 哈希与当前渲染合并结果一致，update 也必须把受管块
+        // 注入到无标记的 legacy 磁盘文件，而不是被「哈希一致 → 未变」分支跳过。
+        let tmp =
+            std::env::temp_dir().join(format!("pengj-upd-legacy-hash-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 模板：agent 层 AGENTS.md 含受管块
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tpl.join("agent")).unwrap();
+        std::fs::write(
+            tpl.join("agent").join("layer.toml"),
+            "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("agent").join("AGENTS.md"),
+            "# {{ project_name }} 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n",
+        )
+        .unwrap();
+
+        // 磁盘 legacy 文件（无受管块标记）+ 用户自定义内容
+        let disk = "# proj 编码规范\n\n## 项目专属\n- 用户规则\n";
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(proj.join("AGENTS.md"), disk).unwrap();
+
+        // 旧版 adopt 记录的「合并哈希」= sha(磁盘 + 追加的受管块)
+        let templates = Templates::new(&tpl);
+        let merged = crate::block::replace_managed_block(
+            disk,
+            "<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n",
+        );
+        std::fs::write(
+            proj.join(crate::manifest::MANIFEST_FILE),
+            serde_json::json!({
+                "tool": "pengj-templates",
+                "version": "0.0.0",
+                "project_name": "proj",
+                "layers": ["common", "agent"],
+                "options": {},
+                "generated_at": "2026-01-01T00:00:00Z",
+                "files": { "AGENTS.md": sha256_hex(merged.as_bytes()) },
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let report = update_project(&templates, &proj).unwrap();
+        assert!(
+            report.updated.iter().any(|f| f == "AGENTS.md"),
+            "磁盘无标记时即使 manifest 哈希已匹配也应注入受管块"
+        );
+        assert!(report.conflicted.is_empty(), "含受管块的文件不应报冲突");
+
+        // 磁盘内容 = 原用户内容 + 追加的受管块，用户内容不丢失
+        let now = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
+        assert!(now.starts_with("# proj 编码规范\n\n## 项目专属\n- 用户规则\n\n"));
+        assert!(now.contains("managed v2"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn update_project_keeps_concat_file_with_managed_block_untouched() {
+        // concat 累加文件（.gitignore/.gitattributes）不走受管块合并分支：其渲染结果是
+        // 逐层拼接、可含多个受管块，replace_managed_block 只处理单个块会丢内容。
+        // 即使模板 .gitignore 含受管块，也绝不能覆盖用户已有的 .gitignore。
+        let tmp = std::env::temp_dir().join(format!("pengj-upd-concat-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("common").join(".gitignore"),
+            "# PENGJ_TEMPLATE_START\n/node_modules\n# PENGJ_TEMPLATE_END\n",
+        )
+        .unwrap();
+
+        // 项目：用户有自己的 .gitignore，与模板 concat 内容不同
+        let user_gitignore = "/target/\n/debug/\n/my-custom-ignore/\n";
+        let proj = tmp.join("proj");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(proj.join(".gitignore"), user_gitignore).unwrap();
+
+        // 渲染 concat，把模板哈希写进 manifest（模拟旧版 adopt 的基线）
+        let templates = Templates::new(&tpl);
+        let ordered = templates.resolve_layers(&["common".to_string()]).unwrap();
+        let ctx = RenderContext::new("proj", ordered.clone(), BTreeMap::new());
+        let fm = templates
+            .build_file_map(&ordered, &BTreeMap::new())
+            .unwrap();
+        let bytes_map = render_file_map(&fm, &ctx, &proj).unwrap();
+        let concat_sha = sha256_hex(&bytes_map[&PathBuf::from(".gitignore")]);
+        std::fs::write(
+            proj.join(crate::manifest::MANIFEST_FILE),
+            serde_json::json!({
+                "tool": "pengj-templates",
+                "version": "0.0.0",
+                "project_name": "proj",
+                "layers": ["common"],
+                "options": {},
+                "generated_at": "2026-01-01T00:00:00Z",
+                "files": { ".gitignore": concat_sha },
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let report = update_project(&templates, &proj).unwrap();
+
+        // 用户 .gitignore 原样保留，不被 concat 受管块覆盖，也不报冲突
+        assert_eq!(
+            std::fs::read_to_string(proj.join(".gitignore")).unwrap(),
+            user_gitignore
+        );
+        assert!(!report.updated.iter().any(|f| f == ".gitignore"));
+        assert!(report.conflicted.is_empty());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn adopt_project_injects_managed_block_into_legacy_file() {
+        let tmp = std::env::temp_dir().join(format!("pengj-adopt-mblock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 模板：agent 层 AGENTS.md 含受管块
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tpl.join("agent")).unwrap();
+        std::fs::write(
+            tpl.join("agent").join("layer.toml"),
+            "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("agent").join("AGENTS.md"),
+            "<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n",
+        )
+        .unwrap();
+
+        // 存量项目：AGENTS.md 是 legacy 文件，没有受管块标记
+        let proj = tmp.join("legacy-app");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(
+            proj.join("AGENTS.md"),
+            "# 项目规范\n\n## 用户自定义规则\n- 规则 A\n- 规则 B\n",
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let report = adopt_project(
+            &templates,
+            &proj,
+            &["common".to_string(), "agent".to_string()],
+            BTreeMap::new(),
+            false,
+        )
+        .expect("adopt should succeed");
+
+        assert!(report.adopted.iter().any(|f| f == "AGENTS.md"));
+
+        // 磁盘内容 = 原用户内容 + 追加的受管块，用户内容不丢失
+        let disk = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
+        assert!(disk.starts_with("# 项目规范\n\n## 用户自定义规则\n- 规则 A\n- 规则 B\n\n"));
+        assert!(disk
+            .contains("<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n"));
+
+        // manifest 记录合并后文件的哈希
+        let manifest = ProjectManifest::load(&proj).unwrap();
+        assert_eq!(
+            manifest.files["AGENTS.md"],
+            sha256_hex(disk.as_bytes()),
+            "manifest 应记录合并后文件哈希"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
@@ -1818,5 +2465,225 @@ mod tests {
         assert!(manifest.files.contains_key(".gitignore"));
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 复刻 ChahuRenderDebugger 纳管场景：存量项目自带 .cargo/config.toml（同名
+    /// target 表）、带版本钉的 package.json、手写 commitlint.config.js 与自定义
+    /// AGENTS.md。adopt 必须产出合法 TOML（无重复表头）、保留用户版本钉与脚本、
+    /// 上报 needs_review 与 commitlint 接线指引；随后 update 幂等。
+    #[test]
+    fn adopt_legacy_project_full_scenario_then_update_is_idempotent() {
+        let tmp = std::env::temp_dir().join(format!("pengj-adopt-chahu-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // ---- 模板三层：common / hooks（lefthook 类）/ rustx（cargo 配置）----
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+
+        std::fs::create_dir_all(tpl.join("hooks")).unwrap();
+        std::fs::write(
+            tpl.join("hooks").join("layer.toml"),
+            "name = \"Hooks\"\ndescription = \"x\"\ndepends = [\"common\"]\nupdate_ignore = [\"commitlint.config.js\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("hooks").join("commitlint.base.js"),
+            "export default { extends: ['@commitlint/config-conventional'] };\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("hooks").join("commitlint.config.js"),
+            "import base from './commitlint.base.js';\nexport default { ...base };\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("hooks").join("package.json"),
+            "{\n  \"name\": \"{{ project_slug }}\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"engines\": { \"node\": \">=20\" },\n  \"scripts\": {\n    \"prepare\": \"template-prepare\",\n    \"commitlint\": \"commitlint\"\n  },\n  \"devDependencies\": {\n    \"@commitlint/cli\": \"latest\",\n    \"@commitlint/config-conventional\": \"latest\",\n    \"lefthook\": \"latest\"\n  }\n}\n",
+        )
+        .unwrap();
+
+        std::fs::create_dir_all(tpl.join("rustx").join(".cargo")).unwrap();
+        std::fs::write(
+            tpl.join("rustx").join("layer.toml"),
+            "name = \"RustX\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("rustx").join(".cargo").join("config.toml"),
+            "# PENGJ_TEMPLATE_START\n[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld\"\n\n[target.x86_64-unknown-linux-gnu]\nlinker = \"lld\"\n# PENGJ_TEMPLATE_END\n",
+        )
+        .unwrap();
+
+        std::fs::create_dir_all(tpl.join("agentdoc")).unwrap();
+        std::fs::write(
+            tpl.join("agentdoc").join("layer.toml"),
+            "name = \"AgentDoc\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("agentdoc").join("AGENTS.md"),
+            "<!-- PENGJ_TEMPLATE_START -->\n# 模板规范 v1\n<!-- PENGJ_TEMPLATE_END -->\n",
+        )
+        .unwrap();
+
+        // ---- 存量项目 ----
+        let proj = tmp.join("legacy-app");
+        std::fs::create_dir_all(proj.join(".cargo")).unwrap();
+        std::fs::write(
+            proj.join(".cargo").join("config.toml"),
+            "[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld\"\nrustflags = [\"-C\", \"target-cpu=x86-64-v3\"]\n",
+        )
+        .unwrap();
+        let user_pkg = "{\n  \"name\": \"legacy-app\",\n  \"version\": \"0.2.0\",\n  \"private\": true,\n  \"description\": \"my app\",\n  \"scripts\": {\n    \"prepare\": \"lefthook install\",\n    \"postinstall\": \"echo done\"\n  },\n  \"devDependencies\": {\n    \"@commitlint/cli\": \"^20.5.3\",\n    \"lefthook\": \"^2.1.10\",\n    \"user-only-lib\": \"^1.0.0\"\n  }\n}\n";
+        std::fs::write(proj.join("package.json"), user_pkg).unwrap();
+        std::fs::write(
+            proj.join("commitlint.config.js"),
+            "export default { extends: ['@commitlint/config-conventional'], rules: { 'scope-enum': [2, 'always', ['core']] } };\n",
+        )
+        .unwrap();
+        std::fs::write(proj.join("AGENTS.md"), "# 项目自有规范\n- 规则 A\n").unwrap();
+
+        let templates = Templates::new(&tpl);
+        let layers = [
+            "common".to_string(),
+            "hooks".to_string(),
+            "rustx".to_string(),
+            "agentdoc".to_string(),
+        ];
+        let report = adopt_project(&templates, &proj, &layers, BTreeMap::new(), false)
+            .expect("adopt should succeed");
+
+        // -- commitlint 接线指引 --
+        assert!(report.created.iter().any(|f| f == "commitlint.base.js"));
+        assert!(
+            report
+                .manual_steps
+                .iter()
+                .any(|s| s.contains("commitlint.config.js")),
+            "应给出手动接线指引，实际: {:?}",
+            report.manual_steps
+        );
+
+        // -- TOML 结构化合并：合法、去重、保用户键 --
+        let cfg_text = std::fs::read_to_string(proj.join(".cargo").join("config.toml")).unwrap();
+        let cfg: toml::Value = toml::from_str(&cfg_text).expect("合并结果必须是合法 TOML");
+        assert_eq!(
+            cfg["target"]["x86_64-pc-windows-msvc"]["linker"].as_str(),
+            Some("rust-lld")
+        );
+        assert_eq!(
+            cfg["target"]["x86_64-pc-windows-msvc"]["rustflags"]
+                .as_array()
+                .map(|a| a.len()),
+            Some(2),
+            "用户 rustflags 必须原样保留"
+        );
+        assert_eq!(
+            cfg["target"]["x86_64-unknown-linux-gnu"]["linker"].as_str(),
+            Some("lld")
+        );
+        assert_eq!(
+            cfg_text.matches("[target.x86_64-pc-windows-msvc]").count(),
+            1,
+            "windows 表不得重复定义"
+        );
+        assert!(
+            report
+                .needs_review
+                .iter()
+                .any(|f| f.replace('\\', "/").starts_with(".cargo/config.toml")),
+            "TOML 首次接入应标记复核，实际: {:?}",
+            report.needs_review
+        );
+
+        // -- package.json 用户优先并集 + 键序保持 --
+        let pkg_text = std::fs::read_to_string(proj.join("package.json")).unwrap();
+        assert!(
+            pkg_text.starts_with("{\n  \"name\": \"legacy-app\""),
+            "首键必须仍是用户的 name（键序保持），实际: {pkg_text}"
+        );
+        assert!(
+            pkg_text.contains("\"@commitlint/cli\": \"^20.5.3\""),
+            "用户版本钉不被 latest 覆盖"
+        );
+        assert!(pkg_text.contains("\"lefthook\": \"^2.1.10\""));
+        assert!(pkg_text.contains("\"user-only-lib\": \"^1.0.0\""));
+        assert!(
+            pkg_text.contains("\"prepare\": \"lefthook install\""),
+            "用户脚本不被模板覆盖"
+        );
+        assert!(
+            pkg_text.contains("\"commitlint\": \"commitlint\""),
+            "模板新脚本并入，实际:\n{pkg_text}"
+        );
+        assert!(pkg_text.contains("\"@commitlint/config-conventional\""));
+        assert!(pkg_text.contains("\"engines\""));
+
+        // -- 文本受管块追加进 legacy AGENTS.md 并标记复核 --
+        let agents = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
+        assert!(agents.starts_with("# 项目自有规范"));
+        assert!(agents.contains("PENGJ_TEMPLATE_START"));
+        assert!(
+            report
+                .needs_review
+                .iter()
+                .any(|f| f.starts_with("AGENTS.md")),
+            "追加进 legacy 文件应标记复核，实际: {:?}",
+            report.needs_review
+        );
+
+        // -- update 幂等：不再有更新/新增/冲突 --
+        let upd = update_project(&templates, &proj).expect("update should succeed");
+        assert!(upd.updated.is_empty(), "不应再有更新: {:?}", upd.updated);
+        assert!(upd.created.is_empty());
+        assert!(
+            upd.conflicted.is_empty(),
+            "不应有冲突: {:?}",
+            upd.conflicted
+        );
+        assert!(upd.needs_review.is_empty());
+        assert_eq!(
+            std::fs::read_to_string(proj.join(".cargo").join("config.toml")).unwrap(),
+            cfg_text
+        );
+        assert_eq!(
+            std::fs::read_to_string(proj.join("package.json")).unwrap(),
+            pkg_text
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn merge_json_update_keeps_user_values_and_fills_missing_only() {
+        let mut base: serde_json::Value = serde_json::from_str(
+            "{\"aaa\":\"keep\",\"scripts\":{\"build\":\"user-build\",\"prepare\":\"user-prepare\"},\"devDependencies\":{\"lefthook\":\"^2.1.10\"}}",
+        )
+        .unwrap();
+        let incoming: serde_json::Value = serde_json::from_str(
+            "{\"bbb\":\"tpl\",\"scripts\":{\"prepare\":\"tpl-prepare\",\"test\":\"tpl-test\"},\"devDependencies\":{\"lefthook\":\"latest\",\"@commitlint/cli\":\"latest\"}}",
+        )
+        .unwrap();
+
+        // 更新语义（overwrite_other=false）：同名键用户优先，缺失才补
+        merge_json(&mut base, &incoming, false);
+        assert_eq!(base["aaa"], "keep");
+        assert_eq!(base["bbb"], "tpl");
+        assert_eq!(base["scripts"]["prepare"], "user-prepare");
+        assert_eq!(base["scripts"]["build"], "user-build");
+        assert_eq!(base["scripts"]["test"], "tpl-test");
+        assert_eq!(base["devDependencies"]["lefthook"], "^2.1.10");
+        assert_eq!(base["devDependencies"]["@commitlint/cli"], "latest");
+
+        // 生成语义（overwrite_other=true，层间合并）：后来层覆盖
+        let mut fresh = serde_json::json!({});
+        merge_json(&mut fresh, &incoming, true);
+        assert_eq!(fresh["scripts"]["prepare"], "tpl-prepare");
     }
 }

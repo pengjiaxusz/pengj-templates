@@ -60,15 +60,15 @@ tauri-build:
 
 # 列出可用层
 layers:
-    cargo run -q -p pengj-cli -- list-layers
+    cargo run -q -p pengj-templates-cli -- list-layers
 
 # 生成新项目（例：just create my-app  或  just create my-app frontend,rust  或  just create my-app rust "D:\out"）
 create NAME LAYERS="rust" OUTPUT=".":
-    cargo run -q -p pengj-cli -- create {{NAME}} --layers {{LAYERS}} --output {{OUTPUT}}
+    cargo run -q -p pengj-templates-cli -- create {{NAME}} --layers {{LAYERS}} --output {{OUTPUT}}
 
 # 同步模板更新到已生成的项目（例：just update ./my-app）
 update DIR=".":
-    cargo run -q -p pengj-cli -- update --dir {{DIR}}
+    cargo run -q -p pengj-templates-cli -- update --dir {{DIR}}
 
 # ---------- 综合 ----------
 

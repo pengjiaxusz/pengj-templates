@@ -8,6 +8,7 @@ description: >-
   Triggers: commit, 提交, amend, push, commit message, conventional commits, Commitlint, 拆分提交, scope, 切 beta, 切 preview, 切 rc, 预发布, prerelease, Release-As.
 ---
 
+<!-- PENGJ_TEMPLATE_START -->
 # commit 提交流程
 
 中文提交信息 + PowerShell 兼容执行。除 type/scope 外一律中文。**提交后立即 push**（防止本机故障丢失最新提交）。
@@ -110,3 +111,18 @@ git push
 - 标题中文短句、不加句号、不空泛。
 - 提交失败重试时带上 `git add`。
 - 收尾确认 `git status` 干净且本地无未推送提交。
+<!-- PENGJ_TEMPLATE_END -->
+
+## 项目专属提交流程与红线
+
+> 本区域位于上方托管块之外：模板更新只替换托管块，下方内容完整保留，可放心补充本项目独有的提交规范。
+
+建议插槽：
+
+- **自定义 pre-commit 校验** —— 提交前运行的脚本，如 `scripts/pre-commit-check.ps1`（在上方流程第 2 步调用）。
+- **领域原则 / 检查清单** —— 本仓库不可妥协的要点（重新生成 mock、更新 golden 文件、跑指定测试套件等）。
+- **CLI `--help` 一致性** —— 改动 CLI 命令/参数后，提交前确认 `--help` 输出与文档一致。
+
+### 项目专属检查清单（可编辑）
+
+- [ ] ...

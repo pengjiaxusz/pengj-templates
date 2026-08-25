@@ -128,7 +128,7 @@ jobs:
         run: pnpm --dir crates/app tauri build --target ${{ matrix.rust_target }} --bundles ${{ matrix.bundles }}
       # ===== 构建 CLI（供便携版）=====
       - name: 构建 CLI
-        run: cargo build --release -p pengj-cli --target ${{ matrix.rust_target }}
+        run: cargo build --release -p pengj-templates-cli --target ${{ matrix.rust_target }}
       # ===== 重命名所有产物为「系统-架构」显式命名 =====
       - name: 重命名 GUI / CLI 产物
         shell: bash

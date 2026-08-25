@@ -1,3 +1,4 @@
+# PENGJ_TEMPLATE_START
 /node_modules
 .env
 .env.*
@@ -5,3 +6,4 @@
 *.log
 
 /.omo/run-continuation
+# PENGJ_TEMPLATE_END

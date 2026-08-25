@@ -1,15 +1,21 @@
-# 构建配置（由模板生成，sccache / lld 按选项开关）
+# .cargo/config.toml — Cargo 本地配置
+
+# PENGJ_TEMPLATE_START
+# 模板托管的编译与链接器优化
 {% if options["use_sccache"] %}
-# 统一使用 sccache 编译缓存
 [build]
 rustc-wrapper = "sccache"
 {% endif %}
 {% if options["use_lld"] %}
-# 使用 lld 链接器
 [target.x86_64-pc-windows-msvc]
-linker = "lld"
-rustflags = ["-C", "link-arg=/OPT:REF"]
+linker = "rust-lld"
 
 [target.x86_64-unknown-linux-gnu]
 linker = "lld"
 {% endif %}
+# PENGJ_TEMPLATE_END
+
+# --- 用户自定义配置区域 (User Custom Section) ---
+# 项目特有的 [alias]、rustflags、target 配置请写在受管区域外部
+# 模板更新时仅替换上方 PENGJ_TEMPLATE 区域，本区域内容 100% 保留
+

@@ -1,5 +1,5 @@
 [package]
-name = "pengj-cli"
+name = "pengj-templates-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
