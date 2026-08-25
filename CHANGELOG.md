@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.12.0-beta.1...v0.13.0-beta.1) (2026-08-25)
+
+
+### Features
+
+* **core:** 受管块合并引擎与 TOML 结构化合并，JSON 并集用户优先 ([3bb0b48](https://github.com/pengjiaxusz/pengj-templates/commit/3bb0b4884a56b8d7089f74f07924e5377f6d2050))
+
 ## [0.12.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.11.0-beta.1...v0.12.0-beta.1) (2026-08-24)
 
 
