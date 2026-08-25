@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.16.0-beta.1...v0.17.0-beta.1) (2026-08-25)
+
+
+### Features
+
+* **core:** 存量技能自动接管，原文下移纳管过渡区 ([3e2aeb6](https://github.com/pengjiaxusz/pengj-templates/commit/3e2aeb6a52687980a6c93425cb4cc444c5c4aaef))
+
 ## [0.16.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.15.0-beta.1...v0.16.0-beta.1) (2026-08-25)
 
 
