@@ -4,7 +4,7 @@
   "version": "0.13.0-beta.1",
   "identifier": "com.pengj.templates",
   "build": {
-    "beforeDevCommand": "pnpm --dir crates/app dev",
+    "beforeDevCommand": "pnpm --filter pengj-templates dev",
     "devUrl": "http://localhost:43999",
     "beforeBuildCommand": "pnpm --filter pengj-templates build",
     "frontendDist": "../dist"
