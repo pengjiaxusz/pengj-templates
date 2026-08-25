@@ -301,14 +301,17 @@ fn split_frontmatter(text: &str) -> (&str, &str) {
 }
 
 /// 接管存量全自定义技能主文档：
-/// 1. 原文件拆出 frontmatter（无则视为空）
-/// 2. 模板渲染结果（托管框架 + 项目专属区骨架）紧随 frontmatter 之后
+/// 1. 原文件拆出 frontmatter（无则视为空），原样保留在最前
+/// 2. 模板渲染结果剥去其自身 frontmatter 后（托管框架 + 项目专属区骨架）
+///    紧随其后——避免出现双 frontmatter
 /// 3. 原正文整体下移到「纳管过渡区」注释之后——短暂双流程，
 ///    由用户把领域差异合并进上方骨架后删除过渡区
 fn take_over_legacy_skill(disk_bytes: &[u8], rendered_bytes: &[u8]) -> Vec<u8> {
     let disk = String::from_utf8_lossy(disk_bytes);
     let rendered = String::from_utf8_lossy(rendered_bytes);
     let (frontmatter, body) = split_frontmatter(&disk);
+    // 渲染页自身的 frontmatter 不带入：技能只应有一个 frontmatter
+    let (_, rendered_body) = split_frontmatter(&rendered);
 
     let mut out = String::with_capacity(disk.len() + rendered.len() + 320);
     if !frontmatter.is_empty() {
@@ -317,7 +320,7 @@ fn take_over_legacy_skill(disk_bytes: &[u8], rendered_bytes: &[u8]) -> Vec<u8> {
             out.push('\n');
         }
     }
-    out.push_str(rendered.trim_end());
+    out.push_str(rendered_body.trim_start());
     out.push_str(
         "\n\n<!-- ⚠️ 纳管过渡区：以下为接管前的原始技能全文（暂时双流程）。\
          请把其中的领域差异合并进上方「项目专属提交流程与红线」，然后删除本段至文末。 -->\n\n",
@@ -3360,11 +3363,20 @@ mod tests {
         )
         .expect("adopt should succeed");
 
-        // 接管结果：frontmatter 在最前，框架随后，原正文保留在过渡区下方
+        // 接管结果：frontmatter 在最前且唯一，框架随后，原正文保留在过渡区下方
         let merged_text = std::fs::read_to_string(user_skill.join("SKILL.md")).unwrap();
         assert!(
             merged_text.starts_with("---\nname: commit\ndescription: 我自己的提交规范\n---"),
             "frontmatter 应原样保留在最前，实际:\n{merged_text}"
+        );
+        assert!(
+            !merged_text.contains("description: x"),
+            "渲染页自身的 frontmatter 不应被带入（避免双 frontmatter）"
+        );
+        assert_eq!(
+            merged_text.matches("name: commit").count(),
+            1,
+            "全文只应有用户自己的 frontmatter"
         );
         let block_start = merged_text
             .find("PENGJ_TEMPLATE_START")
