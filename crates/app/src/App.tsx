@@ -92,7 +92,7 @@ function GenerateTab() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [name, setName] = useState("");
   const [parentDir, setParentDir] = useState("");
-  const [edition, setEdition] = useState("2021");
+  const [edition, setEdition] = useState("2024");
   const [channel, setChannel] = useState("stable");
   const [useSccache, setUseSccache] = useState(false);
   const [useLld, setUseLld] = useState(true);
