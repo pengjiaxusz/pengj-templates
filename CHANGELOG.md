@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.18.0-beta.1...v0.18.1-beta.1) (2026-08-25)
+
+
+### Bug Fixes
+
+* **agent:** fileNesting 折叠规则改为 commitlint.*，纳入 commitlint.base.js ([bb6641a](https://github.com/pengjiaxusz/pengj-templates/commit/bb6641a3b99762a127359c1f74dfaf90e096a881))
+
 ## [0.18.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.17.1-beta.1...v0.18.0-beta.1) (2026-08-25)
 
 
