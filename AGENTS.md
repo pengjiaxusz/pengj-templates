@@ -59,10 +59,10 @@
 - 技能模板放 `templates/agent/.agents/skills/<name>/SKILL.md`，**自动发现无需注册**；生成后落到项目的 `.agents/skills/<name>/SKILL.md`。
 - 技能列表由 `Templates::list_skills()` 提供（渲染后解析 frontmatter 的 `description` 供 UI/CLI 展示）。
 - 新技能目录名即技能名；`SKILL.md` 必须含 frontmatter（`name` + 双语 `description`，含 Triggers）。
-- **技能扩展规范**：SKILL.md = 托管框架块（模板更新原位替换）+ 块外项目专属区（归用户，文档型定制与提交前检查的定义都写这里）；可执行门禁由项目自定形式并在块外声明，框架不预设；存量全自定义技能（无托管块）adopt/update 自动接管——框架插入 frontmatter 后、原文下移为纳管过渡区待用户合并（见 `engine.rs` 的 `take_over_legacy_skill`）。
+- **技能扩展规范**：SKILL.md = 托管框架块（模板更新原位替换）+ 块外项目专属区（归用户，文档型定制与提交前检查的定义都写这里）；可执行门禁由项目自定形式并在块外声明，框架不预设；存量全自定义技能（无托管块）adopt/update 自动接管——模板整页（含 description）覆盖、原正文下移为纳管过渡区待用户合并（见 `engine.rs` 的 `take_over_legacy_skill`）。
 - 本仓库自己的 `.agents/skills/` 与模板 `templates/agent/.agents/skills/` 各自维护：前者是当前仓库生效的渲染版，后者是生成给新项目的模板版。
 
-> EN: skills live at templates/agent/.agents/skills/<name>/SKILL.md, auto-discovered (no registration). Frontmatter requires name + bilingual description with Triggers. Extension convention: managed framework block + user-owned area outside it (document-type customization and check definitions live there; executable gates are project-defined and declared in that area); legacy fully-custom skills are taken over automatically with the original content moved into a transition zone for manual merging (see take_over_legacy_skill in engine.rs). The repo's own .agents/skills/ holds rendered copies; templates/agent/ holds the template versions.
+> EN: skills live at templates/agent/.agents/skills/<name>/SKILL.md, auto-discovered (no registration). Frontmatter requires name + bilingual description with Triggers. Extension convention: managed framework block + user-owned area outside it (document-type customization and check definitions live there; executable gates are project-defined and declared in that area); legacy fully-custom skills are taken over automatically — the template page (incl. description) wins and the original body moves into a transition zone for manual merging (see take_over_legacy_skill in engine.rs). The repo's own .agents/skills/ holds rendered copies; templates/agent/ holds the template versions.
 
 ## 多语言要求 / i18n（agent 层，当前支持 zh/en）
 
