@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.15.0-beta.1...v0.16.0-beta.1) (2026-08-25)
+
+
+### Features
+
+* **agent:** commit 技能框架去脚本化，检查定义归项目专属区 ([b1f382a](https://github.com/pengjiaxusz/pengj-templates/commit/b1f382ae7fb9ec9fe023cdddbe33eb56e906935b))
+
 ## [0.15.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.14.0-beta.1...v0.15.0-beta.1) (2026-08-25)
 
 
