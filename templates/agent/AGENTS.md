@@ -21,7 +21,7 @@
 
 - A skill file = managed framework + project-specific area: inside `SKILL.md`, the `PENGJ_TEMPLATE_START/END` block holds the template framework (replaced in place on update); **content outside the block belongs to the project** and is never touched by template updates.
 - Document-style customization (domain checklists, judgment tables, red lines) goes directly into the project-specific area outside the block — keep everything in one file so a single read yields all conventions; do not create external files.
-- Executable gates go in a `pre-commit-check.*` script inside the skill directory; the framework automatically runs it first.
+- Executable pre-commit gates are project-defined (any language, any tool — script, task runner, or plain checklist); document how to invoke them in the skill's project-specific area. The framework prescribes no implementation.
 - Legacy fully-custom skills (no managed block) are never taken over or appended to; to adopt template updates, move domain differences into the project-specific area, then overwrite with the template version.
 {% endif %}
 
@@ -75,7 +75,7 @@
 
 - 技能文件 = 托管框架 + 项目专属区：`SKILL.md` 中 `PENGJ_TEMPLATE_START/END` 托管块内是模板框架（更新时原位替换）；**块外内容归项目所有**，模板更新永不触碰。
 - 文档型定制（领域检查清单、判定表、红线）直接写在托管块外的项目专属区，保证单次读取即可获得全部约定，不要另建外部文件。
-- 可执行门禁写成技能目录下的 `pre-commit-check.*` 脚本，框架会自动优先执行其输出。
+- 可执行门禁的形式与位置由项目自定（任意语言脚本、task runner 或纯清单），并在项目专属区写明调用方式；框架不预设实现。
 - 存量的全自定义技能（无托管块）不会被模板接管或追加；如需纳入模板更新，把领域差异挪入项目专属区后以模板版覆盖。
 {% endif %}
 

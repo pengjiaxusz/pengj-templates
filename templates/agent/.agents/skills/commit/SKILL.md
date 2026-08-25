@@ -21,14 +21,10 @@ Run from repo root:
 
 `git status` · `git diff --stat` · `git diff --cached --stat` (add full diffs when needed)
 
-## 2. Pre-commit completeness check — project-defined, resolved by priority
-This step belongs to the PROJECT, not the template. Resolve in order and stop at the first hit:
+## 2. Pre-commit completeness check — project-defined
+This step belongs to the PROJECT, not the template: follow whatever the project-specific area below the managed block defines (which commands to run, what to verify — all written there, any language or tool). If the project-specific area defines no checks, use the generic fallback: scan the diff — if it touches build/deps, docs/AGENTS.md/config, or public naming, verify build / update docs / run formatter as appropriate before committing.
 
-1. **Convention script** `.agents/skills/commit/pre-commit-check.ps1` exists (any `pre-commit-check.*` in this skill dir) → MUST run it first; its output is the basis for judgment. The script defines what "complete" means for this repo.
-2. **Project checklist** below the managed block ("Project-specific workflow & red lines") is filled in → follow it.
-3. **Generic fallback** (nothing defined): scan the diff — if it touches build/deps, docs/AGENTS.md/config, or public naming, verify build / update docs / run formatter as appropriate before committing.
-
-Do NOT invent repo-specific checks here; extend the script or checklist instead (see slots below).
+Do NOT invent repo-specific checks here; the project owns them (see the project-specific area below).
 
 ## 3. Split unrelated changes
 Separate unrelated areas into distinct commits (e.g. do not mix docs with feature code).
@@ -57,14 +53,12 @@ Only when explicitly asked, for the just-made, unpushed commit with no dependenc
 仓库根运行：
 `git status` · `git diff --stat` · `git diff --cached --stat`（必要时看完整 diff）
 
-## 2. 提交前完整性检查 —— 项目自定义，按优先级取第一个命中
-本步骤归**项目**所有，模板不硬编码具体检查。按顺序解析：
+## 2. 提交前完整性检查 —— 项目自定义
+本步骤归**项目**所有，模板不硬编码具体检查：按下方托管块外「项目专属提交流程与红线」的定义执行——跑什么命令、查哪些项、用什么语言写，全部由项目在那里自行声明。
 
-1. **约定脚本**：存在 `.agents/skills/commit/pre-commit-check.ps1`（或本技能目录下任意 `pre-commit-check.*`）→ MUST 先运行，以其输出（status/stat 概览等）为判定依据。脚本定义了本仓库「完整」的含义。
-2. **项目清单**：下方托管块外的「项目专属提交流程与红线」已填写 → 按清单执行。
-3. **兜底自检**（以上都没有）：扫 diff——改动构建/依赖、文档/AGENTS.md/配置、公开命名时对应校验构建、更新文档、跑格式化。
+项目专属区未定义任何检查时，使用兜底自检：扫 diff——改动构建/依赖、文档/AGENTS.md/配置、公开命名时对应校验构建、更新文档、跑格式化。
 
-不要在本流程里发明仓库专属检查；需要扩展时改脚本或清单（见下方插槽）。
+不要在本流程里发明仓库专属检查；它们归项目所有（见下方项目专属区）。
 
 ## 3. 拆分无关改动
 不相关领域拆多次提交（文档与功能、构建与业务分开）。
@@ -94,7 +88,19 @@ Only when explicitly asked, for the just-made, unpushed commit with no dependenc
 ## Project-specific workflow & red lines
 
 > This section belongs to the **project**: template updates only maintain the managed block above; rewrite this freely without losing anything.
-> Relation to step 2 above: the script (if present) provides check output; THIS section defines how to judge and what to complete when a check hits.
+> This section IS the definition of step 2 above — write here which checks run before a commit and how to judge them.
+
+### Pre-commit checks (define your own)
+
+State the commands/steps to run before every commit, in any form you prefer (script in any language, task runner, or plain checklist). Examples:
+
+```powershell
+# （示例）pwsh 脚本：pwsh -File .agents/skills/commit/pre-commit-check.ps1
+```
+
+```bash
+# （示例）任务 runner：just lint && just test
+```
 
 ### Domain completeness checks (rewrite for your repo)
 
@@ -117,16 +123,24 @@ Judgment quick table:
 
 - (example) Commit before completing the completeness check
 - (example) Mix multiple domains into one commit
-
-### Optional: pre-commit check script
-
-For executable gates, create `.agents/skills/commit/pre-commit-check.ps1` (any `pre-commit-check.*`) — it automatically feeds step 2 above and is never touched by template updates.
 {% else %}
 <!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
 ## 项目专属提交流程与红线
 
 > 本节归**项目**所有：模板更新只维护上方托管块，这里可以随意改写，不会丢失。
-> 与上文第 2 步的关系：脚本（若存在）提供检查输出，**本节**定义「怎么判定、命中了要补什么」。
+> 本节就是上文第 2 步的定义——在这里写明提交前要执行的检查与判定标准。
+
+### 提交前检查（项目自定义）
+
+用任意形式声明每次提交前要执行的动作（任意语言的脚本、task runner、或纯清单均可），例如：
+
+```powershell
+# （示例）pwsh 脚本：pwsh -File .agents/skills/commit/pre-commit-check.ps1
+```
+
+```bash
+# （示例）任务 runner：just lint && just test
+```
 
 ### 领域完整性检查（按仓库领域改写本节）
 
@@ -149,8 +163,4 @@ For executable gates, create `.agents/skills/commit/pre-commit-check.ps1` (any `
 
 - （示例）跳过完整性检查直接提交
 - （示例）把多个领域混进一次提交
-
-### 可选：提交前检查脚本
-
-需要可执行门禁时，创建 `.agents/skills/commit/pre-commit-check.ps1`（或任意 `pre-commit-check.*`）——它会自动成为上文第 2 步的输入源，模板更新永不覆盖。
 {% endif %}
