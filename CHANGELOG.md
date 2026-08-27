@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.20.0-beta.1...v0.20.1-beta.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* **core:** 修复 adopt 时 .vscode/settings.json 未自动合并 fileNesting ([83892f9](https://github.com/pengjiaxusz/pengj-templates/commit/83892f97f4eb60bf745596ff1ba5b05bd88e66cf))
+
 ## [0.20.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.19.0-beta.1...v0.20.0-beta.1) (2026-08-27)
 
 
