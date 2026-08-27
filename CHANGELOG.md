@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.18.1-beta.1...v0.19.0-beta.1) (2026-08-27)
+
+
+### Features
+
+* **agent:** 新增 write-a-skill 技能，符合双语与托管块规范 ([ca2d968](https://github.com/pengjiaxusz/pengj-templates/commit/ca2d96848db64fb92102d727a43b055508b9f779))
+
 ## [0.18.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.18.0-beta.1...v0.18.1-beta.1) (2026-08-25)
 
 
