@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.19.0-beta.1...v0.20.0-beta.1) (2026-08-27)
+
+
+### Features
+
+* **agent:** 新增 branch-sync 技能，支持无 worktree 与合后分支同步 ([a0672f1](https://github.com/pengjiaxusz/pengj-templates/commit/a0672f1f29d078b42ad86ea9c9a4a45598bab408))
+
 ## [0.19.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.18.1-beta.1...v0.19.0-beta.1) (2026-08-27)
 
 
