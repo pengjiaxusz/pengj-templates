@@ -1050,12 +1050,13 @@ pub fn adopt_project(
             continue;
         }
 
-        // VS Code settings：项目根已有 `*.code-workspace` 时，模板配置并入工作区文件
-        // 的 `settings` 节点，不再新建独立 `.vscode/settings.json`（工作区同步复用
-        // update 同一语义；settings 相对路径计入 adopted 代表「配置已同步」）
+        // VS Code settings：增量合并（与 `.code-workspace` 同一语义），不走
+        // 通用托管块路径——模板的 fileNesting / rust-analyzer.clippy 并入用户文件。
+        // 项目根已有 `*.code-workspace` 且尚无独立 settings 文件时：配置并入工作区
+        // 文件，不再新建 `.vscode/settings.json`。
         if rel == Path::new(VSCODE_SETTINGS_REL) {
             let workspaces = list_workspace_files(project_dir);
-            if !workspaces.is_empty() {
+            if !target.exists() && !workspaces.is_empty() {
                 let mut ws_changed = false;
                 for ws_path in workspaces {
                     ws_changed |= sync_workspace_file(&ws_path, &ctx, &fm, project_dir)?;
@@ -1065,9 +1066,37 @@ pub fn adopt_project(
                         "{rel_str}：VS Code 配置已并入 *.code-workspace 文件的 settings 节点，请复核"
                     ));
                 }
+                manifest_files.insert(rel_str.clone(), sha256_hex(bytes));
                 adopted.push(rel_str);
                 continue;
             }
+            if !workspaces.is_empty() {
+                let mut ws_changed = false;
+                for ws_path in workspaces.clone() {
+                    ws_changed |= sync_workspace_file(&ws_path, &ctx, &fm, project_dir)?;
+                }
+                if ws_changed {
+                    needs_review.push(format!(
+                        "{rel_str}：VS Code 配置已并入 *.code-workspace 文件的 settings 节点，请复核"
+                    ));
+                }
+            }
+            match sync_settings_file(&target, &ctx, &fm, project_dir)? {
+                SettingsSyncOutcome::Updated => {
+                    needs_review.push(format!(
+                        "{rel_str}：VS Code 配置已合并 fileNesting 等模板配置，请复核"
+                    ));
+                    adopted.push(rel_str.clone());
+                }
+                SettingsSyncOutcome::Created => created.push(rel_str.clone()),
+                SettingsSyncOutcome::Unchanged => adopted.push(rel_str.clone()),
+            }
+            let disk_sha = std::fs::read(&target)
+                .ok()
+                .map(|b| sha256_hex(&b))
+                .unwrap_or_else(|| sha256_hex(bytes));
+            manifest_files.insert(rel_str, disk_sha);
+            continue;
         }
 
         if target.exists() {
