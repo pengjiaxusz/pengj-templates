@@ -87,25 +87,17 @@ cargo fmt --check 2>$null; cargo clippy --workspace --all-targets -- -D warnings
 
 ### 架构文档一致性检查
 
-> 本仓库启用 `arch-align`，每次提交必须显式回答“本次是否需更新架构文档”，禁止跳过。
+本项目已启用 `arch-align` 时，第 2 步需追加以下判定：
 
-**触发判断（任一命中即视为触及架构）：**
-- 新增/删除/重命名层或技能（`templates/<layer>/`、`templates/agent/.agents/skills/<name>/`）
-- 调整模块边界或依赖方向（`layer.toml` depends、`crates/core` 分层合并/渲染逻辑）
-- 改变核心数据流或生命周期（生成/更新/纳管流程、`FileMap`/`manifest`/`merge_managed_block`）
-- 修改跨层/跨进程契约或核心不变式（受管块协议、`update_ignore`、TOML/JSON 合并规则、`docs/architecture` 已记载的约束）
-- 变更系统拓扑（CLI/GUI/引擎三件套交互路径、Tauri invoke 注册）
+- **触发判断：** 是否触及架构（新增模块/改拓扑/改数据流/改不变式/改跨层契约）？
+- **命中 → 核验：** `docs/architecture/README.md` 索引与对应 `docs/architecture/<domain>.md` 是否已同步。需深度对齐时执行 `.agents/skills/arch-align` 流程。
+- **快速路径（无需更新文档）：** 纯测试、纯格式化、单函数 bugfix 且不改行为/契约。
 
-**命中 → 核验：**
-1. `docs/architecture/README.md` 索引是否已登记/更新对应领域文档条目（权威级别、关联模块路径、职责一句话）。
-2. 对应 `docs/architecture/<domain>.md` 是否已按 `references/GENERATE-DOC.md` 四段式（边界/数据流/源码映射/红线）同步。
-3. 若 `docs/architecture/README.md` 尚不存在或领域缺檔，按 `arch-align` 技能询问用户后生成并回写索引。
+判定表追加：
 
-**快速路径（无需更新架构文档）：**
-- 纯测试、纯格式化、注释/文案微调
-- 单函数内部修 bug 且不改模块边界/数据流/对外契约
-
-**提交信息要求：** 触及架构的提交需在正文或 footer 注明已同步的架构文档路径（例：`同步 docs/architecture/README.md + docs/architecture/core-engine.md`）。
+| 改动 | 命中的检查 |
+| --- | --- |
+| 触及架构（新增/调整模块、数据流、生命周期、跨模块契约） | `docs/architecture/README.md` 索引与对应领域文档是否已同步 |
 
 ### 红线（agent 绝不能做）
 
