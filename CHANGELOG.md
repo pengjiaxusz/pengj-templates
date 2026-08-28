@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.21.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.0-beta.1...v0.21.1-beta.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **agent:** 对齐 commit 技能架构检查与模板一致 ([6be8d64](https://github.com/pengjiaxusz/pengj-templates/commit/6be8d64f22eb82fe30bea362c8f05f49d4b41eb2))
+* **agent:** 将架构检查移入托管块以支持模板更新传播 ([7ced6ca](https://github.com/pengjiaxusz/pengj-templates/commit/7ced6ca6c1d6ea6e31e9f9386ae48f96c003b86a))
+
 ## [0.21.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.20.2-beta.1...v0.21.0-beta.1) (2026-08-28)
 
 
