@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.20.1-beta.1...v0.20.2-beta.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **core:** 修正累加文件托管块结构为单块块内标记 ([315c6c9](https://github.com/pengjiaxusz/pengj-templates/commit/315c6c95be4724653987dfdd23c5bb28b5e89c6e))
+
 ## [0.20.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.20.0-beta.1...v0.20.1-beta.1) (2026-08-27)
 
 
