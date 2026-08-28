@@ -2329,7 +2329,7 @@ dependencies = [
 
 [[package]]
 name = "pengj-core"
-version = "0.21.1-beta.1"
+version = "0.21.2-beta.1"
 dependencies = [
  "minijinja",
  "serde",
@@ -2341,7 +2341,7 @@ dependencies = [
 
 [[package]]
 name = "pengj-templates"
-version = "0.21.1-beta.1"
+version = "0.21.2-beta.1"
 dependencies = [
  "pengj-core",
  "serde",
@@ -2353,7 +2353,7 @@ dependencies = [
 
 [[package]]
 name = "pengj-templates-cli"
-version = "0.21.1-beta.1"
+version = "0.21.2-beta.1"
 dependencies = [
  "anyhow",
  "clap",
