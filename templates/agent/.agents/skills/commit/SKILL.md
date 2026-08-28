@@ -22,10 +22,10 @@ Run from repo root:
 `git status` · `git diff --stat` · `git diff --cached --stat` (add full diffs when needed)
 
 ## 2. Pre-commit completeness check — project-defined
-This step belongs to the PROJECT, not the template: follow whatever the project-specific area below the managed block defines (which commands to run, what to verify — all written there, any language or tool). If the project-specific area defines no checks, use the generic fallback: scan the diff — if it touches build/deps, docs/AGENTS.md/config, or public naming, verify build / update docs / run formatter as appropriate before committing.{% if options["skills"] is defined and 'arch-align' in options["skills"] %} If this change touches architecture (new/adjusted module boundaries, data flow, lifecycle, system topology, core invariants, etc.), also verify `docs/architecture/README.md` and the corresponding domain docs are in sync; see `.agents/skills/arch-align` for details.{% endif %}
+This step belongs to the PROJECT, not the template: follow whatever the project-specific area below the managed block defines (which commands to run, what to verify — all written there, any language or tool). If the project-specific area defines no checks, use the generic fallback: scan the diff — if it touches build/deps, docs/AGENTS.md/config, or public naming, verify build / update docs / run formatter as appropriate before committing.{% if options["skills"] is undefined or 'arch-align' in options["skills"] %} If this change touches architecture (new/adjusted module boundaries, data flow, lifecycle, system topology, core invariants, etc.), also verify `docs/architecture/README.md` and the corresponding domain docs are in sync; see `.agents/skills/arch-align` for details.{% endif %}
 
 Do NOT invent repo-specific checks here; the project owns them (see the project-specific area below).
-{% if options["skills"] is defined and 'arch-align' in options["skills"] %}
+{% if options["skills"] is undefined or 'arch-align' in options["skills"] %}
 ### Architecture doc consistency check (active when `arch-align` is enabled)
 
 When `arch-align` is enabled, add the following gate to step 2:
@@ -71,10 +71,10 @@ Only when explicitly asked, for the just-made, unpushed commit with no dependenc
 ## 2. 提交前完整性检查 —— 项目自定义
 本步骤归**项目**所有，模板不硬编码具体检查：按下方托管块外「项目专属提交流程与红线」的定义执行——跑什么命令、查哪些项、用什么语言写，全部由项目在那里自行声明。
 
-项目专属区未定义任何检查时，使用兜底自检：扫 diff——改动构建/依赖、文档/AGENTS.md/配置、公开命名时对应校验构建、更新文档、跑格式化{% if options["skills"] is defined and 'arch-align' in options["skills"] %}；触及架构（新增/调整模块边界、数据流、生命周期、系统拓扑、核心不变式等）时检查 `docs/architecture/README.md` 与对应领域文档是否已同步，详情见 `.agents/skills/arch-align`{% endif %}。
+项目专属区未定义任何检查时，使用兜底自检：扫 diff——改动构建/依赖、文档/AGENTS.md/配置、公开命名时对应校验构建、更新文档、跑格式化{% if options["skills"] is undefined or 'arch-align' in options["skills"] %}；触及架构（新增/调整模块边界、数据流、生命周期、系统拓扑、核心不变式等）时检查 `docs/architecture/README.md` 与对应领域文档是否已同步，详情见 `.agents/skills/arch-align`{% endif %}。
 
 不要在本流程里发明仓库专属检查；它们归项目所有（见下方项目专属区）。
-{% if options["skills"] is defined and 'arch-align' in options["skills"] %}
+{% if options["skills"] is undefined or 'arch-align' in options["skills"] %}
 ### 架构文档一致性检查（`arch-align` 已启用时本节生效）
 
 本项目已启用 `arch-align` 时，第 2 步需追加以下判定：
