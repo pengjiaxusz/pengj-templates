@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.4-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.3-beta.1...v0.21.4-beta.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **agent:** 英文项目不再出现中文 ([fc9f9ec](https://github.com/pengjiaxusz/pengj-templates/commit/fc9f9ec6ec4f0dfb6057ff66e7cdbbb1e1776dbd))
+
 ## [0.21.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.2-beta.1...v0.21.3-beta.1) (2026-08-28)
 
 
