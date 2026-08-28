@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.2-beta.1...v0.21.3-beta.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **agent:** commit 模板项目专属区默认留空 ([8b3da59](https://github.com/pengjiaxusz/pengj-templates/commit/8b3da59d115b5cc94fb550fce5087cfc37f4c6c8))
+
 ## [0.21.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.1-beta.1...v0.21.2-beta.1) (2026-08-28)
 
 
