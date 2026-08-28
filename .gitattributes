@@ -1,0 +1,67 @@
+# PENGJ_TEMPLATE_START
+# --- common 层 ---
+
+# ==============================================================================
+# 1. 换行符与文本归一化 (Auto Line Endings & Normalization)
+# ==============================================================================
+# 默认所有文本文件在 Git 仓库内使用 LF 存储，检出时自动适配
+* text=auto eol=lf
+
+# 显式声明特定文本格式强制使用 LF
+*.md text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.env* text eol=lf
+
+# 脚本文件换行符控制
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# ==============================================================================
+# 2. 常见二进制资源 (Binary Files)
+# ==============================================================================
+# 防止 Git 尝试对二进制文件进行文本合并或换行符转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.svg text eol=lf
+
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+
+*.zip binary
+*.tar.gz binary
+*.tgz binary
+*.7z binary
+*.pdf binary
+*.wasm binary
+
+# ==============================================================================
+# 3. 统计与 Diff 优化 (GitHub Linguist & Diff Controls)
+# ==============================================================================
+# 包管理器 Lockfile 标记为生成文件，避免在 PR 中占据过长 Diff 统计
+pnpm-lock.yaml linguist-generated=true
+package-lock.json linguist-generated=true
+yarn.lock linguist-generated=true
+Cargo.lock linguist-generated=true
+
+# 导出忽略（git archive 时剔除工程配置）
+.gitattributes export-ignore
+.gitignore export-ignore
+.github/ export-ignore
+.vscode/ export-ignore
+.agents/ export-ignore
+# PENGJ_TEMPLATE_END

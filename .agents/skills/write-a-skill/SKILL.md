@@ -6,6 +6,7 @@ description: >-
 ---
 
 <!-- PENGJ_TEMPLATE_START -->
+
 # 编写技能
 
 以符合本仓库约定的结构创建新的 Agent 技能（自动发现、双语、托管块 + 项目专属区）。
