@@ -52,34 +52,64 @@ description: >-
 
 ### 提交前检查（项目自定义）
 
-用任意形式声明每次提交前要执行的动作（任意语言的脚本、task runner、或纯清单均可），例如：
+每次提交前按顺序执行（PowerShell 兼容，仓库根运行）：
 
 ```powershell
-# （示例）pwsh 脚本：pwsh -File .agents/skills/commit/pre-commit-check.ps1
+# 1. 收集上下文
+git status; git diff --stat; git diff --cached --stat
+# 2. 构建与静态检查（按改动面选择，改 Rust/模板/配置必跑）
+cargo fmt --check 2>$null; cargo clippy --workspace --all-targets -- -D warnings 2>$null
+# 3. 架构文档一致性判断（见下方“架构文档一致性检查”）
+# 4. 前端改动时：pnpm --dir crates/app build
+# 5. 模板改动时：cargo run -q -p pengj-templates-cli -- create <tmp> --layers agent --skills commit,arch-align --output <临时目录> 校验渲染
 ```
 
-```bash
-# （示例）任务 runner：just lint && just test
-```
+> 可执行门禁以本清单为准，未配置独立脚本前按清单手工逐项勾选；后续若新增 `pre-commit-check.ps1` / `just` 任务，需在本节登记调用方式。
 
-### 领域完整性检查（按仓库领域改写本节）
-
-把下面的示例骨架替换为本仓库真实的三问与判定表：
+### 领域完整性检查
 
 | # | 原则问题 | 命中 → 要查 |
 | --- | --- | --- |
-| 1 | （示例）是否触及核心模块契约？ | 对应 `AGENTS.md` / `docs/` 是否同步 |
-| 2 | （示例）是否新增对外接口/参数？ | 文档与 `--help` 是否完全自解释 |
-| 3 | （示例）是否改动构建/依赖？ | 构建是否验证通过 |
+| 1 | 是否触及架构（新增/调整模块边界、数据流、生命周期、系统拓扑、跨层契约、核心不变式）？ | `docs/architecture/README.md` 索引与对应 `docs/architecture/<domain>.md` 是否已同步；必要时走 `.agents/skills/arch-align` 深度对齐 |
+| 2 | 是否改动模板层/引擎核心契约（`crates/core` 合并渲染、manifest、层依赖、受管块/TOML 合并）？ | `AGENTS.md` / `templates/README.md` / 层 `layer.toml` 说明是否同步；是否跑通端到端 `create`/`update` 验证 |
+| 3 | 是否新增对外接口/参数（CLI args、GUI invoke、生成选项 `options`、技能列表）？ | `README.md` / `--help` / GUI 文案是否完全自解释；`commitlint.config.js` scope 白名单是否更新 |
+| 4 | 是否改动构建/依赖/工具链（Cargo/pnpm/lefthook/CI）？ | `cargo check --workspace` / `cargo test --workspace` / `pnpm --dir crates/app build` / `just ci` 是否通过 |
 
 判定表速查：
 
 | 改动 | 命中的检查 |
 | --- | --- |
-| （示例）`src/core/**` | 核心契约文档 |
-| 纯测试、纯格式化、修 bug 不改行为 | 无（快速路径） |
+| `crates/core/**`、`templates/**/layer.toml`、`crates/core/src/render.rs`/`toml_merge.rs`/`engine.rs` | 架构文档 + 模板文档 + 端到端验证 |
+| `templates/agent/**`、`.agents/skills/**`、技能 `SKILL.md` / `AGENTS.md` | 技能双语分支与托管块完整性；架构技能关联时检查架构索引是否登记 |
+| `crates/cli/**`、`crates/app/src-tauri/**`、`crates/app/src/**` | 对外接口文档与构建验证 |
+| `docs/architecture/**` | 索引 `docs/architecture/README.md` 路由是否可达（渐进式披露不堆细节） |
+| 纯测试、纯格式化、单函数修 bug 且不改行为/契约 | 无（快速路径） |
+
+### 架构文档一致性检查
+
+> 本仓库启用 `arch-align`，每次提交必须显式回答“本次是否需更新架构文档”，禁止跳过。
+
+**触发判断（任一命中即视为触及架构）：**
+- 新增/删除/重命名层或技能（`templates/<layer>/`、`templates/agent/.agents/skills/<name>/`）
+- 调整模块边界或依赖方向（`layer.toml` depends、`crates/core` 分层合并/渲染逻辑）
+- 改变核心数据流或生命周期（生成/更新/纳管流程、`FileMap`/`manifest`/`merge_managed_block`）
+- 修改跨层/跨进程契约或核心不变式（受管块协议、`update_ignore`、TOML/JSON 合并规则、`docs/architecture` 已记载的约束）
+- 变更系统拓扑（CLI/GUI/引擎三件套交互路径、Tauri invoke 注册）
+
+**命中 → 核验：**
+1. `docs/architecture/README.md` 索引是否已登记/更新对应领域文档条目（权威级别、关联模块路径、职责一句话）。
+2. 对应 `docs/architecture/<domain>.md` 是否已按 `references/GENERATE-DOC.md` 四段式（边界/数据流/源码映射/红线）同步。
+3. 若 `docs/architecture/README.md` 尚不存在或领域缺檔，按 `arch-align` 技能询问用户后生成并回写索引。
+
+**快速路径（无需更新架构文档）：**
+- 纯测试、纯格式化、注释/文案微调
+- 单函数内部修 bug 且不改模块边界/数据流/对外契约
+
+**提交信息要求：** 触及架构的提交需在正文或 footer 注明已同步的架构文档路径（例：`同步 docs/architecture/README.md + docs/architecture/core-engine.md`）。
 
 ### 红线（agent 绝不能做）
 
-- （示例）跳过完整性检查直接提交
-- （示例）把多个领域混进一次提交
+- 跳过完整性检查直接提交（含跳过架构文档一致性判断）
+- 触及架构却未同步 `docs/architecture/README.md` 与领域文档就提交
+- 把多个领域（架构+功能+文档+构建）混进一次提交
+- 为过检查而删除/伪造架构文档索引条目
