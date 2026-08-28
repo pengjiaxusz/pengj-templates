@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.20.2-beta.1...v0.21.0-beta.1) (2026-08-28)
+
+
+### Features
+
+* **agent:** 增加架构文档提交前检查并落地主索引 ([0035f40](https://github.com/pengjiaxusz/pengj-templates/commit/0035f40c77c9f24cf9f15efcbffb988eda17e7df))
+
 ## [0.20.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.20.1-beta.1...v0.20.2-beta.1) (2026-08-28)
 
 
