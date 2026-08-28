@@ -550,13 +550,31 @@ fn render_file_map(
     }
 
     for (rel, parts) in &fm.concat {
-        let mut merged: Vec<u8> = Vec::new();
+        // 累加文件（.gitignore/.gitattributes）走单一托管块：块内按层拼接，
+        // 每层贡献前带 "# --- <层> 层 ---" 注释，避免多 START 块叠加
+        let mut inner = String::new();
         for (layer_id, bytes) in parts {
-            merged.extend(format!("# --- {} 层 ---\n\n", layer_id).as_bytes());
-            merged.extend(render_bytes(bytes, ctx)?);
-            merged.push(b'\n');
+            let rendered = String::from_utf8_lossy(&render_bytes(bytes, ctx)?).into_owned();
+            let body = crate::block::extract_managed_block(&rendered)
+                .map(|b| b.body.trim().to_string())
+                .unwrap_or_else(|| rendered.trim().to_string());
+            if body.is_empty() {
+                continue;
+            }
+            if !inner.is_empty() {
+                inner.push_str("\n\n");
+            }
+            inner.push_str(&format!("# --- {} 层 ---\n\n{}", layer_id, body));
         }
-        out.insert(rel.clone(), merged);
+        let wrapped = if inner.is_empty() {
+            "# PENGJ_TEMPLATE_START\n# PENGJ_TEMPLATE_END\n".to_string()
+        } else {
+            format!(
+                "# PENGJ_TEMPLATE_START\n{}\n# PENGJ_TEMPLATE_END\n",
+                inner.trim()
+            )
+        };
+        out.insert(rel.clone(), wrapped.into_bytes());
     }
 
     for (rel, parts) in &fm.json {
@@ -1120,10 +1138,9 @@ pub fn adopt_project(
                 continue;
             }
 
-            // 普通文件（fm.normal）且渲染结果含受管块：结合磁盘状态做合并注入。
-            // 注意：concat 累加文件（.gitignore/.gitattributes）不走此分支，保持旧语义
-            // （记录模板渲染哈希、不覆盖用户文件），避免多受管块拼接丢内容。
-            if fm.normal.contains_key(rel)
+            // 含受管块的文本文件（fm.normal 或累加文件 fm.concat 单一托管块）：
+            // 结合磁盘状态做合并注入，块外用户内容原样保留
+            if (fm.normal.contains_key(rel) || fm.concat.contains_key(rel))
                 && target.is_file()
                 && is_text(&cur)
                 && rendered_has_block
@@ -1413,13 +1430,11 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
             // 磁盘内容非文本或渲染结果不含受管块：落入通用哈希/冲突判定
         }
 
-        // 受管块文件：普通文件（fm.normal）且磁盘已有同名文件、模板渲染结果含受管块时，
-        // 合并/注入受管块：磁盘已有同风格托管块则仅替换块区间（块外用户内容原样保留）；
+        // 受管块文件：普通或累加文件（fm.normal / fm.concat 单一托管块）且磁盘已有同名文件、
+        // 模板渲染结果含受管块时，合并/注入受管块：磁盘已有同风格托管块则仅替换块区间（块外用户内容原样保留）；
         // 磁盘是无块的 legacy 文件则把托管块追加到末尾并计入 needs_review 提示人工复核。
         // 与磁盘一致则记为未变；合并成功不视为冲突。
-        // 注意：concat 累加文件（.gitignore/.gitattributes）不走此分支——它们是逐层拼接、
-        // 可含多个受管块，replace_managed_block 只能处理单个块，会丢内容，仍走哈希/冲突判定。
-        if fm.normal.contains_key(rel) && target.is_file() {
+        if (fm.normal.contains_key(rel) || fm.concat.contains_key(rel)) && target.is_file() {
             let cur = std::fs::read(&target).unwrap_or_default();
             if is_text(&cur)
                 && crate::block::extract_managed_block(&String::from_utf8_lossy(bytes)).is_some()
@@ -3161,9 +3176,8 @@ mod tests {
 
     #[test]
     fn update_project_keeps_concat_file_with_managed_block_untouched() {
-        // concat 累加文件（.gitignore/.gitattributes）不走受管块合并分支：其渲染结果是
-        // 逐层拼接、可含多个受管块，replace_managed_block 只处理单个块会丢内容。
-        // 即使模板 .gitignore 含受管块，也绝不能覆盖用户已有的 .gitignore。
+        // 累加文件（.gitignore/.gitattributes）现为单一托管块（块内按层拼接），
+        // 需走受管块合并：用户已有内容保留在块外，模板块追加到末尾。
         let tmp = std::env::temp_dir().join(format!("pengj-upd-concat-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
@@ -3181,7 +3195,7 @@ mod tests {
         )
         .unwrap();
 
-        // 项目：用户有自己的 .gitignore，与模板 concat 内容不同
+        // 项目：用户有自己的 .gitignore，与模板 concat 内容不同且无托管块
         let user_gitignore = "/target/\n/debug/\n/my-custom-ignore/\n";
         let proj = tmp.join("proj");
         std::fs::create_dir_all(&proj).unwrap();
@@ -3213,12 +3227,13 @@ mod tests {
 
         let report = update_project(&templates, &proj).unwrap();
 
-        // 用户 .gitignore 原样保留，不被 concat 受管块覆盖，也不报冲突
+        // 旧无块文件应追加单一托管块（块内带层头），用户内容保留
+        let expected = "/target/\n/debug/\n/my-custom-ignore/\n\n# PENGJ_TEMPLATE_START\n# --- common 层 ---\n\n/node_modules\n# PENGJ_TEMPLATE_END\n";
         assert_eq!(
             std::fs::read_to_string(proj.join(".gitignore")).unwrap(),
-            user_gitignore
+            expected
         );
-        assert!(!report.updated.iter().any(|f| f == ".gitignore"));
+        assert!(report.updated.iter().any(|f| f == ".gitignore"));
         assert!(report.conflicted.is_empty());
 
         let _ = std::fs::remove_dir_all(&tmp);
