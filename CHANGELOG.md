@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.1-beta.1...v0.21.2-beta.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **agent:** 修正架构检查条件以兼容默认全量技能 ([119f23d](https://github.com/pengjiaxusz/pengj-templates/commit/119f23d27083fd545f22e172820b76205ec16da3))
+
 ## [0.21.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.0-beta.1...v0.21.1-beta.1) (2026-08-28)
 
 
