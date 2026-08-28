@@ -24,6 +24,21 @@ description: >-
 
 不要在本流程里发明仓库专属检查；它们归项目所有（见下方项目专属区）。
 
+### 架构文档一致性检查（`arch-align` 已启用时本节生效）
+
+本项目已启用 `arch-align` 时，第 2 步需追加以下判定：
+
+- **触发判断：** 是否触及架构（新增模块/改拓扑/改数据流/改不变式/改跨层契约）？
+- **命中 → 核验：** `docs/architecture/README.md` 索引与对应 `docs/architecture/<domain>.md` 是否已同步。需深度对齐时执行 `.agents/skills/arch-align` 流程。
+- **快速路径（无需更新文档）：** 纯测试、纯格式化、单函数 bugfix 且不改行为/契约。
+
+判定表追加：
+
+| 改动 | 命中的检查 |
+| --- | --- |
+| 触及架构（新增/调整模块、数据流、生命周期、跨模块契约） | `docs/architecture/README.md` 索引与对应领域文档是否已同步 |
+
+
 ## 3. 拆分无关改动
 不相关领域拆多次提交（文档与功能、构建与业务分开）。
 
@@ -84,20 +99,6 @@ cargo fmt --check 2>$null; cargo clippy --workspace --all-targets -- -D warnings
 | `crates/cli/**`、`crates/app/src-tauri/**`、`crates/app/src/**` | 对外接口文档与构建验证 |
 | `docs/architecture/**` | 索引 `docs/architecture/README.md` 路由是否可达（渐进式披露不堆细节） |
 | 纯测试、纯格式化、单函数修 bug 且不改行为/契约 | 无（快速路径） |
-
-### 架构文档一致性检查
-
-本项目已启用 `arch-align` 时，第 2 步需追加以下判定：
-
-- **触发判断：** 是否触及架构（新增模块/改拓扑/改数据流/改不变式/改跨层契约）？
-- **命中 → 核验：** `docs/architecture/README.md` 索引与对应 `docs/architecture/<domain>.md` 是否已同步。需深度对齐时执行 `.agents/skills/arch-align` 流程。
-- **快速路径（无需更新文档）：** 纯测试、纯格式化、单函数 bugfix 且不改行为/契约。
-
-判定表追加：
-
-| 改动 | 命中的检查 |
-| --- | --- |
-| 触及架构（新增/调整模块、数据流、生命周期、跨模块契约） | `docs/architecture/README.md` 索引与对应领域文档是否已同步 |
 
 ### 红线（agent 绝不能做）
 
