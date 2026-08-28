@@ -101,7 +101,7 @@ pub(crate) fn merge_toml_managed(disk_text: &str, incoming_text: &str) -> TomlMe
 /// 用给定风格重建受管块文本（含头注释说明归属，保证尾随换行）
 fn rebuild_block(style: BlockStyle, body: &str) -> String {
     format!(
-        "{}\n# 由 pengj-templates 托管：update 只替换本区块间，区间外内容归用户所有\n{}\n{}\n",
+        "{}\n# Managed by pengj-templates: update replaces only this block, content outside is user-owned\n{}\n{}\n",
         style.start_marker(),
         body.trim(),
         style.end_marker()

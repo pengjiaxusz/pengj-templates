@@ -553,6 +553,7 @@ fn render_file_map(
         // 累加文件（.gitignore/.gitattributes）走单一托管块：块内按层拼接，
         // 每层贡献前带 "# --- <层> 层 ---" 注释，避免多 START 块叠加
         let mut inner = String::new();
+        let is_en = ctx.options.get("skill_lang").and_then(|v| v.as_str()) == Some("en");
         for (layer_id, bytes) in parts {
             let rendered = String::from_utf8_lossy(&render_bytes(bytes, ctx)?).into_owned();
             let body = crate::block::extract_managed_block(&rendered)
@@ -564,7 +565,11 @@ fn render_file_map(
             if !inner.is_empty() {
                 inner.push_str("\n\n");
             }
-            inner.push_str(&format!("# --- {} 层 ---\n\n{}", layer_id, body));
+            if is_en {
+                inner.push_str(&format!("# --- {} layer ---\n\n{}", layer_id, body));
+            } else {
+                inner.push_str(&format!("# --- {} 层 ---\n\n{}", layer_id, body));
+            }
         }
         let wrapped = if inner.is_empty() {
             "# PENGJ_TEMPLATE_START\n# PENGJ_TEMPLATE_END\n".to_string()

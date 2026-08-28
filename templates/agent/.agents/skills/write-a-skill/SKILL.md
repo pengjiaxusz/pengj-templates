@@ -3,7 +3,7 @@ name: write-a-skill
 description: >-
 {% if options["skill_lang"] == "en" %}
   Create new Agent skills with correct structure, progressive disclosure, and bundled resources. Use when the user wants to create, write, or build a new skill.
-  Triggers: write-a-skill, new skill, create skill, skill template, 编写技能, 创建技能.
+  Triggers: write-a-skill, new skill, create skill, skill template.
 {% else %}
   以正确的结构、渐进式披露和捆绑资源创建新的 Agent 技能。当用户想要创建、编写或构建新技能时使用。
   Triggers: write-a-skill, 编写技能, 创建技能, new skill, skill template.

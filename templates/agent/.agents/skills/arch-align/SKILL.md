@@ -2,7 +2,7 @@
 name: arch-align
 description: >-
 {% if options["skill_lang"] == "en" %}
-  Universal architecture search and constraint alignment skill before feature development and complex debugging. Discovers the authoritative index at docs/architecture/README.md via progressive disclosure; asks the user and generates missing indexes/docs following guidelines; aligns architectural invariants and boundaries before coding. Use when inspecting architecture, planning features, modifying cross-module code, or when the user mentions "check architecture", "architecture docs", or "arch-align". Triggers: arch-align, 架构对齐, 查阅架构, 架构文档, 架构先行, architecture-alignment, 先看架构.
+  Universal architecture search and constraint alignment skill before feature development and complex debugging. Discovers the authoritative index at docs/architecture/README.md via progressive disclosure; asks the user and generates missing indexes/docs following guidelines; aligns architectural invariants and boundaries before coding. Use when inspecting architecture, planning features, modifying cross-module code, or when the user mentions "check architecture", "architecture docs", or "arch-align". Triggers: arch-align, architecture-alignment, check architecture, architecture docs.
 {% else %}
   需求开发与复杂问题定位前的通用架构检索与约束对齐技能。通过渐进式披露检索 docs/architecture/README.md 权威架构主索引；若缺失主索引或领域架构文档，询问用户并按指南生成；对齐架构红线与系统边界后再展开实施。当需要查阅架构、新需求规划、跨模块修改、架构对齐、或用户要求"先看架构"/"架构文档"时使用。 Triggers: arch-align, 架构对齐, 查阅架构, 架构文档, 架构先行, architecture-alignment, 先看架构.
 {% endif %}

@@ -3,7 +3,7 @@ name: branch-sync
 description: >-
 {% if options["skill_lang"] == "en" %}
   Linear branch/worktree sync with clean history. Identify net-new commits, sync parallel feat branches into the integration branch via rebase/ff-merge or cherry-pick + force-with-lease, and verify no merge commits. Use when merging branches, syncing worktrees, aligning branches, or consolidating parallel worktrees.
-  Triggers: branch-sync, worktree sync, sync branch, merge branch, align branch, cherry-pick, rebase, 合并分支, 分支同步.
+  Triggers: branch-sync, worktree sync, sync branch, merge branch, align branch, cherry-pick, rebase.
 {% else %}
   多 worktree 并行分支线性化合入集成分支、保证提交记录干净的同步流程。含净贡献甄别、rebase/ff 合并与 cherry-pick 双路径、force-with-lease 推送与合后校验。当用户要求合并分支、同步分支、合入主分支、分支对齐、收编并行 worktree 时使用。
   Triggers: branch-sync, 分支同步, 同步分支, 合并分支, 合入主分支, worktree 同步, cherry-pick, rebase.

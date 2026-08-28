@@ -3,7 +3,7 @@ name: commit
 description: >-
 {% if options["skill_lang"] == "en" %}
   Conventional commit workflow. Write commit messages{% if options["commit_zh"] %} in Chinese (title/body, except type/scope){% else %} in English{% endif %}. Run the project's pre-commit check first (convention script > project checklist > generic diff scan), split unrelated changes, and push immediately.
-  Triggers: commit, 提交, amend, push, commit message, conventional commits.
+  Triggers: commit, amend, push, commit message, conventional commits.
 {% else %}
   约定式提交流程。提交信息{% if options["commit_zh"] %}用中文撰写（type/scope 除外）{% else %}用英文撰写{% endif %}。提交前先跑项目约定的检查（约定脚本 > 项目清单 > 兜底扫 diff）、拆分无关改动、提交后立即 push。
   Triggers: commit, 提交, amend, push, commit message, conventional commits.
@@ -11,9 +11,9 @@ description: >-
 ---
 
 <!-- PENGJ_TEMPLATE_START -->
-# Commit 提交流程
-
 {% if options["skill_lang"] == "en" %}
+# Commit
+
 Write conventional commit messages. Always push immediately after committing to avoid losing work.
 
 ## 1. Gather context (standard git, cross-platform)
@@ -62,6 +62,7 @@ Separate unrelated areas into distinct commits (e.g. do not mix docs with featur
 ## 6. Amend
 Only when explicitly asked, for the just-made, unpushed commit with no dependency from others. Run the completeness check again; push after amend.
 {% else %}
+# Commit 提交流程
 按约定式提交写提交信息。提交后立即 push，防止丢失。
 
 ## 1. 收集提交上下文（标准 git 命令，跨平台）
