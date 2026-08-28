@@ -1,11 +1,11 @@
 ---
 name: write-a-skill
 description: >-
+
   以正确的结构、渐进式披露和捆绑资源创建新的 Agent 技能。当用户想要创建、编写或构建新技能时使用。
   Triggers: write-a-skill, 编写技能, 创建技能, new skill, skill template.
----
 
-<!-- PENGJ_TEMPLATE_START -->
+---
 
 # 编写技能
 
@@ -139,14 +139,3 @@ description: 能力的简要描述。当 [具体触发条件] 时使用。
 - agent 层全部内容（本 `SKILL.md` 与 `AGENTS.md`）必须中英双语，通过 `{% if options["skill_lang"] == "en" %}` … `{% else %}` … `{% endif %}` 分支实现（zh 为默认）；frontmatter 的 `description` 也要双语分支（供 UI 勾选列表展示）。
 - 新增技能照抄 `commit` 技能的双语模板结构；新增语言时同步扩展 `skill_lang` 校验（CLI / GUI / core）。
 - `SKILL.md` = 托管框架块（`PENGJ_TEMPLATE_START/END`，`update` 时原位替换）+ 块外项目专属区（归用户、永不覆盖）。文档型定制与提交前检查的定义都写在块外；可执行门禁的形式与位置由项目自定，框架不预设。
-
-<!-- PENGJ_TEMPLATE_END -->
-
-<!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
-
-## 项目专属扩展
-
-> 本节归**项目**所有：模板更新只维护上方托管块，这里可随意定制，内容完整保留。
-
-- 如项目对技能命名、触发词、文件落位有额外约定，在此补充。
-- 在此声明新技能的可执行检查如何调用（如 `cargo test --workspace`、`just ci` 或技能 lint 脚本），框架不预设实现。

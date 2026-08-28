@@ -9,8 +9,6 @@ description: >-
   Triggers: write-a-skill, 编写技能, 创建技能, new skill, skill template.
 {% endif %}
 ---
-
-<!-- PENGJ_TEMPLATE_START -->
 {% if options["skill_lang"] == "en" %}
 # Write a Skill
 
@@ -278,26 +276,4 @@ description: 能力的简要描述。当 [具体触发条件] 时使用。
 - agent 层全部内容（本 `SKILL.md` 与 `AGENTS.md`）必须中英双语，通过 `{% raw %}{% if options["skill_lang"] == "en" %}{% endraw %}` … `{% raw %}{% else %}{% endraw %}` … `{% raw %}{% endif %}{% endraw %}` 分支实现（zh 为默认）；frontmatter 的 `description` 也要双语分支（供 UI 勾选列表展示）。
 - 新增技能照抄 `commit` 技能的双语模板结构；新增语言时同步扩展 `skill_lang` 校验（CLI / GUI / core）。
 - `SKILL.md` = 托管框架块（`PENGJ_TEMPLATE_START/END`，`update` 时原位替换）+ 块外项目专属区（归用户、永不覆盖）。文档型定制与提交前检查的定义都写在块外；可执行门禁的形式与位置由项目自定，框架不预设。
-{% endif %}
-<!-- PENGJ_TEMPLATE_END -->
-
-{% if options["skill_lang"] == "en" %}
-<!-- Below is the project-specific area: template updates replace only the managed block above; this area belongs to the project and is fully preserved. -->
-
-## Project-specific extensions
-
-> This section belongs to the **project**: template updates only touch the managed block above. Customize freely here; content is preserved.
-
-- Add domain-specific skill authoring conventions (naming, trigger wording, file placement) if your project has them.
-- Document any executable checks for new skills (e.g. `cargo test --workspace`, `just ci`, or a skill lint script) and how to invoke them — the framework prescribes no implementation.
-
-{% else %}
-<!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
-
-## 项目专属扩展
-
-> 本节归**项目**所有：模板更新只维护上方托管块，这里可随意定制，内容完整保留。
-
-- 如项目对技能命名、触发词、文件落位有额外约定，在此补充。
-- 在此声明新技能的可执行检查如何调用（如 `cargo test --workspace`、`just ci` 或技能 lint 脚本），框架不预设实现。
 {% endif %}

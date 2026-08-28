@@ -9,8 +9,6 @@ description: >-
   Triggers: branch-sync, 分支同步, 同步分支, 合并分支, 合入主分支, worktree 同步, cherry-pick, rebase.
 {% endif %}
 ---
-
-<!-- PENGJ_TEMPLATE_START -->
 {% if options["skill_lang"] == "en" %}
 # Branch Sync — Worktree-Aware Linear Sync
 
@@ -223,66 +221,4 @@ git -C <worktree路径> status --short             # 干净
 - **reset --hard 前必须确认干净**：`git -C <路径> status --short` 有未提交改动会直接丢失。
 - **PowerShell 对 `^` 的转义**：`'feat/x' '^main'` 加单引号，否则被当作转义符。
 - **构建只跑一次**：合后在集成分支跑一次完整校验即可；多 worktree 重复全量构建浪费且易产生并发产物污染。
-{% endif %}
-<!-- PENGJ_TEMPLATE_END -->
-
-{% if options["skill_lang"] == "en" %}
-<!-- Below is the project-specific area: template updates replace only the managed block above; this area belongs to the project and is fully preserved. -->
-
-## Project-specific sync policy
-
-> This section belongs to the **project**: template updates only touch the managed block above. Declare your project's concrete choices here.
-
-### Integration branch
-
-- Integration branch for this project: `main` (default). If your project uses `dev`, change this line.
-- Remote: `origin`.
-
-### Post-merge verification command (run once on integration branch)
-
-```powershell
-cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-# or: just ci
-```
-
-Adjust to your stack (Rust / frontend / docs) and keep it to a single run on the integration branch after sync.
-
-### Red lines (must never)
-
-- Create a merge commit on the integration branch.
-- `git push -f` / `--force` without `--force-with-lease`.
-- `git reset --hard` on a dirty worktree.
-- Sync without filtering net contributions first.
-
-{% else %}
-<!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
-
-## 项目专属同步策略
-
-> 本节归**项目**所有：模板更新只维护上方托管块，这里可按项目实际声明。
-
-### 集成分支
-
-- 本项目统一分支：`main`（默认）。若项目以 `dev` 为统一分支，请改此行。
-- 远端：`origin`。
-
-### 合后校验命令（仅在集成分支跑一次）
-
-```powershell
-cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-# 或：just ci
-```
-
-按技术栈调整（Rust / 前端 / 文档），合后仅在集成分支跑一次即可。
-
-### 红线（绝不能做）
-
-- 在集成分支上产生 merge 提交。
-- 裸 `git push -f` / `--force`（必须 `--force-with-lease`）。
-- 在脏 worktree 上 `git reset --hard`。
-- 未甄别净贡献就直接合入。
 {% endif %}

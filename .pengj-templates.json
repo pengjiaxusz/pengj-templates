@@ -30,18 +30,18 @@
     ".agents\\skills\\arch-align\\SKILL.md": "911129a46fd7f8d9d22822c5474ffde63621c4b375b721327a8d84dd89cf518f",
     ".agents\\skills\\arch-align\\references\\GENERATE-DOC.md": "7cbd5aca4240f88d8ccce5b7a8278778de791aa7152c3c912c243ec2808511df",
     ".agents\\skills\\arch-align\\references\\GENERATE-INDEX.md": "8631df67a99bc9eb96096b4edc28d050e1d63151ef6f05be545ba37fb73396bb",
-    ".agents\\skills\\branch-sync\\SKILL.md": "16d6f1685f8caace2843d24c9037b9547f2105d63a0a122ba3c74a320f1c9766",
+    ".agents\\skills\\branch-sync\\SKILL.md": "2ebc99a72adc8baeb726fd0e81554b75fc935148d4d6de037175da9bf426fbd6",
     ".agents\\skills\\caveman\\SKILL.md": "e66fa0ab7e8227de3d64819029a113a79d0323ed86a5c463dca1b0ad1893ea34",
-    ".agents\\skills\\commit\\SKILL.md": "1caaac8495687c1e9dcdfd2bb3610f01787a377b9f28a63a9d131a026b00f715",
+    ".agents\\skills\\commit\\SKILL.md": "c3dd5bf8813672e290303a6907137f8087325e4369fe161f1fc3feb967eff804",
     ".agents\\skills\\grill-me\\SKILL.md": "92ec2b94d00e57723e9ae8c5f79a85077b43874a7f8fe63a5fa4780ea9d4edb8",
-    ".agents\\skills\\write-a-skill\\SKILL.md": "9d492d163dc7df8c6dbfd18d799eff78ac0536b720b5db5059501530c1735b85",
+    ".agents\\skills\\write-a-skill\\SKILL.md": "36c18c4cdb1a5b21a19b5d9e09010d9e34876ef8b8b663b33fd3cd4add6a433a",
     ".cargo\\config.toml": "168d224a85c74ed9f415aa1f1137975cee016a34b77857c31433ae9887e2fa7e",
     ".gitattributes": "8e4c83eb2cd7cf5fe67722f7c5c5d9ee4735ac1ff74d823499f0f0c832fcca82",
     ".gitignore": "d6994127ac82b65c180fd075f68ee31cb9cfeb84a9204dc87a7390dc117b484d",
     "AGENTS.md": "74a1d7c7eece7f3e24c637607080896faf66d118cfd90f1f629df559c7ec6063",
     "commitlint.base.js": "36309c80b331b643c5800d5e9babb5b03a85811b5fb1e9c6cc5ca940248ed40b",
     "lefthook.yml": "474928a3a7d11adbcbc34bea445ea4f94808c101eb9e0b86e2695582934276f7",
-    "package.json": "1a3b20ea9fea6f91521965891aa9f8ae0884864d919ac7d2eb2a0a7682a728ff",
+    "package.json": "ba0acf784b71c3790a096f50d49a58071c2bcd74eb9c5f2d248706a091dd3e6e",
     "pnpm-workspace.yaml": "dcfc70ea14a010b49505cde45889be59c70c575335efbfecac69553c8d068a0e"
   }
 }
