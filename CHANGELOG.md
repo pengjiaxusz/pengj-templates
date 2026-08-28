@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.5-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.4-beta.1...v0.21.5-beta.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **templates:** 将 .gitattributes 模板注释翻译为英文 ([29a333a](https://github.com/pengjiaxusz/pengj-templates/commit/29a333aedc2f3c0a1be0155bfe6c30fc52174076))
+
 ## [0.21.4-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.3-beta.1...v0.21.4-beta.1) (2026-08-28)
 
 
