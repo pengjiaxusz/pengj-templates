@@ -10,6 +10,14 @@
 {%- if options["commit_and_push"] %}
 - Task conclusion: Always run verification checks, commit changes following Conventional Commits, and push to the remote repository immediately before completing the task.
 {%- endif %}
+{%- if options["chinese_programming"] %}
+
+### Chinese programming conventions
+
+- **Naming & Generic Terms**: File names and variable names prefer Chinese; short common English terms (`code`, `tests`, `xml`, `existing`, `output_dir`, etc.) remain as-is. Avoid awkward multi-word English concatenation.
+- **Mixed Chinese-English naming (Recommended)**: Use "Standard/API English anchor + Domain Chinese role" (e.g. Type `HttpRequest快照`, field `创建信息快照`/`补丁`; underlying spec field names remain English). Avoid long compound English suffixes (e.g. `HttpRequestSnapshot`) or literal translations of spec names.
+- **Natural Localized Terminology (Strict)**: Express concepts in natural native terms; avoid literal translations of English architecture/graph jargon (e.g. `plane` -> `通路/管道` instead of `平面`; `edge` -> `关联/依赖` instead of `边/交叉边`; `node` -> `对象记录/条目`; `backpressure` -> `限流排队`; `provenance` -> `来源`). Self-check: read aloud as if explaining to a colleague; rephrase if it sounds like machine translation; keep spec/protocol proper nouns in English.
+{%- endif %}
 {%- if options["skills"] is defined and options["skills"] | length > 0 %}
 
 ### Enabled skills
@@ -34,24 +42,16 @@
 - Template-managed: `Cargo.toml`, `.cargo/config.toml`, `rust-toolchain.toml` — sync compile/toolchain changes via the template (`pengj-templates-cli update`). `src/main.rs` is user-owned and not overwritten on update.
 {%- if options["chinese_programming"] %}
 
-### Rust Chinese-programming extras
+### Rust Chinese-programming specifics
 
 - **Files & Modules**:
-  - Entry files (`main.rs`, `lib.rs`, `mod.rs`) and concise top-level directory names stay ASCII; business implementation and helper file names prefer Chinese.
+  - Entry files (`main.rs`, `lib.rs`, `mod.rs`) and concise top-level directory names stay ASCII; implementation and helper file names prefer Chinese.
   - Chinese-named source files map to modules via explicit `#[path]` attributes:
     - Submodule mapping: `#[path = "配置/mod.rs"] pub mod 配置;` or `#[path = "创建.rs"] mod 创建;`
     - Mapping to ASCII mod names: `#[path = "数据处理.rs"] mod data_processing;`
   - `name`, `[lib].name`, `[[bin]].name` in `Cargo.toml` stay ASCII for tooling compatibility.
-- **Identifiers & Naming**:
-  - Domain identifiers and comments prefer Chinese; Chinese-containing identifiers do not enforce snake_case (e.g. `解析AST`), while pure ASCII identifiers follow standard Rust conventions (`snake_case` for functions/variables, `PascalCase` for types, `SCREAMING_SNAKE_CASE` for constants).
-  - Short generic English names (`path`, `stats`, `code`, `tests`, `output_dir`) stay as-is; avoid awkward long multi-word English concatenation.
-- **Mixed Chinese-English naming (Recommended)**:
-  - Use "Standard/API English anchor + Domain Chinese role" (e.g. Type `HttpRequest快照`, field `创建信息快照`/`补丁`; underlying spec field names remain English).
-  - Avoid awkward long English compound suffixes (e.g. `SwapchainCreateInfoSnapshot`) or literal translations of spec names.
-  - Self-check: type names resemble "Spec Name + Chinese Role", field names sound natural when spoken.
-- **Natural Localized Terminology (Strict)**:
-  - Express concepts in natural native terms; avoid literal translations of English architecture/graph jargon (e.g. `plane` -> `通路/管道` instead of `平面`; `edge` -> `关联/依赖` instead of `边/交叉边`; `node` -> `对象记录/条目`; `backpressure` -> `限流排队`; `provenance` -> `来源`).
-  - Self-check: read aloud as if explaining to a colleague; rephrase if it sounds like machine translation; keep spec/protocol proper nouns in English.
+- **Identifier style**:
+  - Chinese-containing identifiers do not enforce snake_case (e.g. `解析AST`), while pure ASCII identifiers follow standard Rust conventions (`snake_case` for functions/variables, `PascalCase` for types, `SCREAMING_SNAKE_CASE` for constants).
 - **Recommended dependencies**:
   - Prefer derive macros (such as `derive_more`) to automatically implement common traits and eliminate boilerplate.
 {%- endif %}
@@ -66,6 +66,14 @@
 - 提交信息遵守约定式提交：`type(scope): 标题`{% if options["commit_zh"] %}，type 用英文、标题正文用中文{% else %}，标题用英文{% endif %}{% if options["skills"] is undefined or 'commit' in options["skills"] %}（见 `.agents/skills/commit`）{% endif %}。
 {%- if options["commit_and_push"] %}
 - 任务收尾要求：修改完成并通过必要检查后，**必须主动提交代码并推送到远端仓库（commit & push）**，不要遗留未提交的改动。
+{%- endif %}
+{%- if options["chinese_programming"] %}
+
+### 中文编程规范
+
+- **中文化命名与通用保留**：文件名与变量名优先使用中文；简短通用英文（`code`、`tests`、`xml`、`existing`、`output_dir` 等）保持原样；避免冗长别扭的英文多词拼接（如 `wrapper_handle` 中文化为「包装线程句柄」）。
+- **中英拼接规范（推荐）**：采用「规范/API 英文锚点 + 领域中文角色」形式（例：类型 `HttpRequest快照`、`SwapchainCreateInfo快照`，字段 `创建信息快照` / `补丁`；底层规范原样字段保持英文）。禁止生造超长英文多词后缀（如 `SwapchainCreateInfoSnapshot`）或规范结构体硬译中文（如 `交换链创建信息拥有体`）。自检标准：类型名像「规范名 + 中文角色」、字段名像「同事会这么说」。
+- **中文本土化与母语自然表达（硬性）**：用母语自然词表达领域意思，禁止英文架构/图论/运维黑话逐词生硬直译（例：`plane`→`通路`/`管道`而非「平面」；`edge`→`关联`/`依赖`而非「边」/「交叉边」；`node`→`对象记录`/`条目`；`backpressure`→`限流排队`；`provenance`→`来源`）。自检：默念「给同事口述这个概念会不会这么说」，像机翻必须改名。文档、注释、提交信息、UI 文案与代码标识符同一标准；规范专名（Win32/Vulkan/Web/POSIX 等）保留英文。
 {%- endif %}
 {%- if options["skills"] is defined and options["skills"] | length > 0 %}
 
@@ -91,7 +99,7 @@
 - 《`Cargo.toml`、`.cargo/config.toml`、`rust-toolchain.toml` 由模板托管：改编译选项、工具链需同步模板（`pengj-templates-cli update`）。`src/main.rs` 归用户所有，模板更新不覆盖。
 {%- if options["chinese_programming"] %}
 
-### Rust 中文编程额外规范
+### Rust 中文编程特定规范
 
 - **文件与模块架构**：
   - 入口骨架文件（`main.rs`、`lib.rs`、`mod.rs`）及短英文入口目录保持标准，业务实现与工具类文件名优先使用中文。
@@ -99,16 +107,8 @@
     - 同级或子模块映射：`#[path = "配置/mod.rs"] pub mod 配置;` 或 `#[path = "创建.rs"] mod 创建;`
     - 映射到 ASCII 模块名：`#[path = "数据处理.rs"] mod data_processing;`
   - `Cargo.toml` 的 `name`、`[lib].name`、`[[bin]].name` 保持 ASCII（工具链兼容）。
-- **变量与命名惯例**：
-  - 业务标识符与注释优先使用中文；含中文标识符不强制蛇形（如 `解析AST`），纯英文标识符仍遵循 Rust 惯例（变量/函数 `snake_case`，类型 `PascalCase`，常量 `SCREAMING_SNAKE_CASE`）。
-  - 简短通用英文（如 `path`、`stats`、`code`、`tests`、`output_dir` 等）保持原样，避免冗长别扭的英文多词硬拼（如 `wrapper_handle` 中文化为「包装线程句柄」）。
-- **中英拼接规范（推荐）**：
-  - 采用「规范/API 英文锚点 + 领域中文角色」形式（例：类型 `HttpRequest快照`、`SwapchainCreateInfo快照`，字段 `创建信息快照` / `补丁`；底层规范原样字段保持英文）。
-  - 禁止生造超长英文多词后缀（如 `SwapchainCreateInfoSnapshot`）或规范结构体硬译中文（如 `交换链创建信息拥有体`）。
-  - 自检标准：类型名像「规范名 + 中文角色」、字段名符合母语自然表达。
-- **中文本土化与母语自然表达（硬性）**：
-  - 必须用母语自然词表达领域概念，禁止英文架构/图论/运维黑话逐词生硬直译（例：`plane`→`通路`/`管道`而非「平面」；`edge`→`关联`/`依赖`而非「边」/「交叉边」；`node`→`对象记录`/`条目`；`backpressure`→`限流排队`；`provenance`→`来源`）。
-  - 自检原则：默念「给同事口述这个概念会不会这么说」，具有机翻感的词必须重构；协议与第三方库原生专有名词保留英文。
+- **标识符风格与蛇形豁免**：
+  - 含中文标识符不强制蛇形（如 `解析AST`），纯英文标识符仍遵循 Rust 惯例（变量/函数 `snake_case`，类型 `PascalCase`，常量 `SCREAMING_SNAKE_CASE`）。
 - **推荐依赖**：
   - 优先利用派生宏（如 `derive_more` 等）自动派生常用 Trait，减少冗余样板代码。
 {%- endif %}

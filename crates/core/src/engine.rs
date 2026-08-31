@@ -4216,7 +4216,8 @@ mod tests {
         .unwrap();
         assert!(report.files.iter().any(|f| f == "AGENTS.md"));
         let zh_md = std::fs::read_to_string(tmp.join("cp_zh").join("AGENTS.md")).unwrap();
-        assert!(zh_md.contains("Rust 中文编程额外规范"));
+        assert!(zh_md.contains("### 中文编程规范"));
+        assert!(zh_md.contains("### Rust 中文编程特定规范"));
         assert!(zh_md.contains("中英拼接规范（推荐）"));
         assert!(zh_md.contains("中文本土化与母语自然表达（硬性）"));
         assert!(zh_md.contains("derive_more"));
@@ -4234,9 +4235,27 @@ mod tests {
         )
         .unwrap();
         let en_md = std::fs::read_to_string(tmp.join("cp_en").join("AGENTS.md")).unwrap();
-        assert!(en_md.contains("Rust Chinese-programming extras"));
+        assert!(en_md.contains("### Chinese programming conventions"));
+        assert!(en_md.contains("### Rust Chinese-programming specifics"));
         assert!(en_md.contains("Mixed Chinese-English naming (Recommended)"));
         assert!(en_md.contains("Natural Localized Terminology (Strict)"));
+
+        // 3. With chinese_programming = true (zh, agent layer ONLY, no rust layer)
+        let mut opts_non_rust = BTreeMap::new();
+        opts_non_rust.insert("chinese_programming".to_string(), serde_json::json!(true));
+        opts_non_rust.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        generate(
+            &templates,
+            "cp_agent_only",
+            &["agent".to_string()],
+            opts_non_rust,
+            &tmp,
+        )
+        .unwrap();
+        let agent_only_md =
+            std::fs::read_to_string(tmp.join("cp_agent_only").join("AGENTS.md")).unwrap();
+        assert!(agent_only_md.contains("### 中文编程规范"));
+        assert!(!agent_only_md.contains("Rust"));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
