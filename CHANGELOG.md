@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.5-beta.1...v0.22.0-beta.1) (2026-08-31)
+
+
+### Features
+
+* **templates:** 精简 AGENTS.md 规范、移除 codegraph 并支持自动提交推送选项 ([a7fe68a](https://github.com/pengjiaxusz/pengj-templates/commit/a7fe68a689c08c1c6f1f13fc1a1908c730bff103))
+
 ## [0.21.5-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.4-beta.1...v0.21.5-beta.1) (2026-08-28)
 
 
