@@ -99,6 +99,7 @@ function GenerateTab() {
   const [chinese, setChinese] = useState(false);
   const [skillLang, setSkillLang] = useState("zh");
   const [commitZh, setCommitZh] = useState(true);
+  const [commitAndPush, setCommitAndPush] = useState(false);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -157,6 +158,7 @@ function GenerateTab() {
           chinese_programming: chinese,
           skill_lang: skillLang,
           commit_zh: commitZh,
+          commit_and_push: commitAndPush,
           skills: [...selectedSkills],
         },
       });
@@ -320,7 +322,7 @@ function GenerateTab() {
                 ))}
               </div>
             )}
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <select
                 value={skillLang}
                 onChange={(e) => setSkillLang(e.target.value)}
@@ -335,6 +337,13 @@ function GenerateTab() {
                   onCheckedChange={(v) => setCommitZh(!!v)}
                 />
                 提交信息用中文
+              </label>
+              <label className="flex items-center gap-2">
+                <Checkbox
+                  checked={commitAndPush}
+                  onCheckedChange={(v) => setCommitAndPush(!!v)}
+                />
+                收尾时自动提交并推送
               </label>
             </div>
           </div>

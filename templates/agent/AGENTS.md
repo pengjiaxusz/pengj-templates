@@ -7,38 +7,33 @@
 ## General conventions
 
 - Commits follow Conventional Commits — {% if options["commit_zh"] %}type/scope in English, subject/body in Chinese{% else %}titles in English{% endif %}{% if options["skills"] is undefined or 'commit' in options["skills"] %} (see `.agents/skills/commit`){% endif %}.
-- Keep changes minimal and readable; match the existing style; reuse over reinvent.
-- When touching build/deps, docs, or public naming, self-check before finishing.
+{%- if options["commit_and_push"] %}
+- Task conclusion: Always run verification checks, commit changes following Conventional Commits, and push to the remote repository immediately before completing the task.
+{%- endif %}
+{%- if options["skills"] is defined and options["skills"] | length > 0 %}
 
-{% if options["skills"] is defined and options["skills"] | length > 0 %}
 ### Enabled skills
 
-{% for skill in options["skills"] %}
+{% for skill in options["skills"] -%}
 - `{{ skill }}` — see `.agents/skills/{{ skill }}/SKILL.md`
 {% endfor %}
-
 ### Skill extension convention
 
 - A skill file = managed framework + project-specific area: inside `SKILL.md`, the `PENGJ_TEMPLATE_START/END` block holds the template framework (replaced in place on update); **content outside the block belongs to the project** and is never touched by template updates.
 - Document-style customization (domain checklists, judgment tables, red lines) goes directly into the project-specific area outside the block — keep everything in one file so a single read yields all conventions; do not create external files.
 - Executable pre-commit gates are project-defined (any language, any tool — script, task runner, or plain checklist); document how to invoke them in the skill's project-specific area. The framework prescribes no implementation.
 - Legacy fully-custom skills (no managed block) are taken over automatically on adopt/update: the template page wins entirely (frontmatter incl. description is overwritten) and the original body moves down into a transition zone (temporary double flow). Merge domain differences into the project-specific area, then delete the zone.
-{% endif %}
+{%- endif %}
+{%- if 'rust' in layers or 'rust-workspace' in layers %}
 
-{% if 'codegraph' in layers %}
-## CodeGraph conventions
-
-- All code exploration and searching should prioritize the CodeGraph CLI (`codegraph explore`, `query`, `callers`, `callees`) over raw search.
-{% endif %}
-
-{% if 'rust' in layers or 'rust-workspace' in layers %}
 ## Rust conventions
 
 - Format: `cargo fmt`; CI uses `just fmt` (`cargo fmt --check`).
 - Lint: `cargo clippy --all-targets --all-features -- -D warnings` (`just check`); keep zero warnings.
 - Naming: variables/functions/modules `snake_case`, types/traits/enums `CamelCase`, constants `SCREAMING_SNAKE_CASE`.
 - Template-managed: `Cargo.toml`, `.cargo/config.toml`, `rust-toolchain.toml` — sync compile/toolchain changes via the template (`pengj-templates-cli update`). `src/main.rs` is user-owned and not overwritten on update.
-{% if options["chinese_programming"] %}
+{%- if options["chinese_programming"] %}
+
 ### Rust Chinese-programming extras
 
 - Identifiers and comments in business code may use Chinese; naming still follows snake_case (Chinese has no case).
@@ -51,9 +46,9 @@
   ```
 
 - `name`, `[lib].name`, `[[bin]].name` in `Cargo.toml` stay ASCII (poor tooling support for Chinese crate names); keep Chinese names as human-readable aliases or in comments.
-{% endif %}
-{% endif %}
-{% else %}
+{%- endif %}
+{%- endif %}
+{%- else %}
 # {{ project_name }} 编码规范
 
 > 供 AI 编码助手在修改本仓库时遵循。由 pengj-templates 的 `agent` 层按所选层与选项生成。
@@ -61,38 +56,33 @@
 ## 通用约定
 
 - 提交信息遵守约定式提交：`type(scope): 标题`{% if options["commit_zh"] %}，type 用英文、标题正文用中文{% else %}，标题用英文{% endif %}{% if options["skills"] is undefined or 'commit' in options["skills"] %}（见 `.agents/skills/commit`）{% endif %}。
-- 改动遵循最小化与可读性，先对齐仓库现有风格；能复用不新造。
-- 涉及构建/依赖、文档、公开命名时，改完先自检再收尾。
+{%- if options["commit_and_push"] %}
+- 任务收尾要求：修改完成并通过必要检查后，**必须主动提交代码并推送到远端仓库（commit & push）**，不要遗留未提交的改动。
+{%- endif %}
+{%- if options["skills"] is defined and options["skills"] | length > 0 %}
 
-{% if options["skills"] is defined and options["skills"] | length > 0 %}
 ### 启用的技能
 
-{% for skill in options["skills"] %}
+{% for skill in options["skills"] -%}
 - `{{ skill }}` —— 见 `.agents/skills/{{ skill }}/SKILL.md`
 {% endfor %}
-
 ### 技能扩展规范
 
 - 技能文件 = 托管框架 + 项目专属区：`SKILL.md` 中 `PENGJ_TEMPLATE_START/END` 托管块内是模板框架（更新时原位替换）；**块外内容归项目所有**，模板更新永不触碰。
 - 文档型定制（领域检查清单、判定表、红线）直接写在托管块外的项目专属区，保证单次读取即可获得全部约定，不要另建外部文件。
 - 可执行门禁的形式与位置由项目自定（任意语言脚本、task runner 或纯清单），并在项目专属区写明调用方式；框架不预设实现。
 - 存量的全自定义技能（无托管块）在纳管/更新时自动接管：以模板整页为准（frontmatter 含 description 一并覆盖），原正文下移为「纳管过渡区」（暂时双流程），由用户把领域差异合并进项目专属区后删除过渡区。
-{% endif %}
+{%- endif %}
+{%- if 'rust' in layers or 'rust-workspace' in layers %}
 
-{% if 'codegraph' in layers %}
-## CodeGraph 知识图谱约定
-
-- 代码探索与搜索优先使用 CodeGraph CLI（`codegraph explore`、`query`、`callers`、`callees`），提升结构理解效率。
-{% endif %}
-
-{% if 'rust' in layers or 'rust-workspace' in layers %}
 ## Rust 编码规范
 
 - 格式化：`cargo fmt`；CI 用 `just fmt`（`cargo fmt --check`）。
 - 静态检查：`cargo clippy --all-targets --all-features -- -D warnings`（`just check`），保持 warnings 清零。
 - 命名：变量/函数/模块 `snake_case`，类型/特征/枚举 `CamelCase`，常量 `SCREAMING_SNAKE_CASE`。
 - 《`Cargo.toml`、`.cargo/config.toml`、`rust-toolchain.toml` 由模板托管：改编译选项、工具链需同步模板（`pengj-templates-cli update`）。`src/main.rs` 归用户所有，模板更新不覆盖。
-{% if options["chinese_programming"] %}
+{%- if options["chinese_programming"] %}
+
 ### Rust 中文编程额外规范
 
 - 业务代码的**标识符与注释可以使用中文**；命名仍遵循 snake_case（中文无大小写之分）。
@@ -105,9 +95,11 @@
   ```
 
 - `Cargo.toml` 的 `name`、`[lib].name`、`[[bin]].name` 保持 ASCII（工具链对中文 crate 名兼容差）；中文名可用作 `[lib].name` 之外的人读别名，或写在注释里。
-{% endif %}
-{% endif %}
-{% endif %}
+{%- endif %}
+{%- endif %}
+{%- endif %}
 <!-- PENGJ_TEMPLATE_END -->
 
 <!-- 项目专属规范可写在下方（锚点之外），模板更新时将完整保留用户内容 -->
+
+

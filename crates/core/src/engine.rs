@@ -366,6 +366,7 @@ fn dummy_skill_ctx() -> RenderContext {
     for (k, v) in [
         ("skill_lang", serde_json::json!("zh")),
         ("commit_zh", serde_json::json!(true)),
+        ("commit_and_push", serde_json::json!(false)),
         ("chinese_programming", serde_json::json!(false)),
         ("edition", serde_json::json!("2021")),
         ("channel", serde_json::json!("stable")),
@@ -756,6 +757,18 @@ pub fn generate(
         std::fs::create_dir_all(&target)?;
     }
 
+    let mut options = options;
+    if ordered.iter().any(|l| l == "agent") && !options.contains_key("skills") {
+        let all_skills: Vec<String> = templates
+            .list_skills()?
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        if !all_skills.is_empty() {
+            options.insert("skills".to_string(), serde_json::json!(all_skills));
+        }
+    }
+
     let ctx = RenderContext::new(project_name, ordered.clone(), options.clone());
     let fm = templates.build_file_map(&ordered, &options)?;
     let bytes_map = render_file_map(&fm, &ctx, &target)?;
@@ -1050,6 +1063,18 @@ pub fn adopt_project(
         .unwrap_or_else(|| "project".to_string());
 
     let ordered = templates.resolve_layers(selected)?;
+    let mut options = options;
+    if ordered.iter().any(|l| l == "agent") && !options.contains_key("skills") {
+        let all_skills: Vec<String> = templates
+            .list_skills()?
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        if !all_skills.is_empty() {
+            options.insert("skills".to_string(), serde_json::json!(all_skills));
+        }
+    }
+
     let ctx = RenderContext::new(&project_name, ordered.clone(), options.clone());
     let fm = templates.build_file_map(&ordered, &options)?;
     let bytes_map = render_file_map(&fm, &ctx, project_dir)?;
@@ -1316,7 +1341,24 @@ pub struct UpdateReport {
 /// - 层声明的 `update_ignore` 黑名单文件 -> 完全跳过（不覆盖/不冲突/不删除上报），归用户所有
 pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<UpdateReport> {
     let mut manifest = ProjectManifest::load(project_dir)?;
-    let ordered = templates.resolve_layers(&manifest.layers)?;
+    // 过滤掉已从模板中移除/废弃的层，保留当前模板仍支持的层
+    let metas = templates.layer_metas()?;
+    let valid_layers: Vec<String> = manifest
+        .layers
+        .into_iter()
+        .filter(|l| metas.contains_key(l))
+        .collect();
+    let ordered = templates.resolve_layers(&valid_layers)?;
+    if ordered.iter().any(|l| l == "agent") && !manifest.options.contains_key("skills") {
+        if let Ok(skills) = templates.list_skills() {
+            let all_skills: Vec<String> = skills.into_iter().map(|s| s.name).collect();
+            if !all_skills.is_empty() {
+                manifest
+                    .options
+                    .insert("skills".to_string(), serde_json::json!(all_skills));
+            }
+        }
+    }
     let ctx = RenderContext::new(
         &manifest.project_name,
         ordered.clone(),
@@ -1563,6 +1605,7 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
         );
     }
 
+    manifest.layers = ordered.clone();
     manifest.files = new_files;
     manifest.save(project_dir)?;
 
@@ -4029,5 +4072,120 @@ mod tests {
         let mut fresh = serde_json::json!({});
         merge_json(&mut fresh, &incoming, true);
         assert_eq!(fresh["scripts"]["prepare"], "tpl-prepare");
+    }
+
+    #[test]
+    fn generate_and_update_populates_default_skills_when_missing() {
+        let tmp = std::env::temp_dir().join(format!("pengj-skills-pop-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(
+            tpl.join("agent")
+                .join(".agents")
+                .join("skills")
+                .join("commit"),
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("agent").join("layer.toml"),
+            "name = \"Agent\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("agent")
+                .join(".agents")
+                .join("skills")
+                .join("commit")
+                .join("SKILL.md"),
+            "---\nname: commit\ndescription: 提交技能\n---\n# Commit\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("agent").join("AGENTS.md"),
+            "<!-- PENGJ_TEMPLATE_START -->\n{% if options[\"skills\"] is defined %}{% for s in options[\"skills\"] %}- {{ s }}\n{% endfor %}{% endif %}<!-- PENGJ_TEMPLATE_END -->\n",
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let out_dir = tmp.join("out");
+        std::fs::create_dir_all(&out_dir).unwrap();
+
+        // 1. generate without "skills" in options
+        let report = generate(
+            &templates,
+            "demo",
+            &["agent".to_string()],
+            BTreeMap::new(),
+            &out_dir,
+        )
+        .unwrap();
+        assert!(report.files.iter().any(|f| f.contains("commit")));
+
+        let agents_md = std::fs::read_to_string(out_dir.join("demo").join("AGENTS.md")).unwrap();
+        assert!(
+            agents_md.contains("- commit"),
+            "AGENTS.md 应渲染出默认补全的 commit 技能"
+        );
+
+        let manifest = ProjectManifest::load(&out_dir.join("demo")).unwrap();
+        assert_eq!(manifest.options["skills"], serde_json::json!(["commit"]));
+
+        // 2. update should also preserve or backfill skills
+        let upd_report = update_project(&templates, &out_dir.join("demo")).unwrap();
+        assert_eq!(
+            upd_report.unchanged + upd_report.updated.len(),
+            manifest.files.len()
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn commit_and_push_option_renders_task_conclusion_rule() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+        let tmp = std::env::temp_dir().join(format!("pengj-cap-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 1. With commit_and_push = true (zh)
+        let mut opts = BTreeMap::new();
+        opts.insert("commit_and_push".to_string(), serde_json::json!(true));
+        opts.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        let report = generate(&templates, "zh_proj", &["agent".to_string()], opts, &tmp).unwrap();
+        assert!(report.files.iter().any(|f| f == "AGENTS.md"));
+        let zh_md = std::fs::read_to_string(tmp.join("zh_proj").join("AGENTS.md")).unwrap();
+        assert!(zh_md.contains("必须主动提交代码并推送到远端仓库（commit & push）"));
+
+        // 2. With commit_and_push = true (en)
+        let mut opts_en = BTreeMap::new();
+        opts_en.insert("commit_and_push".to_string(), serde_json::json!(true));
+        opts_en.insert("skill_lang".to_string(), serde_json::json!("en"));
+        generate(&templates, "en_proj", &["agent".to_string()], opts_en, &tmp).unwrap();
+        let en_md = std::fs::read_to_string(tmp.join("en_proj").join("AGENTS.md")).unwrap();
+        assert!(en_md.contains("Task conclusion: Always run verification checks, commit changes"));
+
+        // 3. With commit_and_push = false (zh)
+        let mut opts_off = BTreeMap::new();
+        opts_off.insert("commit_and_push".to_string(), serde_json::json!(false));
+        generate(
+            &templates,
+            "off_proj",
+            &["agent".to_string()],
+            opts_off,
+            &tmp,
+        )
+        .unwrap();
+        let off_md = std::fs::read_to_string(tmp.join("off_proj").join("AGENTS.md")).unwrap();
+        assert!(!off_md.contains("commit & push"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

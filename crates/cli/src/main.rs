@@ -67,6 +67,9 @@ enum Command {
         /// 提交信息是否用中文（仅 agent 层生效；默认开，传 --no-commit-zh 关闭）
         #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
         commit_zh: bool,
+        /// 任务收尾时是否要求自动提交并推送（仅 agent 层生效；默认关，传 --commit-and-push 开启）
+        #[arg(long = "commit-and-push", default_value_t = false)]
+        commit_and_push: bool,
         /// 选择的技能（仅 agent 层生效），逗号分隔如 commit,caveman,grill-me；默认全部
         #[arg(long, value_delimiter = ',')]
         skills: Option<Vec<String>>,
@@ -112,6 +115,9 @@ enum Command {
         /// 提交信息是否用中文（默认开，传 --no-commit-zh 关闭）
         #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
         commit_zh: bool,
+        /// 任务收尾时是否要求自动提交并推送（默认关，传 --commit-and-push 开启）
+        #[arg(long = "commit-and-push", default_value_t = false)]
+        commit_and_push: bool,
         /// 选择的技能，逗号分隔如 commit,caveman；默认全部
         #[arg(long, value_delimiter = ',')]
         skills: Option<Vec<String>>,
@@ -133,6 +139,7 @@ fn main() -> anyhow::Result<()> {
             chinese,
             skill_lang,
             commit_zh,
+            commit_and_push,
             skills,
             output,
         } => cmd_create(
@@ -146,6 +153,7 @@ fn main() -> anyhow::Result<()> {
             chinese,
             &skill_lang,
             commit_zh,
+            commit_and_push,
             skills.as_deref(),
             &output,
         ),
@@ -161,6 +169,7 @@ fn main() -> anyhow::Result<()> {
             chinese,
             skill_lang,
             commit_zh,
+            commit_and_push,
             skills,
         } => cmd_adopt(
             &templates,
@@ -174,6 +183,7 @@ fn main() -> anyhow::Result<()> {
             chinese,
             &skill_lang,
             commit_zh,
+            commit_and_push,
             skills.as_deref(),
         ),
     }
@@ -216,6 +226,7 @@ fn cmd_create(
     chinese: bool,
     skill_lang: &str,
     commit_zh: bool,
+    commit_and_push: bool,
     skills: Option<&[String]>,
     output: &Path,
 ) -> anyhow::Result<()> {
@@ -273,6 +284,7 @@ fn cmd_create(
             serde_json::Value::String(skill_lang.to_string()),
         ),
         ("commit_zh", serde_json::Value::Bool(commit_zh)),
+        ("commit_and_push", serde_json::Value::Bool(commit_and_push)),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))
@@ -335,6 +347,7 @@ fn cmd_adopt(
     chinese: bool,
     skill_lang: &str,
     commit_zh: bool,
+    commit_and_push: bool,
     skills: Option<&[String]>,
 ) -> anyhow::Result<()> {
     if layers.is_empty() {
@@ -373,6 +386,7 @@ fn cmd_adopt(
             serde_json::Value::String(skill_lang.to_string()),
         ),
         ("commit_zh", serde_json::Value::Bool(commit_zh)),
+        ("commit_and_push", serde_json::Value::Bool(commit_and_push)),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))

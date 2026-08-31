@@ -99,25 +99,16 @@
 ## 通用约定
 
 - 提交信息遵守约定式提交：`type(scope): 标题`，type 用英文、标题正文用中文（见 `.agents/skills/commit`）。
-- 改动遵循最小化与可读性，先对齐仓库现有风格；能复用不新造。
-- 涉及构建/依赖、文档、公开命名时，改完先自检再收尾。
-
+- 任务收尾要求：修改完成并通过必要检查后，**必须主动提交代码并推送到远端仓库（commit & push）**，不要遗留未提交的改动。
 
 ### 启用的技能
 
-
 - `commit` —— 见 `.agents/skills/commit/SKILL.md`
-
 - `arch-align` —— 见 `.agents/skills/arch-align/SKILL.md`
-
 - `branch-sync` —— 见 `.agents/skills/branch-sync/SKILL.md`
-
 - `caveman` —— 见 `.agents/skills/caveman/SKILL.md`
-
 - `grill-me` —— 见 `.agents/skills/grill-me/SKILL.md`
-
 - `write-a-skill` —— 见 `.agents/skills/write-a-skill/SKILL.md`
-
 
 ### 技能扩展规范
 
@@ -126,17 +117,10 @@
 - 可执行门禁的形式与位置由项目自定（任意语言脚本、task runner 或纯清单），并在项目专属区写明调用方式；框架不预设实现。
 - 存量的全自定义技能（无托管块）在纳管/更新时自动接管：以模板整页为准（frontmatter 含 description 一并覆盖），原正文下移为「纳管过渡区」（暂时双流程），由用户把领域差异合并进项目专属区后删除过渡区。
 
-
-
-
-
 ## Rust 编码规范
 
 - 格式化：`cargo fmt`；CI 用 `just fmt`（`cargo fmt --check`）。
 - 静态检查：`cargo clippy --all-targets --all-features -- -D warnings`（`just check`），保持 warnings 清零。
 - 命名：变量/函数/模块 `snake_case`，类型/特征/枚举 `CamelCase`，常量 `SCREAMING_SNAKE_CASE`。
 - 《`Cargo.toml`、`.cargo/config.toml`、`rust-toolchain.toml` 由模板托管：改编译选项、工具链需同步模板（`pengj-templates-cli update`）。`src/main.rs` 归用户所有，模板更新不覆盖。
-
-
-
 <!-- PENGJ_TEMPLATE_END -->
