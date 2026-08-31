@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.22.0-beta.1...v0.23.0-beta.1) (2026-08-31)
+
+
+### Features
+
+* **templates:** 丰富并通用化 Rust 中文编程与本土化命名规范 ([2c5afae](https://github.com/pengjiaxusz/pengj-templates/commit/2c5afae0618a0f8905272e9a2978eb4b3bcc8046))
+
 ## [0.22.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.21.5-beta.1...v0.22.0-beta.1) (2026-08-31)
 
 
