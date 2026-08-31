@@ -36,16 +36,24 @@
 
 ### Rust Chinese-programming extras
 
-- Identifiers and comments in business code may use Chinese; naming still follows snake_case (Chinese has no case).
-- `mod` names and `bin`/`lib` crate names MUST be ASCII: rustc/Cargo tooling has poor support for Chinese module and crate names.
-- A Chinese-named source file cannot be used directly as a `mod`; map it to an ASCII `mod` with `#[path]`:
-
-  ```rust
-  #[path = "数据处理.rs"]
-  mod data_processing;
-  ```
-
-- `name`, `[lib].name`, `[[bin]].name` in `Cargo.toml` stay ASCII (poor tooling support for Chinese crate names); keep Chinese names as human-readable aliases or in comments.
+- **Files & Modules**:
+  - Entry files (`main.rs`, `lib.rs`, `mod.rs`) and concise top-level directory names stay ASCII; business implementation and helper file names prefer Chinese.
+  - Chinese-named source files map to modules via explicit `#[path]` attributes:
+    - Submodule mapping: `#[path = "配置/mod.rs"] pub mod 配置;` or `#[path = "创建.rs"] mod 创建;`
+    - Mapping to ASCII mod names: `#[path = "数据处理.rs"] mod data_processing;`
+  - `name`, `[lib].name`, `[[bin]].name` in `Cargo.toml` stay ASCII for tooling compatibility.
+- **Identifiers & Naming**:
+  - Domain identifiers and comments prefer Chinese; Chinese-containing identifiers do not enforce snake_case (e.g. `解析AST`), while pure ASCII identifiers follow standard Rust conventions (`snake_case` for functions/variables, `PascalCase` for types, `SCREAMING_SNAKE_CASE` for constants).
+  - Short generic English names (`path`, `stats`, `code`, `tests`, `output_dir`) stay as-is; avoid awkward long multi-word English concatenation.
+- **Mixed Chinese-English naming (Recommended)**:
+  - Use "Standard/API English anchor + Domain Chinese role" (e.g. Type `HttpRequest快照`, field `创建信息快照`/`补丁`; underlying spec field names remain English).
+  - Avoid awkward long English compound suffixes (e.g. `SwapchainCreateInfoSnapshot`) or literal translations of spec names.
+  - Self-check: type names resemble "Spec Name + Chinese Role", field names sound natural when spoken.
+- **Natural Localized Terminology (Strict)**:
+  - Express concepts in natural native terms; avoid literal translations of English architecture/graph jargon (e.g. `plane` -> `通路/管道` instead of `平面`; `edge` -> `关联/依赖` instead of `边/交叉边`; `node` -> `对象记录/条目`; `backpressure` -> `限流排队`; `provenance` -> `来源`).
+  - Self-check: read aloud as if explaining to a colleague; rephrase if it sounds like machine translation; keep spec/protocol proper nouns in English.
+- **Recommended dependencies**:
+  - Prefer derive macros (such as `derive_more`) to automatically implement common traits and eliminate boilerplate.
 {%- endif %}
 {%- endif %}
 {%- else %}
@@ -85,16 +93,24 @@
 
 ### Rust 中文编程额外规范
 
-- 业务代码的**标识符与注释可以使用中文**；命名仍遵循 snake_case（中文无大小写之分）。
-- **`mod` 名与 `bin`/`lib` 的 crate 名必须用 ASCII**：rustc/Cargo 各子工具对中文模块名与 crate 名兼容差。
-- 中文命名的源文件不能直接作 `mod` 名，需用 `#[path]` 映射到 ASCII `mod` 名：
-
-  ```rust
-  #[path = "数据处理.rs"]
-  mod data_processing;
-  ```
-
-- `Cargo.toml` 的 `name`、`[lib].name`、`[[bin]].name` 保持 ASCII（工具链对中文 crate 名兼容差）；中文名可用作 `[lib].name` 之外的人读别名，或写在注释里。
+- **文件与模块架构**：
+  - 入口骨架文件（`main.rs`、`lib.rs`、`mod.rs`）及短英文入口目录保持标准，业务实现与工具类文件名优先使用中文。
+  - 中文命名的源文件通过 `#[path]` 显式映射到模块：
+    - 同级或子模块映射：`#[path = "配置/mod.rs"] pub mod 配置;` 或 `#[path = "创建.rs"] mod 创建;`
+    - 映射到 ASCII 模块名：`#[path = "数据处理.rs"] mod data_processing;`
+  - `Cargo.toml` 的 `name`、`[lib].name`、`[[bin]].name` 保持 ASCII（工具链兼容）。
+- **变量与命名惯例**：
+  - 业务标识符与注释优先使用中文；含中文标识符不强制蛇形（如 `解析AST`），纯英文标识符仍遵循 Rust 惯例（变量/函数 `snake_case`，类型 `PascalCase`，常量 `SCREAMING_SNAKE_CASE`）。
+  - 简短通用英文（如 `path`、`stats`、`code`、`tests`、`output_dir` 等）保持原样，避免冗长别扭的英文多词硬拼（如 `wrapper_handle` 中文化为「包装线程句柄」）。
+- **中英拼接规范（推荐）**：
+  - 采用「规范/API 英文锚点 + 领域中文角色」形式（例：类型 `HttpRequest快照`、`SwapchainCreateInfo快照`，字段 `创建信息快照` / `补丁`；底层规范原样字段保持英文）。
+  - 禁止生造超长英文多词后缀（如 `SwapchainCreateInfoSnapshot`）或规范结构体硬译中文（如 `交换链创建信息拥有体`）。
+  - 自检标准：类型名像「规范名 + 中文角色」、字段名符合母语自然表达。
+- **中文本土化与母语自然表达（硬性）**：
+  - 必须用母语自然词表达领域概念，禁止英文架构/图论/运维黑话逐词生硬直译（例：`plane`→`通路`/`管道`而非「平面」；`edge`→`关联`/`依赖`而非「边」/「交叉边」；`node`→`对象记录`/`条目`；`backpressure`→`限流排队`；`provenance`→`来源`）。
+  - 自检原则：默念「给同事口述这个概念会不会这么说」，具有机翻感的词必须重构；协议与第三方库原生专有名词保留英文。
+- **推荐依赖**：
+  - 优先利用派生宏（如 `derive_more` 等）自动派生常用 Trait，减少冗余样板代码。
 {%- endif %}
 {%- endif %}
 {%- endif %}

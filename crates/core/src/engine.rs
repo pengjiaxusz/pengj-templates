@@ -4188,4 +4188,56 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
+
+    #[test]
+    fn chinese_programming_option_renders_generalized_rules() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+        let tmp = std::env::temp_dir().join(format!("pengj-cp-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 1. With chinese_programming = true (zh, rust layer)
+        let mut opts = BTreeMap::new();
+        opts.insert("chinese_programming".to_string(), serde_json::json!(true));
+        opts.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        let report = generate(
+            &templates,
+            "cp_zh",
+            &["agent".to_string(), "rust".to_string()],
+            opts,
+            &tmp,
+        )
+        .unwrap();
+        assert!(report.files.iter().any(|f| f == "AGENTS.md"));
+        let zh_md = std::fs::read_to_string(tmp.join("cp_zh").join("AGENTS.md")).unwrap();
+        assert!(zh_md.contains("Rust 中文编程额外规范"));
+        assert!(zh_md.contains("中英拼接规范（推荐）"));
+        assert!(zh_md.contains("中文本土化与母语自然表达（硬性）"));
+        assert!(zh_md.contains("derive_more"));
+
+        // 2. With chinese_programming = true (en, rust layer)
+        let mut opts_en = BTreeMap::new();
+        opts_en.insert("chinese_programming".to_string(), serde_json::json!(true));
+        opts_en.insert("skill_lang".to_string(), serde_json::json!("en"));
+        generate(
+            &templates,
+            "cp_en",
+            &["agent".to_string(), "rust".to_string()],
+            opts_en,
+            &tmp,
+        )
+        .unwrap();
+        let en_md = std::fs::read_to_string(tmp.join("cp_en").join("AGENTS.md")).unwrap();
+        assert!(en_md.contains("Rust Chinese-programming extras"));
+        assert!(en_md.contains("Mixed Chinese-English naming (Recommended)"));
+        assert!(en_md.contains("Natural Localized Terminology (Strict)"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }
