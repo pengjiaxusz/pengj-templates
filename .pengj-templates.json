@@ -21,6 +21,7 @@
       "branch-sync",
       "caveman",
       "grill-me",
+      "template-sync",
       "write-a-skill"
     ],
     "use_lld": true,
@@ -33,16 +34,17 @@
     ".agents\\skills\\arch-align\\references\\GENERATE-INDEX.md": "8631df67a99bc9eb96096b4edc28d050e1d63151ef6f05be545ba37fb73396bb",
     ".agents\\skills\\branch-sync\\SKILL.md": "2ebc99a72adc8baeb726fd0e81554b75fc935148d4d6de037175da9bf426fbd6",
     ".agents\\skills\\caveman\\SKILL.md": "e66fa0ab7e8227de3d64819029a113a79d0323ed86a5c463dca1b0ad1893ea34",
-    ".agents\\skills\\commit\\SKILL.md": "0e42538126038bd49da36f00afbed1d2db339137a09927b525a97c6d200e0926",
+    ".agents\\skills\\commit\\SKILL.md": "b577b5ff7e2b40f895c35e8933e2af707b7416824f3de8fd3e06c59249f77f70",
     ".agents\\skills\\grill-me\\SKILL.md": "92ec2b94d00e57723e9ae8c5f79a85077b43874a7f8fe63a5fa4780ea9d4edb8",
+    ".agents\\skills\\template-sync\\SKILL.md": "bf5ca9fa762a61209f00a52e2a5a5e1cf99730f046c3abad205ef614efac61ac",
     ".agents\\skills\\write-a-skill\\SKILL.md": "36c18c4cdb1a5b21a19b5d9e09010d9e34876ef8b8b663b33fd3cd4add6a433a",
     ".cargo\\config.toml": "1b06aced2448d86dc3dffeba01ffac746b65059315367c4d54e5801e5af7b98d",
     ".gitattributes": "b5099197608cab315182fadad3cdf0e06ad5ab9b21f3decf8ace9e328cb9a121",
     ".gitignore": "d6994127ac82b65c180fd075f68ee31cb9cfeb84a9204dc87a7390dc117b484d",
-    "AGENTS.md": "7720eb836594eed12a92804ef4a6d98c608cbd79271094cbcce1b7db3101fc9c",
+    "AGENTS.md": "b2065949a7b02581dabab794b6d9189c3f8e7a2f379cf1064da3c551315697c7",
     "commitlint.base.js": "36309c80b331b643c5800d5e9babb5b03a85811b5fb1e9c6cc5ca940248ed40b",
     "lefthook.yml": "474928a3a7d11adbcbc34bea445ea4f94808c101eb9e0b86e2695582934276f7",
-    "package.json": "136d7093a2db73b1d40aa64aa7092653a3d2eb54f13fc9a185521b7fa752eca8",
+    "package.json": "5bb90189802b3cad37483f5f1e5ed678048dd2466745ee499e51112fb4230c62",
     "pnpm-workspace.yaml": "dcfc70ea14a010b49505cde45889be59c70c575335efbfecac69553c8d068a0e"
   }
 }
