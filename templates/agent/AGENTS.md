@@ -8,7 +8,8 @@
 
 - Commits follow Conventional Commits — {% if options["commit_zh"] %}type/scope in English, subject/body in Chinese{% else %}titles in English{% endif %}{% if options["skills"] is undefined or 'commit' in options["skills"] %} (see `.agents/skills/commit`){% endif %}.
 {%- if options["commit_and_push"] %}
-- Task conclusion: Always run verification checks, commit changes following Conventional Commits, and push to the remote repository immediately before completing the task.
+- **Milestone completion commit (Mandatory)**: Whenever an independent feature, refactoring step, or bug fix is completed and verified (passing tests/checks), **do not accumulate uncommitted changes in the working directory. You MUST immediately run the commit workflow (completeness checks, split commits, and `git push`)** before reporting back to the user or proceeding to the next step/task. Never defer committing until the end of a multi-turn conversation or wait for the user to prompt `/commit`.
+- **Task conclusion**: Always run verification checks, commit changes following Conventional Commits, and push to the remote repository immediately before completing the task.
 {%- endif %}
 {%- if options["chinese_programming"] %}
 
@@ -65,6 +66,7 @@
 
 - 提交信息遵守约定式提交：`type(scope): 标题`{% if options["commit_zh"] %}，type 用英文、标题正文用中文{% else %}，标题用英文{% endif %}{% if options["skills"] is undefined or 'commit' in options["skills"] %}（见 `.agents/skills/commit`）{% endif %}。
 {%- if options["commit_and_push"] %}
+- **阶段性完工即提交（硬性）**：每当完成一个独立的功能点、阶段性重构或 Bug 修复并通过必要验证后，**禁止将改动堆积在工作区，必须立即主动运行提交流程（检查、拆分、提交并 push）**，然后再向用户汇报或进入下一个任务/步骤；严禁在多轮对话中拖延至最后或等待用户催促 `/commit`。
 - 任务收尾要求：修改完成并通过必要检查后，**必须主动提交代码并推送到远端仓库（commit & push）**，不要遗留未提交的改动。
 {%- endif %}
 {%- if options["chinese_programming"] %}

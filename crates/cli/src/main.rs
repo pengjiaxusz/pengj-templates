@@ -67,7 +67,7 @@ enum Command {
         /// 提交信息是否用中文（仅 agent 层生效；默认开，传 --no-commit-zh 关闭）
         #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
         commit_zh: bool,
-        /// 任务收尾时是否要求自动提交并推送（仅 agent 层生效；默认关，传 --commit-and-push 开启）
+        /// 阶段性完工与收尾时是否要求自动提交并推送（仅 agent 层生效；默认关，传 --commit-and-push 开启）
         #[arg(long = "commit-and-push", default_value_t = false)]
         commit_and_push: bool,
         /// 选择的技能（仅 agent 层生效），逗号分隔如 commit,caveman,grill-me；默认全部
@@ -115,7 +115,7 @@ enum Command {
         /// 提交信息是否用中文（默认开，传 --no-commit-zh 关闭）
         #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
         commit_zh: bool,
-        /// 任务收尾时是否要求自动提交并推送（默认关，传 --commit-and-push 开启）
+        /// 阶段性完工与收尾时是否要求自动提交并推送（默认关，传 --commit-and-push 开启）
         #[arg(long = "commit-and-push", default_value_t = false)]
         commit_and_push: bool,
         /// 选择的技能，逗号分隔如 commit,caveman；默认全部

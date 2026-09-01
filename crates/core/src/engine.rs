@@ -4162,6 +4162,7 @@ mod tests {
         let report = generate(&templates, "zh_proj", &["agent".to_string()], opts, &tmp).unwrap();
         assert!(report.files.iter().any(|f| f == "AGENTS.md"));
         let zh_md = std::fs::read_to_string(tmp.join("zh_proj").join("AGENTS.md")).unwrap();
+        assert!(zh_md.contains("阶段性完工即提交（硬性）"));
         assert!(zh_md.contains("必须主动提交代码并推送到远端仓库（commit & push）"));
 
         // 2. With commit_and_push = true (en)
@@ -4170,7 +4171,10 @@ mod tests {
         opts_en.insert("skill_lang".to_string(), serde_json::json!("en"));
         generate(&templates, "en_proj", &["agent".to_string()], opts_en, &tmp).unwrap();
         let en_md = std::fs::read_to_string(tmp.join("en_proj").join("AGENTS.md")).unwrap();
-        assert!(en_md.contains("Task conclusion: Always run verification checks, commit changes"));
+        assert!(en_md.contains("Milestone completion commit (Mandatory)"));
+        assert!(
+            en_md.contains("**Task conclusion**: Always run verification checks, commit changes")
+        );
 
         // 3. With commit_and_push = false (zh)
         let mut opts_off = BTreeMap::new();

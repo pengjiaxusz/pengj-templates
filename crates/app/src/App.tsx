@@ -343,7 +343,7 @@ function GenerateTab() {
                   checked={commitAndPush}
                   onCheckedChange={(v) => setCommitAndPush(!!v)}
                 />
-                收尾时自动提交并推送
+                阶段性完工/收尾时自动提交并推送
               </label>
             </div>
           </div>

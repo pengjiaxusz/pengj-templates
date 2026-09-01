@@ -19,10 +19,11 @@
 - 约定式提交：`type(scope): 中文标题`（type/scope 英文、标题正文中文）。
 - type：`feat fix docs style refactor perf test build ci chore revert`。
 - scope 白名单见 `commitlint.config.js`：`agent app cli core ci templates main`；无合适 scope 时省略；需要新 scope 时按 commit 技能流程更新白名单。
+- **阶段性完工即提交（硬性）**：每当完成一个独立的功能点、重构或 Bug 修复并通过必要验证后，禁止将改动堆积在工作区，必须立即主动运行提交流程（检查、拆分、提交并 git push），然后再向用户汇报或进入下一个任务；严禁等待多轮对话全部结束或等待用户发送 `/commit` 指令才集中提交。
 - 提交前跑「提交前完整性检查」（构建验证 / 文档同步 / 格式与命名）；无关改动拆分多次提交；**提交后立即 push**。
 - 提交由 lefthook + commitlint 校验，格式不符会被拦截。
 
-> EN: Conventional commits, Chinese subject. Type/scope whitelisted (see commitlint.config.js). Split unrelated changes; push immediately after commit; hooks enforce format.
+> EN: Conventional commits, Chinese subject. Type/scope whitelisted (see commitlint.config.js). Milestone completion commit: commit & push immediately after each subtask/bugfix. Split unrelated changes; push immediately after commit; hooks enforce format.
 
 ## Rust 规范 / Rust (crates/core, crates/cli, src-tauri)
 
@@ -99,6 +100,7 @@
 ## 通用约定
 
 - 提交信息遵守约定式提交：`type(scope): 标题`，type 用英文、标题正文用中文（见 `.agents/skills/commit`）。
+- **阶段性完工即提交（硬性）**：每当完成一个独立的功能点、阶段性重构或 Bug 修复并通过必要验证后，**禁止将改动堆积在工作区，必须立即主动运行提交流程（检查、拆分、提交并 push）**，然后再向用户汇报或进入下一个任务/步骤；严禁在多轮对话中拖延至最后或等待用户催促 `/commit`。
 - 任务收尾要求：修改完成并通过必要检查后，**必须主动提交代码并推送到远端仓库（commit & push）**，不要遗留未提交的改动。
 
 ### 启用的技能
