@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.24.0-beta.1...v0.25.0-beta.1) (2026-09-01)
+
+
+### Features
+
+* **agent:** 新增 template-sync 模板同步与项目纳管技能 ([e68c1bc](https://github.com/pengjiaxusz/pengj-templates/commit/e68c1bcb2874b1b0ce3ef3116c7797ec13645a6a))
+
 ## [0.24.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.23.0-beta.1...v0.24.0-beta.1) (2026-09-01)
 
 
