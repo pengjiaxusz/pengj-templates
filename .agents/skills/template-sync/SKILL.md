@@ -68,7 +68,7 @@ cargo run -p pengj-templates-cli -- adopt <目标项目目录> --layers <层1,�
 - **配置与工具链接线核验**：
   - 检查 `commitlint.base.js` 自动接线、`.vscode/settings.json`、`.cargo/config.toml` 合并是否符合预期。
 
-### 4. 验证与提交
+### 4. 验证与按需精准提交
 
 1. 进入目标项目目录，执行对应技术栈的验证检查：
    ```powershell
@@ -77,7 +77,10 @@ cargo run -p pengj-templates-cli -- adopt <目标项目目录> --layers <层1,�
    # 如前端项目
    pnpm build
    ```
-2. 按照阶段性完工要求，触发 `commit` 技能完成提交并推送。
+2. **提交策略与精准提交流程**：
+   - **默认不提交**：执行 `update` 或 `adopt` 后，默认仅在工作区完成更新与核验，**不要自动提交**，等待用户确认或显式指令。
+   - **用户要求提交时的精准提交（红线）**：当用户明确要求提交时，**只能单独 `git add <file>` 本次模板同步/纳管所修改或新增的文件**（严格对照 update 报告清单），**严禁 `git add .` 或 `git commit -a`**，防止误将工作区既有的无关改动或脏文件一并带入提交。
+   - 提交信息采用约定式提交（如 `chore(templates): 同步上游模板更新` 或 `chore(templates): 纳管项目分层模板`），并在提交后推送。
 
 <!-- PENGJ_TEMPLATE_END -->
 
