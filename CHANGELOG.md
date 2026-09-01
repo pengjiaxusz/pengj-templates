@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.24.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.23.0-beta.1...v0.24.0-beta.1) (2026-09-01)
+
+
+### Features
+
+* **agent:** 增加阶段性完工即提交硬性约束与触发时机规范 ([b189c87](https://github.com/pengjiaxusz/pengj-templates/commit/b189c8793083f2f9b17d0f9ce32d4e08c77ec876))
+
 ## [0.23.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.22.0-beta.1...v0.23.0-beta.1) (2026-08-31)
 
 
