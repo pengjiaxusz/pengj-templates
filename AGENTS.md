@@ -110,6 +110,7 @@
 - `branch-sync` —— 见 `.agents/skills/branch-sync/SKILL.md`
 - `caveman` —— 见 `.agents/skills/caveman/SKILL.md`
 - `grill-me` —— 见 `.agents/skills/grill-me/SKILL.md`
+- `template-sync` —— 见 `.agents/skills/template-sync/SKILL.md`
 - `write-a-skill` —— 见 `.agents/skills/write-a-skill/SKILL.md`
 
 ### 技能扩展规范
