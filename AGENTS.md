@@ -18,12 +18,11 @@
 
 - 约定式提交：`type(scope): 中文标题`（type/scope 英文、标题正文中文）。
 - type：`feat fix docs style refactor perf test build ci chore revert`。
-- scope 白名单见 `commitlint.config.js`：`agent app cli core ci templates main`；无合适 scope 时省略；需要新 scope 时按 commit 技能流程更新白名单。
-- **阶段性完工即提交（硬性）**：每当完成一个独立的功能点、重构或 Bug 修复并通过必要验证后，禁止将改动堆积在工作区，必须立即主动运行提交流程（检查、拆分、提交并 git push），然后再向用户汇报或进入下一个任务；严禁等待多轮对话全部结束或等待用户发送 `/commit` 指令才集中提交。
+- **回复前提交门禁（硬性拦截，禁止堆积）**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（检查、拆分、提交并 git push）作为最后一个工具调用步骤**。严禁在工作区留存已验证修改直接结束回复；严禁在多轮对话中拖延堆积或等待用户催促 `/commit`；在 `/plan` 等规划模式下生成 `walkthrough.md` 后，必须紧随其后执行提交与推送，不可中途停顿。
 - 提交前跑「提交前完整性检查」（构建验证 / 文档同步 / 格式与命名）；无关改动拆分多次提交；**提交后立即 push**。
 - 提交由 lefthook + commitlint 校验，格式不符会被拦截。
 
-> EN: Conventional commits, Chinese subject. Type/scope whitelisted (see commitlint.config.js). Milestone completion commit: commit & push immediately after each subtask/bugfix. Split unrelated changes; push immediately after commit; hooks enforce format.
+> EN: Conventional commits, Chinese subject. Type/scope whitelisted (see commitlint.config.js). Pre-response commit gate: whenever files are modified and verified in a turn, commit & push must be the final tool-calling step before outputting the final reply to user. Split unrelated changes; push immediately after commit; hooks enforce format.
 
 ## Rust 规范 / Rust (crates/core, crates/cli, src-tauri)
 
@@ -100,8 +99,10 @@
 ## 通用约定
 
 - 提交信息遵守约定式提交：`type(scope): 标题`，type 用英文、标题正文用中文（见 `.agents/skills/commit`）。
-- **阶段性完工即提交（硬性）**：每当完成一个独立的功能点、阶段性重构或 Bug 修复并通过必要验证后，**禁止将改动堆积在工作区，必须立即主动运行提交流程（检查、拆分、提交并 push）**，然后再向用户汇报或进入下一个任务/步骤；严禁在多轮对话中拖延至最后或等待用户催促 `/commit`。
-- 任务收尾要求：修改完成并通过必要检查后，**必须主动提交代码并推送到远端仓库（commit & push）**，不要遗留未提交的改动。
+- **回复前提交门禁（硬性拦截，禁止堆积）**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（检查、拆分、提交并 push）作为最后一个工具调用步骤**。严禁在工作区留存已验证的代码修改就结束工具调用向用户汇报；严禁在多轮对话中拖延堆积改动或等待用户催促 `/commit`。
+  - **规划模式（`/plan` / `/boost`）特别约束**：即使在规划模式下生成或更新了 `walkthrough.md`，写完文档亦绝不等于任务完结；**严禁仅写完 walkthrough 就直接交差，必须紧随其后执行 commit 与 push，未提交推送前严禁结束对话汇报**。
+  - **无需提交的豁免情况**：仅当本轮对话为纯问答/无任何文件变动，或构建/测试失败正在排查取证阶段且需向用户提问时，方可不提交。
+- 任务收尾要求：任何开发或维护任务结束、向用户做最终交差前，工作区必须保持干净，所有改动必须已提交并推送到远端（commit & push）。
 
 ### 启用的技能
 

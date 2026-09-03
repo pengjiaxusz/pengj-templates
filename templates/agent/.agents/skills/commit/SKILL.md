@@ -2,11 +2,11 @@
 name: commit
 description: >-
 {% if options["skill_lang"] == "en" %}
-  Conventional commit workflow. Triggers on milestone completion (feature, bugfix, refactor passed checks), before task conclusion, or upon user request. Write commit messages{% if options["commit_zh"] %} in Chinese (title/body, except type/scope){% else %} in English{% endif %}. Run the project's pre-commit check first (convention script > project checklist > generic diff scan), split unrelated changes, and push immediately.
-  Triggers: commit, amend, push, commit message, conventional commits, milestone commit, auto commit.
+  Conventional commit workflow. Triggers on code modification completion, milestone completion (feature, bugfix, refactor passed checks), before task conclusion, or upon user request. Write commit messages{% if options["commit_zh"] %} in Chinese (title/body, except type/scope){% else %} in English{% endif %}. Run the project's pre-commit check first (convention script > project checklist > generic diff scan), split unrelated changes, and push immediately.
+  Triggers: commit, amend, push, commit message, conventional commits, milestone commit, auto commit, post-edit commit, finish task, commit and push.
 {% else %}
-  约定式提交流程。在阶段性完工（功能点、Bug 修复、重构通过检查）、任务收尾或用户显式要求时触发。提交信息{% if options["commit_zh"] %}用中文撰写（type/scope 除外）{% else %}用英文撰写{% endif %}。提交前先跑项目约定的检查（约定脚本 > 项目清单 > 兜底扫 diff）、拆分无关改动、提交后立即 push。
-  Triggers: commit, 提交, amend, push, commit message, conventional commits, 完工提交, 阶段性提交.
+  约定式提交流程。在代码修改完成并通过验证后、阶段性完工、任务收尾或用户显式要求时触发。提交信息{% if options["commit_zh"] %}用中文撰写（type/scope 除外）{% else %}用英文撰写{% endif %}。提交前先跑项目约定的检查（约定脚本 > 项目清单 > 兜底扫 diff）、拆分无关改动、提交后立即 push。
+  Triggers: commit, 提交, amend, push, commit message, conventional commits, 完工提交, 阶段性提交, 变更收尾, 任务结束提交, 自动提交.
 {% endif %}
 ---
 
@@ -17,7 +17,7 @@ description: >-
 Write conventional commit messages. Always push immediately after committing to avoid losing work.
 
 ## 0. Trigger conditions (proactive triggers)
-- **Milestone completion (Mandatory — no accumulation)**: Whenever an independent feature, refactoring step, or bug fix is completed and verified, do not leave uncommitted changes in the working directory. Immediately trigger this commit workflow (pre-commit checks, split commits, and `git push`) before reporting back to the user or proceeding to the next step/task. Never defer committing until the end of multi-turn dialogues or wait for user `/commit` prompts.
+- **Code modification & milestone completion (Mandatory barrier — no accumulation)**: Whenever files are modified and verified in the current turn, you MUST run this commit workflow (pre-commit checks, split commits, and `git push`) before reporting back to the user or proceeding to the next step. Never leave verified changes sitting in the working directory before yielding control; writing `walkthrough.md` in planning modes (`/plan` / `/boost`) does NOT conclude the task — you must commit and push immediately after.
 - **Task conclusion (Mandatory)**: Before concluding any development/maintenance task or delivering final responses, ensure the working tree is clean and all commits are pushed.
 - **Explicit user instruction**: When user invokes `/commit`, "commit", "commit & push", etc.
 
@@ -71,7 +71,7 @@ Only when explicitly asked, for the just-made, unpushed commit with no dependenc
 按约定式提交写提交信息。提交后立即 push，防止丢失。
 
 ## 0. 触发时机（主动触发规则）
-- **阶段性完工（硬性触发，禁止堆积）**：每当完成一个独立的功能点、重构或 Bug 修复并通过必要验证后，禁止将改动留在工作区，必须立即主动触发本提交流程（执行检查、拆分提交并 git push），然后再向用户汇报或进入后续步骤/任务。严禁在多轮对话中拖延至最后或等待用户发送 `/commit` 指令才集中提交。
+- **代码修改与阶段性完工（回复前硬性门禁，禁止堆积）**：凡本轮对话存在已通过构建/测试验证的代码修改，在向用户输出最终汇报前，必须主动运行本提交流程（执行检查、拆分提交并 `git push`），严禁在工作区留存已验证修改直接结束回复；在 `/plan` 等规划模式下生成 `walkthrough.md` 后，亦必须紧随其后执行提交与推送，不可中途停顿。
 - **任务收尾（硬性触发）**：任何开发或维护任务结束、向用户做最终交付前，必须确保工作区干净已推送，不留未提交修改。
 - **用户显式指令**：用户发送 `/commit`、"提交"、"commit & push" 等。
 

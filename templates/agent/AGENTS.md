@@ -8,8 +8,10 @@
 
 - Commits follow Conventional Commits — {% if options["commit_zh"] %}type/scope in English, subject/body in Chinese{% else %}titles in English{% endif %}{% if options["skills"] is undefined or 'commit' in options["skills"] %} (see `.agents/skills/commit`){% endif %}.
 {%- if options["commit_and_push"] %}
-- **Milestone completion commit (Mandatory)**: Whenever an independent feature, refactoring step, or bug fix is completed and verified (passing tests/checks), **do not accumulate uncommitted changes in the working directory. You MUST immediately run the commit workflow (completeness checks, split commits, and `git push`)** before reporting back to the user or proceeding to the next step/task. Never defer committing until the end of a multi-turn conversation or wait for the user to prompt `/commit`.
-- **Task conclusion**: Always run verification checks, commit changes following Conventional Commits, and push to the remote repository immediately before completing the task.
+- **Pre-Response Commit Gate (Mandatory Barrier — No Accumulation)**: Whenever files (code, tests, or docs) are created, modified, or deleted in the current turn and have passed verification (builds/tests pass), **you MUST run the commit workflow (completeness checks, split commits, and `git push`) as the very last tool-calling step BEFORE stopping to output your final response to the user**. Never leave verified changes sitting in the working directory before yielding control; never defer committing until the end of a multi-turn conversation or wait for the user to prompt `/commit`.
+  - **Planning Modes (`/plan` / `/boost`) Enforcement**: In planning modes, creating or updating `walkthrough.md` does NOT conclude the task; **you are strictly forbidden from stopping after writing a walkthrough — you MUST proceed immediately to commit and push before finishing your turn**.
+  - **Exemptions**: Committing is only skipped if the turn is purely conversational (zero file changes in `git status`) or if tests/builds failed and you are stopping specifically to ask the user for diagnostic input.
+- **Task Conclusion**: Before concluding any task or delivering final responses, the working tree must be clean and all commits pushed to the remote repository.
 {%- endif %}
 {%- if options["chinese_programming"] %}
 
@@ -66,8 +68,10 @@
 
 - 提交信息遵守约定式提交：`type(scope): 标题`{% if options["commit_zh"] %}，type 用英文、标题正文用中文{% else %}，标题用英文{% endif %}{% if options["skills"] is undefined or 'commit' in options["skills"] %}（见 `.agents/skills/commit`）{% endif %}。
 {%- if options["commit_and_push"] %}
-- **阶段性完工即提交（硬性）**：每当完成一个独立的功能点、阶段性重构或 Bug 修复并通过必要验证后，**禁止将改动堆积在工作区，必须立即主动运行提交流程（检查、拆分、提交并 push）**，然后再向用户汇报或进入下一个任务/步骤；严禁在多轮对话中拖延至最后或等待用户催促 `/commit`。
-- 任务收尾要求：修改完成并通过必要检查后，**必须主动提交代码并推送到远端仓库（commit & push）**，不要遗留未提交的改动。
+- **回复前提交门禁（硬性拦截，禁止堆积）**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（完整性检查、语义拆分、commit 与 `git push`）作为最后一个工具调用步骤**。严禁在工作区留存已验证的代码修改就结束工具调用向用户汇报；严禁在多轮对话中拖延堆积改动或等待用户催促 `/commit`。
+  - **规划模式（`/plan` / `/boost`）特别约束**：即使在规划模式下生成或更新了 `walkthrough.md`，写完文档亦绝不等于任务完结；**严禁仅写完 walkthrough 就直接交差，必须紧随其后执行 commit 与 push，未提交推送前严禁结束对话汇报**。
+  - **无需提交的豁免情况**：仅当本轮对话为纯问答/无任何文件变动，或构建/测试失败正在排查取证阶段且需向用户提问时，方可不提交。
+- **任务收尾要求**：任何开发或维护任务结束、向用户做最终交差前，工作区必须保持干净，所有改动必须已提交并推送到远端（commit & push）。
 {%- endif %}
 {%- if options["chinese_programming"] %}
 
