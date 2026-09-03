@@ -617,6 +617,8 @@ pub(crate) enum ManagedTextMergeKind {
     Replaced,
     /// 磁盘是无托管块的既有文件（legacy）：模板托管块被追加到文件末尾
     Appended,
+    /// 磁盘是无托管块的既有规范文件（如 AGENTS.md）：模板托管块被置顶插入到文件开头
+    Prepended,
 }
 
 /// 受管块文本合并结果
@@ -627,11 +629,25 @@ pub(crate) struct ManagedTextMerge {
     pub kind: ManagedTextMergeKind,
 }
 
+/// 判断该文件在缺少托管块时是否应置顶插入（Prepend）：
+/// 规范类文件（AGENTS.md / GEMINI.md）置顶可确保 AI 编码助手最先看到总则与门禁
+fn is_prepend_file(rel: &Path) -> bool {
+    let name = rel
+        .file_name()
+        .map(|n| n.to_string_lossy().to_ascii_uppercase())
+        .unwrap_or_default();
+    name == "AGENTS.MD" || name == "GEMINI.MD"
+}
+
 /// 受管块文本合并（纯文本版）：把 `incoming_text` 中的托管块并入 `target_text`。
 ///
 /// - 目标含同风格托管块 → 仅替换该区间（`Replaced`）
-/// - 其余情况 → 托管块追加到末尾（`Appended`）
-fn merge_managed_block_texts(target_text: &str, incoming_text: &str) -> ManagedTextMerge {
+/// - 其余情况 → 按 `placement` 追加到末尾（`Appended`）或置顶插入（`Prepended`）
+fn merge_managed_block_texts(
+    target_text: &str,
+    incoming_text: &str,
+    placement: crate::block::BlockPlacement,
+) -> ManagedTextMerge {
     let Some(incoming) = crate::block::extract_managed_block(incoming_text) else {
         return ManagedTextMerge {
             bytes: incoming_text.as_bytes().to_vec(),
@@ -640,9 +656,13 @@ fn merge_managed_block_texts(target_text: &str, incoming_text: &str) -> ManagedT
     };
     let kind = match crate::block::extract_managed_block(target_text) {
         Some(t) if t.style == incoming.style => ManagedTextMergeKind::Replaced,
-        _ => ManagedTextMergeKind::Appended,
+        _ => match placement {
+            crate::block::BlockPlacement::Append => ManagedTextMergeKind::Appended,
+            crate::block::BlockPlacement::Prepend => ManagedTextMergeKind::Prepended,
+        },
     };
-    let out = crate::block::replace_managed_block(target_text, incoming_text);
+    let out =
+        crate::block::replace_managed_block_with_placement(target_text, incoming_text, placement);
     ManagedTextMerge {
         bytes: out.into_bytes(),
         kind,
@@ -689,7 +709,12 @@ fn merge_managed_block(project_dir: &Path, rel: &Path, rendered: &[u8]) -> Manag
         };
     }
     let disk_text = String::from_utf8_lossy(&disk_bytes).into_owned();
-    merge_managed_block_texts(&disk_text, &rendered_text)
+    let placement = if is_prepend_file(rel) {
+        crate::block::BlockPlacement::Prepend
+    } else {
+        crate::block::BlockPlacement::Append
+    };
+    merge_managed_block_texts(&disk_text, &rendered_text, placement)
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -1235,12 +1260,18 @@ pub fn adopt_project(
                 if merged.bytes != cur {
                     write_file(&target, &merged.bytes)?;
                 }
-                if merged.kind == ManagedTextMergeKind::Appended
+                if (merged.kind == ManagedTextMergeKind::Appended
+                    || merged.kind == ManagedTextMergeKind::Prepended)
                     && legacy_without_block
                     && !cur.is_empty()
                 {
+                    let action = if merged.kind == ManagedTextMergeKind::Prepended {
+                        "置顶插入到既有文件开头"
+                    } else {
+                        "追加到既有文件末尾"
+                    };
                     needs_review.push(format!(
-                        "{rel_str}：模板托管块已追加到既有文件末尾，请人工检查是否与原有内容重复"
+                        "{rel_str}：模板托管块已{action}，请人工检查是否与原有内容重复"
                     ));
                 }
                 manifest_files.insert(rel_str.clone(), sha256_hex(&merged.bytes));
@@ -1515,12 +1546,18 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
                     write_file(&target, &merged.bytes)?;
                     new_files.insert(rel_str.clone(), sha256_hex(&merged.bytes));
                     updated.push(rel_str.clone());
-                    if merged.kind == ManagedTextMergeKind::Appended
+                    if (merged.kind == ManagedTextMergeKind::Appended
+                        || merged.kind == ManagedTextMergeKind::Prepended)
                         && legacy_without_block
                         && !cur.is_empty()
                     {
+                        let action = if merged.kind == ManagedTextMergeKind::Prepended {
+                            "置顶插入到既有文件开头"
+                        } else {
+                            "追加到既有文件末尾"
+                        };
                         needs_review.push(format!(
-                            "{rel_str}：模板托管块已追加到既有文件末尾，请人工检查是否与原有内容重复"
+                            "{rel_str}：模板托管块已{action}，请人工检查是否与原有内容重复"
                         ));
                     }
                 }
@@ -3132,11 +3169,12 @@ mod tests {
         );
         assert!(report.conflicted.is_empty(), "含受管块的文件不应报冲突");
 
-        // 磁盘内容 = 原用户内容 + 追加的受管块，用户内容不丢失
+        // 磁盘内容 = 置顶的受管块 + 原用户内容，用户内容不丢失
         let merged = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
-        assert!(merged.starts_with("# proj 编码规范\n\n## 项目专属\n- 用户规则\n\n"));
-        assert!(merged
-            .contains("<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n"));
+        assert!(merged.starts_with(
+            "<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n\n# proj 编码规范"
+        ));
+        assert!(merged.contains("## 项目专属\n- 用户规则"));
         assert!(!merged.contains("managed v1"));
 
         // manifest 记录合并后文件的哈希
@@ -3214,9 +3252,12 @@ mod tests {
         );
         assert!(report.conflicted.is_empty(), "含受管块的文件不应报冲突");
 
-        // 磁盘内容 = 原用户内容 + 追加的受管块，用户内容不丢失
+        // 磁盘内容 = 置顶的受管块 + 原用户内容，用户内容不丢失
         let now = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
-        assert!(now.starts_with("# proj 编码规范\n\n## 项目专属\n- 用户规则\n\n"));
+        assert!(now.starts_with(
+            "<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n\n# proj 编码规范"
+        ));
+        assert!(now.contains("## 项目专属\n- 用户规则"));
         assert!(now.contains("managed v2"));
 
         let _ = std::fs::remove_dir_all(&tmp);
@@ -3334,11 +3375,12 @@ mod tests {
 
         assert!(report.adopted.iter().any(|f| f == "AGENTS.md"));
 
-        // 磁盘内容 = 原用户内容 + 追加的受管块，用户内容不丢失
+        // 磁盘内容 = 置顶的受管块 + 原用户内容，用户内容不丢失
         let disk = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
-        assert!(disk.starts_with("# 项目规范\n\n## 用户自定义规则\n- 规则 A\n- 规则 B\n\n"));
-        assert!(disk
-            .contains("<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n"));
+        assert!(disk.starts_with(
+            "<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n\n# 项目规范"
+        ));
+        assert!(disk.contains("## 用户自定义规则\n- 规则 A\n- 规则 B"));
 
         // manifest 记录合并后文件的哈希
         let manifest = ProjectManifest::load(&proj).unwrap();
@@ -3759,16 +3801,16 @@ mod tests {
         assert!(pkg_text.contains("\"@commitlint/config-conventional\""));
         assert!(pkg_text.contains("\"engines\""));
 
-        // -- 文本受管块追加进 legacy AGENTS.md 并标记复核 --
+        // -- 文本受管块置顶插入 legacy AGENTS.md 并标记复核 --
         let agents = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
-        assert!(agents.starts_with("# 项目自有规范"));
-        assert!(agents.contains("PENGJ_TEMPLATE_START"));
+        assert!(agents.starts_with("<!-- PENGJ_TEMPLATE_START -->"));
+        assert!(agents.contains("# 项目自有规范"));
         assert!(
             report
                 .needs_review
                 .iter()
                 .any(|f| f.starts_with("AGENTS.md")),
-            "追加进 legacy 文件应标记复核，实际: {:?}",
+            "置顶插入 legacy 文件应标记复核，实际: {:?}",
             report.needs_review
         );
 
@@ -4162,8 +4204,9 @@ mod tests {
         let report = generate(&templates, "zh_proj", &["agent".to_string()], opts, &tmp).unwrap();
         assert!(report.files.iter().any(|f| f == "AGENTS.md"));
         let zh_md = std::fs::read_to_string(tmp.join("zh_proj").join("AGENTS.md")).unwrap();
-        assert!(zh_md.contains("阶段性完工即提交（硬性）"));
-        assert!(zh_md.contains("必须主动提交代码并推送到远端仓库（commit & push）"));
+        assert!(zh_md.contains("回复前提交门禁（硬性拦截，禁止堆积）"));
+        assert!(zh_md.contains("规划模式（`/plan` / `/boost`）特别约束"));
+        assert!(zh_md.contains("所有改动必须已提交并推送到远端（commit & push）"));
 
         // 2. With commit_and_push = true (en)
         let mut opts_en = BTreeMap::new();
@@ -4171,10 +4214,11 @@ mod tests {
         opts_en.insert("skill_lang".to_string(), serde_json::json!("en"));
         generate(&templates, "en_proj", &["agent".to_string()], opts_en, &tmp).unwrap();
         let en_md = std::fs::read_to_string(tmp.join("en_proj").join("AGENTS.md")).unwrap();
-        assert!(en_md.contains("Milestone completion commit (Mandatory)"));
-        assert!(
-            en_md.contains("**Task conclusion**: Always run verification checks, commit changes")
-        );
+        assert!(en_md.contains("Pre-Response Commit Gate (Mandatory Barrier — No Accumulation)"));
+        assert!(en_md.contains("Planning Modes (`/plan` / `/boost`) Enforcement"));
+        assert!(en_md.contains(
+            "**Task Conclusion**: Before concluding any task or delivering final responses"
+        ));
 
         // 3. With commit_and_push = false (zh)
         let mut opts_off = BTreeMap::new();

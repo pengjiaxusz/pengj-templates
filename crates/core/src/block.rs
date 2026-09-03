@@ -87,6 +87,16 @@ fn extract_block_of_style(text: &str, style: BlockStyle) -> Option<ManagedBlock>
     })
 }
 
+/// 托管块在目标文件缺失时的放置策略
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BlockPlacement {
+    /// 追加到末尾（默认）
+    #[default]
+    Append,
+    /// 置顶插入到开头（适用于 AGENTS.md 等规范文件，保证框架总则处于最前）
+    Prepend,
+}
+
 /// 用 `incoming_text` 中的托管块更新 `target_text` 中的同风格托管块。
 ///
 /// 规则：
@@ -95,6 +105,15 @@ fn extract_block_of_style(text: &str, style: BlockStyle) -> Option<ManagedBlock>
 /// - 其余情况（target 无托管块，或风格不匹配）：把 incoming 的托管块追加到
 ///   `target_text` 末尾，中间用一个空行分隔，并保证结果以换行结尾。
 pub fn replace_managed_block(target_text: &str, incoming_text: &str) -> String {
+    replace_managed_block_with_placement(target_text, incoming_text, BlockPlacement::Append)
+}
+
+/// 支持指定放置策略（Append / Prepend）的托管块替换
+pub fn replace_managed_block_with_placement(
+    target_text: &str,
+    incoming_text: &str,
+    placement: BlockPlacement,
+) -> String {
     let Some(incoming) = extract_managed_block(incoming_text) else {
         return incoming_text.to_string();
     };
@@ -107,8 +126,28 @@ pub fn replace_managed_block(target_text: &str, incoming_text: &str) -> String {
             out.push_str(&target_text[target.end..]);
             out
         }
-        _ => append_block(target_text, &incoming.full),
+        _ => match placement {
+            BlockPlacement::Append => append_block(target_text, &incoming.full),
+            BlockPlacement::Prepend => prepend_block(target_text, &incoming.full),
+        },
     }
+}
+
+/// 把托管块置顶插入到目标文本开头：空行分隔，保证尾随换行
+fn prepend_block(target_text: &str, block: &str) -> String {
+    if target_text.is_empty() {
+        let mut out = String::with_capacity(block.len() + 1);
+        out.push_str(block);
+        ensure_trailing_newline(&mut out);
+        return out;
+    }
+
+    let mut out = String::with_capacity(target_text.len() + block.len() + 3);
+    out.push_str(block.trim_end());
+    out.push_str("\n\n");
+    out.push_str(target_text.trim_start());
+    ensure_trailing_newline(&mut out);
+    out
 }
 
 /// 把托管块追加到目标文本末尾：空行分隔，保证尾随换行
@@ -397,5 +436,33 @@ mod tests {
         let incoming = "<!-- PENGJ_TEMPLATE_START -->\nnever closed";
         let merged = replace_managed_block(target, incoming);
         assert_eq!(merged, "<!-- PENGJ_TEMPLATE_START -->\nnever closed");
+    }
+
+    #[test]
+    fn prepend_block_when_target_has_no_markers() {
+        let target = "# Custom User Rules\n- Rule 1\n- Rule 2\n";
+        let merged =
+            replace_managed_block_with_placement(target, HTML_BLOCK, BlockPlacement::Prepend);
+        assert_eq!(
+            merged,
+            "<!-- PENGJ_TEMPLATE_START -->\nmanaged\n<!-- PENGJ_TEMPLATE_END -->\n\n# Custom User Rules\n- Rule 1\n- Rule 2\n"
+        );
+    }
+
+    #[test]
+    fn prepend_block_to_empty_target() {
+        let merged = replace_managed_block_with_placement("", HTML_BLOCK, BlockPlacement::Prepend);
+        assert_eq!(merged, HTML_BLOCK);
+    }
+
+    #[test]
+    fn prepend_block_replaces_in_place_when_target_has_block() {
+        let target = "<!-- PENGJ_TEMPLATE_START -->\nold\n<!-- PENGJ_TEMPLATE_END -->\n\n# Custom User Rules\n";
+        let merged =
+            replace_managed_block_with_placement(target, HTML_BLOCK, BlockPlacement::Prepend);
+        assert_eq!(
+            merged,
+            "<!-- PENGJ_TEMPLATE_START -->\nmanaged\n<!-- PENGJ_TEMPLATE_END -->\n\n# Custom User Rules\n"
+        );
     }
 }
