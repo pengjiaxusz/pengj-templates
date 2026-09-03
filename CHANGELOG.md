@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.26.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.25.0-beta.1...v0.26.0-beta.1) (2026-09-03)
+
+
+### Features
+
+* **agent:** 强化回复前提交门禁与规划模式约束并补齐触发词 ([0eb0366](https://github.com/pengjiaxusz/pengj-templates/commit/0eb0366cd1f7abc163ade11b283c4aeefaa316e4))
+* **core:** 规范类文件无托管块时采用置顶放置策略 ([6a0ad59](https://github.com/pengjiaxusz/pengj-templates/commit/6a0ad59c91da517eb4ce5e6080a12b98f8137636))
+
 ## [0.25.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.24.0-beta.1...v0.25.0-beta.1) (2026-09-01)
 
 
