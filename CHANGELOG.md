@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.26.0-beta.1...v0.27.0-beta.1) (2026-09-07)
+
+
+### Features
+
+* **templates:** 增加提交信息语言校验门禁并强化规范约束 ([cb3295e](https://github.com/pengjiaxusz/pengj-templates/commit/cb3295eac158c157f75fc3803c633e20aab1642c))
+
 ## [0.26.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.25.0-beta.1...v0.26.0-beta.1) (2026-09-03)
 
 
