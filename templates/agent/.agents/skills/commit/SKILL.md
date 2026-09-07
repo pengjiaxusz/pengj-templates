@@ -52,11 +52,15 @@ Separate unrelated areas into distinct commits (e.g. do not mix docs with featur
 ## 4. Commit message format
 `type(scope): subject`
 {% if options["commit_zh"] %}
-- Subject in Chinese, short, no trailing punctuation.
+- Subject in Chinese, short, no trailing punctuation (mandatory: at least 2 Chinese characters; strictly forbidden to write pure English subjects).
+  - ❌ Forbidden: `feat(cli): add new flags`
+  - ✅ Correct: `feat(cli): 新增参数支持`
 - Type/scope in English (see type list below): `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`.
 - Scope from the project's `commitlint.config.js` scope-enum whitelist when it exists.
 {% else %}
-- Subject in English (imperative, short, no trailing period).
+- Subject in English (imperative, short, no trailing period; strictly forbidden to contain Chinese characters).
+  - ❌ Forbidden: `feat(cli): 新增参数支持`
+  - ✅ Correct: `feat(cli): add new flags`
 - Type/scope in English: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`.
 - Scope from the project's `commitlint.config.js` scope-enum whitelist when it exists.
 {% endif %}
@@ -107,11 +111,15 @@ Only when explicitly asked, for the just-made, unpushed commit with no dependenc
 ## 4. 提交信息格式
 `type(scope): 标题`
 {% if options["commit_zh"] %}
-- 标题用中文短句、不加句号。
+- 标题用中文短句、不加句号（硬性要求：必须包含至少 2 个汉字，严禁写纯英文）。
+  - ❌ 严禁：`feat(cli): add new flags`
+  - ✅ 必须：`feat(cli): 新增参数支持`
 - type/scope 用英文：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`。
 - scope 参考项目 `commitlint.config.js` 的 scope-enum 白名单，无合适则省略。
 {% else %}
-- 标题用英文短句（祈使式），不加句号。
+- 标题用英文短句（祈使式），不加句号（硬性要求：必须纯英文，严禁包含汉字）。
+  - ❌ 严禁：`feat(cli): 新增参数支持`
+  - ✅ 必须：`feat(cli): add new flags`
 - type/scope 用英文：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`。
 - scope 参考项目 `commitlint.config.js` 的 scope-enum 白名单，无合适则省略。
 {% endif %}
