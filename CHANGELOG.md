@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.27.0-beta.1...v0.28.0-beta.1) (2026-09-08)
+
+
+### Features
+
+* **templates:** 增强提交语言门禁并支持字面量豁免与小额容差 ([4c146fc](https://github.com/pengjiaxusz/pengj-templates/commit/4c146fcb3bc3faf7d03e6add6bceec65fd0e02ba))
+
 ## [0.27.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.26.0-beta.1...v0.27.0-beta.1) (2026-09-07)
 
 
