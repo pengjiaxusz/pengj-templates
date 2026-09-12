@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.28.0-beta.1...v0.29.0-beta.1) (2026-09-12)
+
+
+### Features
+
+* **agent:** 新增 subrepo-sync 通用子仓库同步与升级技能 ([d77c3ba](https://github.com/pengjiaxusz/pengj-templates/commit/d77c3ba912daf5775bde0435b059a6303340dd51))
+
 ## [0.28.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.27.0-beta.1...v0.28.0-beta.1) (2026-09-08)
 
 
