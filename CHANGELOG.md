@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.29.1-beta.1...v0.30.0-beta.1) (2026-09-13)
+
+
+### Features
+
+* **template-sync:** 强化新项目纳管自动诊断推荐方案与用户咨询流程 ([723e829](https://github.com/pengjiaxusz/pengj-templates/commit/723e82911cc2fd6fe89dacc272a733711c2248c5))
+
 ## [0.29.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.29.0-beta.1...v0.29.1-beta.1) (2026-09-13)
 
 
