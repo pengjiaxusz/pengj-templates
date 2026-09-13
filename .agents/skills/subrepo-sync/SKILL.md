@@ -5,6 +5,7 @@ description: >-
 ---
 
 <!-- PENGJ_TEMPLATE_START -->
+
 # 子仓库同步与升级 (Subrepo Sync)
 
 用于在宿主项目中受控升级外部依赖子仓库（Git Submodule、CMake FetchContent、独立子仓库等），提取未应用提交、按子系统聚类分析影响面、指导业务组件重构与门禁回归。
@@ -60,6 +61,7 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 
 - [子仓库系统架构与依赖模式详解](REFERENCE.md)
 - [历史真实升级与组件重构案例](EXAMPLES.md)
+
 <!-- PENGJ_TEMPLATE_END -->
 
 <!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
