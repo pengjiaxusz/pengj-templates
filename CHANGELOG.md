@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.30.0-beta.1...v0.31.0-beta.1) (2026-09-13)
+
+
+### Features
+
+* **app:** 引入 cha-set 子模块作为 UI 库并升级前端界面 ([61879b2](https://github.com/pengjiaxusz/pengj-templates/commit/61879b2a7cef49666c1682d9e6647ec5e4dd8ebd))
+
 ## [0.30.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.29.1-beta.1...v0.30.0-beta.1) (2026-09-13)
 
 
