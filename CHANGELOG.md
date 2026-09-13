@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.29.0-beta.1...v0.29.1-beta.1) (2026-09-13)
+
+
+### Performance Improvements
+
+* **agent:** 优化分支同步流程减少工具调用与消耗 ([c335b69](https://github.com/pengjiaxusz/pengj-templates/commit/c335b69d27663f6732b7324b51f02f4a0eb88938))
+
 ## [0.29.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.28.0-beta.1...v0.29.0-beta.1) (2026-09-12)
 
 
