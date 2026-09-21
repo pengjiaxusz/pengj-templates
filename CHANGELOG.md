@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.32.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.31.0-beta.1...v0.32.0-beta.1) (2026-09-21)
+
+
+### Features
+
+* **agent:** 分支同步通用化集成分支推导与未追踪路径正则忽略 ([27e34e0](https://github.com/pengjiaxusz/pengj-templates/commit/27e34e0c0e744a52cae84092324b8b53c994eceb))
+* **core:** 新增项目模板漂移巡检分析引擎与 CLI audit 命令 ([789e184](https://github.com/pengjiaxusz/pengj-templates/commit/789e184edc7974d8144d94a267d3641c91b40386))
+* **templates:** 扩充模板巡检工作流并在 AGENTS.md 注入防篡改红线 ([ff86bc7](https://github.com/pengjiaxusz/pengj-templates/commit/ff86bc7283eb3427ea0241bde763d0e300887cf8))
+
 ## [0.31.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.30.0-beta.1...v0.31.0-beta.1) (2026-09-13)
 
 
