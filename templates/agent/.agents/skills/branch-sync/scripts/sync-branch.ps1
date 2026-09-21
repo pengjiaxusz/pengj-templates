@@ -14,7 +14,10 @@
     待合入的源特性分支名（例如: feat/foo）。必须提供。
 
 .PARAMETER IntegrationBranch
-    目标集成分支名。默认自动探测 origin/main -> origin/master -> main -> master。
+    目标集成分支名。默认按如下顺序自动推导：命令行指定 -> origin/HEAD 符号引用 -> SKILL.md 登记 -> 远端/本地探测 (main/dev/develop/master/trunk) -> git init.defaultBranch。
+
+.PARAMETER DirtyIgnorePattern
+    工作区干净度检查时额外忽略的路径正则表达式列表（如构建产物、未追踪生成代码等）。亦可于 SKILL.md 项目专属区声明。
 
 .PARAMETER Apply
     是否执行实际合并、推送与对齐。未指定时仅进行快速预检 (Dry Run) 并输出紧凑报告。
@@ -40,6 +43,9 @@ param(
 
     [Parameter(Position = 1)]
     [string]$IntegrationBranch = "",
+
+    [Parameter()]
+    [string[]]$DirtyIgnorePattern = @(),
 
     [switch]$Apply,
     [switch]$NoPush,
@@ -100,25 +106,87 @@ if ([string]::IsNullOrWhiteSpace($SourceBranch)) {
 $remoteCheck = Invoke-Git @("remote", "get-url", "origin")
 $hasRemote = ($remoteCheck.ExitCode -eq 0)
 
-# 2. 自动探测集成分支
+# 读取项目 SKILL.md 声明配置（集成分支与未追踪路径忽略正则）
+$skillDocPath = Join-Path $PSScriptRoot "..\SKILL.md"
+if (-not (Test-Path $skillDocPath)) {
+    $candidate = Join-Path (Get-Location).Path ".agents\skills\branch-sync\SKILL.md"
+    if (Test-Path $candidate) {
+        $skillDocPath = $candidate
+    }
+}
+$declaredIntegrationBranch = ""
+$declaredDirtyPatterns = [System.Collections.Generic.List[string]]::new()
+if (Test-Path $skillDocPath) {
+    try {
+        $skillDocContent = [System.IO.File]::ReadAllText($skillDocPath, [System.Text.Encoding]::UTF8)
+        if ($skillDocContent -match '(?m)^[-*]\s*(?:集成分支|Integration branch)[：:]\s*`?([a-zA-Z0-9_\-\.\/]+)`?') {
+            $declaredIntegrationBranch = $Matches[1].Trim()
+        }
+        $patRegex = '(?m)^[-*]\s*(?:忽略未追踪路径正则|忽略路径正则|忽略正则|Dirty ignore regex|Dirty ignore pattern)[：:]\s*`?([^\r\n`]+)`?'
+        $patMatches = [regex]::Matches($skillDocContent, $patRegex)
+        foreach ($m in $patMatches) {
+            $patVal = $m.Groups[1].Value.Trim()
+            if (-not [string]::IsNullOrWhiteSpace($patVal)) {
+                $declaredDirtyPatterns.Add($patVal)
+            }
+        }
+    } catch {}
+}
+foreach ($p in $DirtyIgnorePattern) {
+    if (-not [string]::IsNullOrWhiteSpace($p)) {
+        $declaredDirtyPatterns.Add($p.Trim())
+    }
+}
+
+# 2. 自动探测集成分支 (多层降级策略)
 if ([string]::IsNullOrWhiteSpace($IntegrationBranch)) {
+    # 2.1 Git 远端 HEAD 符号引用探测 (标准 Git 远端默认分支，如 refs/remotes/origin/HEAD -> origin/dev)
     if ($hasRemote) {
-        $rMain = Invoke-Git @("rev-parse", "--verify", "origin/main")
-        if ($rMain.ExitCode -eq 0) {
-            $IntegrationBranch = "main"
-        } else {
-            $rMaster = Invoke-Git @("rev-parse", "--verify", "origin/master")
-            if ($rMaster.ExitCode -eq 0) {
-                $IntegrationBranch = "master"
+        $rHead = Invoke-Git @("symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+        if ($rHead.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($rHead.Output))) {
+            $headRef = $rHead.Output.Trim()
+            if ($headRef.StartsWith("origin/")) {
+                $IntegrationBranch = $headRef.Substring(7).Trim()
+            } else {
+                $IntegrationBranch = $headRef
             }
         }
     }
+
+    # 2.2 SKILL.md 项目专属区显式声明
+    if ([string]::IsNullOrWhiteSpace($IntegrationBranch) -and (-not [string]::IsNullOrWhiteSpace($declaredIntegrationBranch))) {
+        $IntegrationBranch = $declaredIntegrationBranch
+    }
+
+    # 2.3 远端常用集成分支探测
+    if ([string]::IsNullOrWhiteSpace($IntegrationBranch) -and $hasRemote) {
+        foreach ($b in @("main", "dev", "develop", "master", "trunk")) {
+            $rTest = Invoke-Git @("rev-parse", "--verify", "origin/$b")
+            if ($rTest.ExitCode -eq 0) {
+                $IntegrationBranch = $b
+                break
+            }
+        }
+    }
+
+    # 2.4 本地常用分支探测
     if ([string]::IsNullOrWhiteSpace($IntegrationBranch)) {
-        $lMain = Invoke-Git @("rev-parse", "--verify", "main")
-        if ($lMain.ExitCode -eq 0) {
-            $IntegrationBranch = "main"
+        foreach ($b in @("main", "dev", "develop", "master", "trunk")) {
+            $lTest = Invoke-Git @("rev-parse", "--verify", $b)
+            if ($lTest.ExitCode -eq 0) {
+                $IntegrationBranch = $b
+                break
+            }
+        }
+    }
+
+    # 2.5 git init.defaultBranch 回退
+    if ([string]::IsNullOrWhiteSpace($IntegrationBranch)) {
+        $dConf = Invoke-Git @("config", "init.defaultBranch")
+        if ($dConf.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($dConf.Output))) {
+            $IntegrationBranch = $dConf.Output.Trim()
         } else {
-            $IntegrationBranch = "master"
+            $IntegrationBranch = "main"
         }
     }
 }
@@ -209,9 +277,23 @@ if (-not [string]::IsNullOrWhiteSpace($rootStatus.Output)) {
                 break
             }
         }
-        if (-not $isRegisteredWt) {
-            $dirtyItems.Add($sl)
+        if ($isRegisteredWt) {
+            continue
         }
+
+        # 若匹配忽略正则（如构建生成代码、未追踪目录等），予以忽略
+        $isIgnoredPattern = $false
+        foreach ($pat in $declaredDirtyPatterns) {
+            if ($relPath -match $pat) {
+                $isIgnoredPattern = $true
+                break
+            }
+        }
+        if ($isIgnoredPattern) {
+            continue
+        }
+
+        $dirtyItems.Add($sl)
     }
 }
 
@@ -227,7 +309,25 @@ if ($route -eq "Route B") {
         throw "无法检查占用分支的 Worktree ($occupiedWorktreePath) 状态: $($wtStatus.Error)"
     }
     if (-not [string]::IsNullOrWhiteSpace($wtStatus.Output)) {
-        throw "占用源分支 '$SourceBranch' 的 Worktree ($occupiedWorktreePath) 存在未提交改动，严禁强制重置！请先在该目录提交或 stash。"
+        $wtDirty = [System.Collections.Generic.List[string]]::new()
+        foreach ($line in ($wtStatus.Output -split "`r?`n")) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $relP = $line.Substring(3).Trim().Trim('"').TrimEnd('/')
+            $isIgnoredP = $false
+            foreach ($pat in $declaredDirtyPatterns) {
+                if ($relP -match $pat) {
+                    $isIgnoredP = $true
+                    break
+                }
+            }
+            if (-not $isIgnoredP) {
+                $wtDirty.Add($line)
+            }
+        }
+        if ($wtDirty.Count -gt 0) {
+            $dirtyList = $wtDirty -join "`n"
+            throw "占用源分支 '$SourceBranch' 的 Worktree ($occupiedWorktreePath) 存在未提交改动，严禁强制重置！请先在该目录提交或 stash：`n$dirtyList"
+        }
     }
 }
 

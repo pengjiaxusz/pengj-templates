@@ -28,7 +28,7 @@ pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch 'feat/x'
 pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch 'feat/x' -Apply
 ```
 
-> **提速与省 Token 准则**：在源分支明确且用户要求合并同步时，Agent 可直接执行带 `-Apply` 的单次调用。脚本会自动拦截脏工作区、自动甄别净贡献、自动对齐双端分支并完成合后校验。
+> **提速与省 Token 准则**：在源分支明确且用户要求合并同步时，Agent 可直接执行带 `-Apply` 的单次调用。脚本会自动拦截脏工作区（支持项目忽略正则）、自适应探测集成分支（`origin/HEAD` -> `SKILL.md` 登记 -> 常见分支嗅探）、自动甄别净贡献、自动对齐双端分支并完成合后校验。
 
 ---
 
@@ -93,6 +93,10 @@ git rev-parse HEAD origin/main origin/'feat/x'; git diff origin/main origin/'fea
 
 ### 集成分支登记
 - 集成分支：`main`
+
+### 忽略未追踪路径正则（可选）
+声明工作区脏检查时需忽略的本地未追踪/生成目录正则：
+- 忽略正则：``
 
 ### 合后验证命令
 在集成分支运行一次项目专属验证：
