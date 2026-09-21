@@ -13,6 +13,10 @@
   - **Exemptions**: Committing is only skipped if the turn is purely conversational (zero file changes in `git status`) or if tests/builds failed and you are stopping specifically to ask the user for diagnostic input.
 - **Task Conclusion**: Before concluding any task or delivering final responses, the working tree must be clean and all commits pushed to the remote repository.
 {%- endif %}
+- **Template Anti-Tampering Red Line (Strict Protection)**: All files under `.agents/skills/*/scripts/` and all content inside `PENGJ_TEMPLATE_START/END` managed blocks belong to `pengj-templates`. Directly modifying managed script files or tampering with code inside managed blocks in downstream projects is strictly prohibited! When encountering environment mismatch or needing project-specific settings:
+  1. Always declare configuration in the project-specific area outside the managed block in `SKILL.md` (e.g. integration branch declaration, untracked path ignore regex, or verification gates);
+  2. If the template lacks necessary capabilities, propose generic features to upstream `pengj-templates` instead of keeping local hacks in downstream;
+  3. Run `cargo run -p pengj-templates-cli -- audit --dir . --diff` anytime to inspect alignment and keep drift violations at zero.
 {%- if options["chinese_programming"] %}
 
 ### Chinese programming conventions
@@ -73,6 +77,10 @@
   - **无需提交的豁免情况**：仅当本轮对话为纯问答/无任何文件变动，或构建/测试失败正在排查取证阶段且需向用户提问时，方可不提交。
 - **任务收尾要求**：任何开发或维护任务结束、向用户做最终交差前，工作区必须保持干净，所有改动必须已提交并推送到远端（commit & push）。
 {%- endif %}
+- **模板受管区域防篡改禁令（硬性红线）**：`.agents/skills/*/scripts/` 脚本文件及所有带 `PENGJ_TEMPLATE_START/END` 的托管块区间归 `pengj-templates` 统一托管。严禁在下游仓库直接修改托管脚本文件或私自篡改托管块内代码！若遇到下游环境不适配或需要定制：
+  1. 优先查阅对应技能的 `SKILL.md`，在托管块外「项目专属区」以声明式配置解决（如 `集成分支登记`、`忽略未追踪路径正则` 或项目门禁）；
+  2. 若模板缺乏相应扩展能力，应向上游 `pengj-templates` 反馈或进行通用化改造，严禁在下游私自保留本地 hack；
+  3. 随时运行 `cargo run -p pengj-templates-cli -- audit --dir . --diff` 巡检模板对齐状态，确保违规漂移清零。
 {%- if options["chinese_programming"] %}
 
 ### 中文编程规范

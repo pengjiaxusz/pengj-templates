@@ -2,25 +2,28 @@
 name: template-sync
 description: >-
 {% if options["skill_lang"] == "en" %}
-  Template synchronization and project adoption workflow for pengj-templates. Automatically diagnoses tech stack, paradigms, and commit habits to recommend tailored profiles and consult users when adopting existing/new projects (adopt); updates managed projects from upstream templates (update); resolves review notices (needs_review / conflicted / transition zones) and verifies downstream alignment.
-  Triggers: template-sync, sync-template, update-template, apply-template, adopt-project, 模板同步, 更新模板, 应用模板, 纳管项目, 同步模板.
+  Template synchronization, adoption, and audit workflow for pengj-templates. Automatically diagnoses tech stack, paradigms, and commit habits to recommend tailored profiles when adopting projects (adopt); audits template drifts, script tampering, and managed block violations (audit); updates managed projects from upstream templates (update); resolves review notices (needs_review / conflicted / transition zones).
+  Triggers: template-sync, sync-template, update-template, apply-template, adopt-project, template-audit, template-diff, 模板同步, 更新模板, 应用模板, 纳管项目, 同步模板, 模板巡检, 模板漂移.
 {% else %}
-  基于 pengj-templates 的分层模板同步与项目纳管技能。针对存量或新项目纳管（adopt），自动诊断技术栈、编程范式与提交习惯并提供推荐方案咨询用户；同步上游模板最新改动到已有项目（update）；裁决更新差异与接管过渡区（needs_review / conflicted / 纳管过渡区）或验证下游项目对齐。
-  Triggers: template-sync, 模板同步, 更新模板, 应用模板, 纳管项目, 同步模板, update-template, apply-template, adopt-project, 模板更新.
+  基于 pengj-templates 的分层模板同步、项目纳管与模板漂移巡检技能。针对存量或新项目纳管（adopt），自动诊断技术栈、编程范式与提交习惯并提供推荐方案咨询用户；巡检查验下游受管脚本篡改与托管块漂移（audit）；同步上游模板最新改动到已有项目（update）；裁决更新差异与接管过渡区（needs_review / conflicted / 纳管过渡区）或验证下游项目对齐。
+  Triggers: template-sync, 模板同步, 更新模板, 应用模板, 纳管项目, 同步模板, 模板巡检, 模板漂移, 检查模板改动, update-template, apply-template, adopt-project, 模板更新, template-audit, template-diff.
 {% endif %}
 ---
 
 <!-- PENGJ_TEMPLATE_START -->
 {% if options["skill_lang"] == "en" %}
-# Template Sync (Update & Adopt)
+# Template Sync (Update, Adopt & Audit)
 
-Workflow for updating downstream projects from upstream `pengj-templates` or adopting templates into existing repositories.
+Workflow for auditing downstream project alignment, updating downstream projects from upstream `pengj-templates`, or adopting templates into existing repositories.
 
 ## Quick Start
 
 Run from `pengj-templates` repo or ensure `pengj-templates-cli` is in PATH / `PENGJ_TEMPLATES` is set:
 
 ```powershell
+# 0. Audit template alignment & drifts (read-only inspection, checks tampering)
+cargo run -p pengj-templates-cli -- audit --dir <project-dir> --diff
+
 # 1. Update an already managed project (has .pengj-templates.json)
 cargo run -p pengj-templates-cli -- update --dir <project-dir>
 
@@ -34,6 +37,7 @@ cargo run -p pengj-templates-cli -- adopt --dir <project-dir> --layers <layer1,l
 
 Check whether the target project has `.pengj-templates.json`:
 
+- **Inspection / Verification**: Run **Audit Mode** (Step 2C) to detect whether downstream has drifted or violated template rules.
 - **Manifest exists**: The project is already managed. Proceed to **Update Mode** (Step 2A).
 - **Manifest does NOT exist**: The project is not yet managed. Proceed to **Adopt Mode** (Step 2B).
 
@@ -93,6 +97,21 @@ cargo run -p pengj-templates-cli -- adopt --dir <project-dir> --layers <layer1,l
 ```
 *(Note: `--dir` specifies the target project directory; do not pass bare positional arguments).*
 
+### 2C. Audit Mode (Template Drift Inspection & Governance)
+
+Run audit to detect whether downstream has drifted or tampered with template-managed assets:
+```powershell
+cargo run -p pengj-templates-cli -- audit --dir <project-dir> --diff
+```
+
+**Governance Decision Tree**:
+- **`ProjectCustomized` (Safe)**: Content added outside `PENGJ_TEMPLATE_START/END` in the project-specific area. Benign and expected.
+- **`UpstreamNewer` (Safe to update)**: Upstream template evolved; downstream untouched. Run `update` to cleanly sync.
+- **`ViolatedManagedBlock` / `LocallyModifiedFile` (Violation / Critical Drift)**:
+  - **Rule 1 (Universal Value)**: If the downstream modification addresses a common limitation (e.g. branch auto-detection, toolchain adaptation), contribute it to upstream `pengj-templates`, make it generic, and run `update` to eliminate the downstream hack!
+  - **Rule 2 (Project Environment)**: If it is project-specific (e.g. untracked generated directories, build flags), move the configuration to the project-specific area outside the managed block (e.g. `SKILL.md` ignore regex), and restore the managed file to pure template!
+  - **Rule 3 (Strict Anti-tampering)**: Never keep private hacks in template scripts or inside managed blocks in downstream projects.
+
 ### 3. Post-Processing & Conflict Resolution
 
 Inspect the CLI execution report:
@@ -129,6 +148,9 @@ Inspect the CLI execution report:
 在 `pengj-templates` 仓库根目录运行，或确保 `pengj-templates-cli` 在 PATH 中 / 已设置 `PENGJ_TEMPLATES` 环境变量：
 
 ```powershell
+# 0. 巡检项目模板对齐状态（只读排查违规篡改与漂移）
+cargo run -p pengj-templates-cli -- audit --dir <目标项目目录> --diff
+
 # 1. 更新已纳管项目（已有 .pengj-templates.json）
 cargo run -p pengj-templates-cli -- update --dir <目标项目目录>
 
@@ -142,6 +164,7 @@ cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <�
 
 检查目标项目根目录是否存在 `.pengj-templates.json`：
 
+- **巡检排查**：需检查下游是否出现私自修改脚本或违规漂移，进入 **Audit 模式（步骤 2C）**。
 - **存在 manifest**：说明项目已纳管，直接进入 **Update 模式（步骤 2A）**。
 - **不存在 manifest**：说明是存量或未受管项目，进入 **Adopt 模式（步骤 2B）**。
 
@@ -200,6 +223,21 @@ AI 应首先巡检目标项目的工作区，按以下维度完成自动化诊�
 cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <层1,层2> [选项]
 ```
 *(注意：`--dir` 用于指定目标项目目录，请勿使用裸路径位置参数)*
+
+### 2C. Audit 模式（模板巡检与漂移排查治理）
+
+用于检测下游项目是否存在私自篡改模板脚本或越界修改受管块的只读排查工作流：
+```powershell
+cargo run -p pengj-templates-cli -- audit --dir <目标项目目录> --diff
+```
+
+**漂移排查与治理决策树**：
+- **`[项目专属定制]`（合规）**：改动完全处于 `PENGJ_TEMPLATE_START/END` 托管块之外的项目专属区（如 `SKILL.md` 门禁与声明、`AGENTS.md` 领域规范），属于标准合规定制。
+- **`[上游有更新]`（待同步）**：上游模板已演进，下游未做修改，可直接运行 `update` 安全同步。
+- **`[托管块被篡改]` / `[受管文件被改]`（违规严重漂移）**：
+  - **判定 1（具通用价值）**：若下游改动解决了某种通用痛点（如分支自适应推导、常见工具链兼容），**必须反馈至上游 `pengj-templates` 进行通用化重构**，在上游发布后一键 `update` 抹平下游 hack。
+  - **判定 2（项目特殊环境）**：若为下游独有的特殊构建目录、缓存或环境，**严禁直接修改脚本或受管块**，必须利用模板提供的声明机制（如 `SKILL.md` 的「忽略未追踪路径正则」或项目专属区）进行声明配置，并把受管文件还原为纯净模板版本。
+  - **判定 3（严禁私留 Hack）**：下游项目严禁留存对模板托管脚本及托管块内的私自修改，必须时刻保持 audit 违规项为零。
 
 ### 3. 结果解析与后处理（关键步骤）
 
