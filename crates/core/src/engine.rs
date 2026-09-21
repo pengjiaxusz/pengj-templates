@@ -1658,6 +1658,305 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
     })
 }
 
+// ---------- 审计巡检 ----------
+
+/// 项目受管文件与托管块的巡检审计状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum AuditFileStatus {
+    /// 与模板完全一致
+    InSync,
+    /// 上游模板已有更新，下游未修改（可直接安全 update）
+    UpstreamNewer,
+    /// 包含受管块的文件：受管块与模板一致，块外包含项目专属自定义（合规定制）
+    ProjectCustomized,
+    /// 包含受管块的文件：受管块【内部】被下游修改（违规篡改/严重漂移）
+    ViolatedManagedBlock,
+    /// 无受管块的受管文件（脚本、基础配置等）：被下游修改（违规篡改/严重漂移）
+    LocallyModifiedFile,
+    /// 模板预期存在但在磁盘缺失
+    MissingOnDisk,
+    /// 存在于 manifest 但模板中已无此文件（上游已废弃）
+    OrphanInManifest,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AuditItem {
+    pub path: String,
+    pub status: AuditFileStatus,
+    /// 仅在存在漂移/修改且指定包含 diff 时生成
+    pub diff: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AuditReport {
+    pub project_name: String,
+    pub layers: Vec<String>,
+    pub items: Vec<AuditItem>,
+    /// 是否存在违规篡改（ViolatedManagedBlock 或 LocallyModifiedFile）
+    pub has_violations: bool,
+}
+
+fn generate_unified_diff(old_name: &str, old_text: &str, new_name: &str, new_text: &str) -> String {
+    similar::TextDiff::from_lines(old_text, new_text)
+        .unified_diff()
+        .context_radius(3)
+        .header(old_name, new_name)
+        .to_string()
+}
+
+/// 巡检项目的模板对齐状态（只读诊断受管文件与托管块漂移）
+///
+/// 严格比对磁盘当前内容、Manifest 记录与模板最新渲染结果：
+/// - 识别受管块内部篡改（ViolatedManagedBlock）
+/// - 识别普通脚本/配置文件私改（LocallyModifiedFile）
+/// - 识别合规的项目专属区自定义（ProjectCustomized）
+/// - 识别上游有更新但本地未改（UpstreamNewer）
+pub fn audit_project(
+    templates: &Templates,
+    project_dir: &Path,
+    include_diff: bool,
+) -> Result<AuditReport> {
+    let manifest = ProjectManifest::load(project_dir)?;
+    let metas = templates.layer_metas()?;
+    let valid_layers: Vec<String> = manifest
+        .layers
+        .iter()
+        .filter(|l| metas.contains_key(*l))
+        .cloned()
+        .collect();
+    let ordered = templates.resolve_layers(&valid_layers)?;
+    let mut options = manifest.options.clone();
+    if ordered.iter().any(|l| l == "agent") && !options.contains_key("skills") {
+        if let Ok(skills) = templates.list_skills() {
+            let all_skills: Vec<String> = skills.into_iter().map(|s| s.name).collect();
+            if !all_skills.is_empty() {
+                options.insert("skills".to_string(), serde_json::json!(all_skills));
+            }
+        }
+    }
+    let ctx = RenderContext::new(&manifest.project_name, ordered.clone(), options.clone());
+    let fm = templates.build_file_map(&ordered, &options)?;
+    let bytes_map = render_file_map(&fm, &ctx, project_dir)?;
+    let ignores = templates.collect_update_ignores(&ordered)?;
+
+    let mut items = Vec::new();
+    let mut has_violations = false;
+    let json_merge_keys: BTreeSet<&Path> = fm.json.keys().map(|p| p.as_path()).collect();
+
+    for (rel, tpl_bytes) in &bytes_map {
+        if ignores.contains(rel) {
+            continue;
+        }
+        let rel_str = rel.to_string_lossy().into_owned();
+        let target = project_dir.join(rel);
+
+        if !target.exists() {
+            items.push(AuditItem {
+                path: rel_str,
+                status: AuditFileStatus::MissingOnDisk,
+                diff: None,
+            });
+            continue;
+        }
+
+        let disk_bytes = match std::fs::read(&target) {
+            Ok(b) => b,
+            Err(_) => {
+                items.push(AuditItem {
+                    path: rel_str,
+                    status: AuditFileStatus::MissingOnDisk,
+                    diff: None,
+                });
+                continue;
+            }
+        };
+
+        let tpl_sha = sha256_hex(tpl_bytes);
+        let disk_sha = sha256_hex(&disk_bytes);
+        let manifest_sha = manifest.files.get(&rel_str);
+
+        let is_tpl_text = is_text(tpl_bytes);
+        let is_disk_text = is_text(&disk_bytes);
+
+        // 1. 完全一致（支持文本换行符 CRLF/LF 归一化）
+        if disk_sha == tpl_sha
+            || (is_tpl_text
+                && is_disk_text
+                && String::from_utf8_lossy(tpl_bytes)
+                    .replace("\r\n", "\n")
+                    .trim_end()
+                    == String::from_utf8_lossy(&disk_bytes)
+                        .replace("\r\n", "\n")
+                        .trim_end())
+        {
+            items.push(AuditItem {
+                path: rel_str,
+                status: AuditFileStatus::InSync,
+                diff: None,
+            });
+            continue;
+        }
+
+        // 2. JSON 并集文件（如 package.json）
+        if json_merge_keys.contains(rel.as_path()) {
+            items.push(AuditItem {
+                path: rel_str,
+                status: AuditFileStatus::ProjectCustomized,
+                diff: None,
+            });
+            continue;
+        }
+
+        // 3. TOML 受管文件（如 .cargo/config.toml）
+        if fm.normal.contains_key(rel)
+            && crate::toml_merge::is_toml_managed(rel)
+            && is_text(&disk_bytes)
+            && is_text(tpl_bytes)
+        {
+            let disk_text = String::from_utf8_lossy(&disk_bytes);
+            let tpl_text = String::from_utf8_lossy(tpl_bytes);
+            match crate::toml_merge::merge_toml_managed(&disk_text, &tpl_text) {
+                crate::toml_merge::TomlMergeOutcome::Merged(merged_text) => {
+                    if merged_text.as_bytes() == disk_bytes.as_slice() {
+                        items.push(AuditItem {
+                            path: rel_str,
+                            status: AuditFileStatus::ProjectCustomized,
+                            diff: None,
+                        });
+                    } else {
+                        items.push(AuditItem {
+                            path: rel_str,
+                            status: AuditFileStatus::UpstreamNewer,
+                            diff: None,
+                        });
+                    }
+                }
+                crate::toml_merge::TomlMergeOutcome::Conflict(reason) => {
+                    has_violations = true;
+                    let diff_str = if include_diff {
+                        Some(format!("TOML 结构化合并冲突: {reason}\n"))
+                    } else {
+                        None
+                    };
+                    items.push(AuditItem {
+                        path: rel_str,
+                        status: AuditFileStatus::ViolatedManagedBlock,
+                        diff: diff_str,
+                    });
+                }
+            }
+            continue;
+        }
+
+        // 4. 受管块文本文件（如 AGENTS.md, SKILL.md, .gitignore 等）
+        if (fm.normal.contains_key(rel) || fm.concat.contains_key(rel))
+            && is_text(tpl_bytes)
+            && is_text(&disk_bytes)
+        {
+            let tpl_text = String::from_utf8_lossy(tpl_bytes);
+            let disk_text = String::from_utf8_lossy(&disk_bytes);
+
+            if let Some(tpl_block) = crate::block::extract_managed_block(&tpl_text) {
+                if let Some(disk_block) = crate::block::extract_managed_block(&disk_text) {
+                    if disk_block.body.trim() == tpl_block.body.trim() {
+                        items.push(AuditItem {
+                            path: rel_str,
+                            status: AuditFileStatus::ProjectCustomized,
+                            diff: None,
+                        });
+                    } else {
+                        has_violations = true;
+                        let diff_str = if include_diff {
+                            Some(generate_unified_diff(
+                                &format!("{rel_str} (template block)"),
+                                &tpl_block.body,
+                                &format!("{rel_str} (disk block)"),
+                                &disk_block.body,
+                            ))
+                        } else {
+                            None
+                        };
+                        items.push(AuditItem {
+                            path: rel_str,
+                            status: AuditFileStatus::ViolatedManagedBlock,
+                            diff: diff_str,
+                        });
+                    }
+                    continue;
+                } else {
+                    has_violations = true;
+                    let diff_str = if include_diff {
+                        Some(generate_unified_diff(
+                            &format!("{rel_str} (template)"),
+                            &tpl_text,
+                            &format!("{rel_str} (disk without block)"),
+                            &disk_text,
+                        ))
+                    } else {
+                        None
+                    };
+                    items.push(AuditItem {
+                        path: rel_str,
+                        status: AuditFileStatus::ViolatedManagedBlock,
+                        diff: diff_str,
+                    });
+                    continue;
+                }
+            }
+        }
+
+        // 5. 无受管块的普通文件（如 scripts/sync-branch.ps1, commitlint.config.js 等）
+        if let Some(m_sha) = manifest_sha {
+            if disk_sha == *m_sha && tpl_sha != *m_sha {
+                items.push(AuditItem {
+                    path: rel_str,
+                    status: AuditFileStatus::UpstreamNewer,
+                    diff: None,
+                });
+                continue;
+            }
+        }
+
+        has_violations = true;
+        let diff_str = if include_diff && is_text(tpl_bytes) && is_text(&disk_bytes) {
+            let tpl_text = String::from_utf8_lossy(tpl_bytes);
+            let disk_text = String::from_utf8_lossy(&disk_bytes);
+            Some(generate_unified_diff(
+                &format!("{rel_str} (template)"),
+                &tpl_text,
+                &format!("{rel_str} (disk)"),
+                &disk_text,
+            ))
+        } else {
+            None
+        };
+        items.push(AuditItem {
+            path: rel_str,
+            status: AuditFileStatus::LocallyModifiedFile,
+            diff: diff_str,
+        });
+    }
+
+    // 6. 检查 manifest 中存在但在模板中已不存在的文件
+    for rel_str in manifest.files.keys() {
+        let rel = Path::new(rel_str);
+        if !bytes_map.contains_key(rel) && !ignores.contains(rel) {
+            items.push(AuditItem {
+                path: rel_str.clone(),
+                status: AuditFileStatus::OrphanInManifest,
+                diff: None,
+            });
+        }
+    }
+
+    Ok(AuditReport {
+        project_name: manifest.project_name,
+        layers: ordered,
+        items,
+        has_violations,
+    })
+}
+
 // ---------- .code-workspace 同步 ----------
 
 /// 扫描 `dir` 下一级（非递归）所有 `*.code-workspace` 文件，按文件名排序返回。
@@ -4304,6 +4603,76 @@ mod tests {
             std::fs::read_to_string(tmp.join("cp_agent_only").join("AGENTS.md")).unwrap();
         assert!(agent_only_md.contains("### 中文编程规范"));
         assert!(!agent_only_md.contains("Rust"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn audit_project_detects_clean_customized_and_violations() {
+        let tmp = std::env::temp_dir().join(format!("pengj_test_audit_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let tpl_dir = tmp.join("templates");
+        let proj_dir = tmp.join("project");
+
+        // 构造一层模板：含 1 个带托管块文件，1 个无托管块文件
+        let l1 = tpl_dir.join("layer1");
+        std::fs::create_dir_all(&l1).unwrap();
+        std::fs::write(
+            l1.join("layer.toml"),
+            "name = \"L1\"\ndescription = \"Test\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            l1.join("doc.md"),
+            "Intro\n<!-- PENGJ_TEMPLATE_START -->\nManaged Block V1\n<!-- PENGJ_TEMPLATE_END -->\nOutro",
+        )
+        .unwrap();
+        std::fs::write(l1.join("script.sh"), "#!/bin/sh\necho hello\n").unwrap();
+
+        let templates = Templates::new(&tpl_dir);
+
+        // 生成项目
+        let opts = BTreeMap::new();
+        generate(&templates, "project", &["layer1".to_string()], opts, &tmp).unwrap();
+
+        // 1. 刚刚生成：审计结果应当干净（无任何违规）
+        let rep1 = audit_project(&templates, &proj_dir, true).unwrap();
+        assert!(!rep1.has_violations);
+        let doc_item = rep1.items.iter().find(|i| i.path == "doc.md").unwrap();
+        assert_eq!(doc_item.status, AuditFileStatus::InSync);
+        let script_item = rep1.items.iter().find(|i| i.path == "script.sh").unwrap();
+        assert_eq!(script_item.status, AuditFileStatus::InSync);
+
+        // 2. 在 doc.md 托管块外新增用户专属内容（合规自定义）
+        std::fs::write(
+            proj_dir.join("doc.md"),
+            "Intro\n<!-- PENGJ_TEMPLATE_START -->\nManaged Block V1\n<!-- PENGJ_TEMPLATE_END -->\nOutro\n## Project Custom Notes\n",
+        )
+        .unwrap();
+        let rep2 = audit_project(&templates, &proj_dir, true).unwrap();
+        assert!(!rep2.has_violations);
+        let doc_item2 = rep2.items.iter().find(|i| i.path == "doc.md").unwrap();
+        assert_eq!(doc_item2.status, AuditFileStatus::ProjectCustomized);
+
+        // 3. 在 doc.md 托管块【内部】篡改内容 -> 产生 ViolatedManagedBlock 违规
+        std::fs::write(
+            proj_dir.join("doc.md"),
+            "Intro\n<!-- PENGJ_TEMPLATE_START -->\nManaged Block TAMPERED\n<!-- PENGJ_TEMPLATE_END -->\nOutro\n## Project Custom Notes\n",
+        )
+        .unwrap();
+        let rep3 = audit_project(&templates, &proj_dir, true).unwrap();
+        assert!(rep3.has_violations);
+        let doc_item3 = rep3.items.iter().find(|i| i.path == "doc.md").unwrap();
+        assert_eq!(doc_item3.status, AuditFileStatus::ViolatedManagedBlock);
+        assert!(doc_item3.diff.as_ref().unwrap().contains("TAMPERED"));
+
+        // 4. 篡改无托管块的 script.sh -> 产生 LocallyModifiedFile 违规
+        std::fs::write(proj_dir.join("script.sh"), "#!/bin/sh\necho hacked\n").unwrap();
+        let rep4 = audit_project(&templates, &proj_dir, true).unwrap();
+        assert!(rep4.has_violations);
+        let script_item4 = rep4.items.iter().find(|i| i.path == "script.sh").unwrap();
+        assert_eq!(script_item4.status, AuditFileStatus::LocallyModifiedFile);
+        assert!(script_item4.diff.as_ref().unwrap().contains("hacked"));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

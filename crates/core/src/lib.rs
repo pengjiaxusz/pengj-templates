@@ -13,10 +13,13 @@ pub mod render;
 pub(crate) mod toml_merge;
 
 pub use engine::{
-    adopt_project, default_templates_dir, generate, list_workspace_files, sync_workspace_file,
-    update_project, Templates,
+    adopt_project, audit_project, default_templates_dir, generate, list_workspace_files,
+    sync_workspace_file, update_project, Templates,
 };
-pub use engine::{AdoptReport, ConflictInfo, GenerateReport, UpdateReport};
+pub use engine::{
+    AdoptReport, AuditFileStatus, AuditItem, AuditReport, ConflictInfo, GenerateReport,
+    UpdateReport,
+};
 pub use error::{CoreError, Result};
 pub use layer::{LayerInfo, SkillInfo};
 pub use manifest::{ProjectManifest, MANIFEST_FILE};

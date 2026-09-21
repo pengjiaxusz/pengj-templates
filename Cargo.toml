@@ -18,3 +18,4 @@ include_dir = "0.7"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 toml = "0.8"
+similar = "2"

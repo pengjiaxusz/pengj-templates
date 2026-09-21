@@ -83,6 +83,18 @@ enum Command {
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
     },
+    /// 巡检项目的模板对齐状态（只读诊断受管文件与托管块漂移）
+    Audit {
+        /// 目标项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 显示详细差异对比（diff）
+        #[arg(long)]
+        diff: bool,
+        /// 以 JSON 格式输出（供脚本/自动化消费）
+        #[arg(long)]
+        json: bool,
+    },
     /// 纳管存量已有项目（初始化 .pengj-templates.json 并建立基线）
     Adopt {
         /// 目标项目目录（默认当前目录）
@@ -158,6 +170,7 @@ fn main() -> anyhow::Result<()> {
             &output,
         ),
         Command::Update { dir } => cmd_update(&templates, &dir),
+        Command::Audit { dir, diff, json } => cmd_audit(&templates, &dir, diff, json),
         Command::Adopt {
             dir,
             layers,
@@ -331,6 +344,100 @@ fn cmd_update(templates: &pengj_core::Templates, dir: &Path) -> anyhow::Result<(
     for f in &report.removed {
         println!("  [移除] {} （模板已删除，本地文件保留）", f);
     }
+    Ok(())
+}
+
+fn cmd_audit(
+    templates: &pengj_core::Templates,
+    dir: &Path,
+    show_diff: bool,
+    json: bool,
+) -> anyhow::Result<()> {
+    let report =
+        pengj_core::audit_project(templates, dir, show_diff).context("审计项目模板对齐状态失败")?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        if report.has_violations {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    println!(
+        "项目: {}（层: {}）",
+        report.project_name,
+        report.layers.join(" -> ")
+    );
+    println!("------------------------------------------------------------");
+
+    let mut in_sync_count = 0;
+    let mut custom_count = 0;
+    let mut upstream_newer_count = 0;
+    let mut violations = Vec::new();
+
+    for item in &report.items {
+        match item.status {
+            pengj_core::AuditFileStatus::InSync => in_sync_count += 1,
+            pengj_core::AuditFileStatus::ProjectCustomized => {
+                custom_count += 1;
+                println!("  [项目专属定制] {}", item.path);
+            }
+            pengj_core::AuditFileStatus::UpstreamNewer => {
+                upstream_newer_count += 1;
+                println!("  [上游有更新]   {} (可安全运行 update)", item.path);
+            }
+            pengj_core::AuditFileStatus::ViolatedManagedBlock => {
+                violations.push(item);
+                println!(
+                    "  [托管块被篡改] {} (严重漂移: 受管区间内代码被下游修改)",
+                    item.path
+                );
+            }
+            pengj_core::AuditFileStatus::LocallyModifiedFile => {
+                violations.push(item);
+                println!(
+                    "  [受管文件被改] {} (严重漂移: 模板托管文件被下游私自修改)",
+                    item.path
+                );
+            }
+            pengj_core::AuditFileStatus::MissingOnDisk => {
+                println!("  [本地文件缺失] {}", item.path);
+            }
+            pengj_core::AuditFileStatus::OrphanInManifest => {
+                println!("  [上游已废弃]   {}", item.path);
+            }
+        }
+    }
+
+    println!("------------------------------------------------------------");
+    println!(
+        "统计: {} 个一致, {} 个项目合规定制, {} 个待更新, {} 个违规漂移",
+        in_sync_count,
+        custom_count,
+        upstream_newer_count,
+        violations.len()
+    );
+
+    if show_diff && !violations.is_empty() {
+        println!("\n================== 详细漂移差异 (Diff) ==================");
+        for v in &violations {
+            if let Some(d) = &v.diff {
+                println!("\n--- 差异: {} ---", v.path);
+                print!("{d}");
+            }
+        }
+        println!("=========================================================");
+    }
+
+    if report.has_violations {
+        eprintln!("\n[警告] 检测到项目存在违规篡改模板内容！请遵循规范：");
+        eprintln!("  1. 若改动具备通用价值，应反馈至上游 pengj-templates 模板；");
+        eprintln!("  2. 若为项目特化环境，应迁移至托管块外「项目专属区」声明配置；");
+        eprintln!("  3. 严禁下游私自保留对模板托管脚本及托管块内的 hack。\n");
+        std::process::exit(1);
+    }
+
     Ok(())
 }
 

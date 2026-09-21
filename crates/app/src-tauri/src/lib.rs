@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use pengj_core::{adopt_project, generate, list_workspace_files, update_project, Templates};
+use pengj_core::{
+    adopt_project, audit_project, generate, list_workspace_files, update_project, Templates,
+};
 use tauri::Manager;
 
 /// 定位模板目录：环境 PENGJ_TEMPLATES > app 资源目录 templates/ > 默认位置
@@ -60,6 +62,18 @@ fn cmd_update_project(
     update_project(&templates, Path::new(&project_dir)).map_err(|e| e.to_string())
 }
 
+/// 巡检项目的模板对齐状态
+#[tauri::command]
+fn cmd_audit_project(
+    app: tauri::AppHandle,
+    project_dir: String,
+    diff: Option<bool>,
+) -> Result<pengj_core::AuditReport, String> {
+    let templates = resolve_templates(&app)?;
+    audit_project(&templates, Path::new(&project_dir), diff.unwrap_or(false))
+        .map_err(|e| e.to_string())
+}
+
 /// 纳管已有存量项目
 #[tauri::command]
 fn cmd_adopt_project(
@@ -102,6 +116,7 @@ pub fn run() {
             cmd_list_skills,
             cmd_create_project,
             cmd_update_project,
+            cmd_audit_project,
             cmd_adopt_project,
             cmd_list_workspaces
         ])
