@@ -1358,19 +1358,34 @@ pub struct UpdateReport {
     pub unchanged: usize,
 }
 
-/// 按 manifest 记录把模板的最新内容同步到已生成的项目
-///
-/// 规则：
-/// - 模板文件内容未变 -> 跳过
-/// - 模板变了、本地文件未动过 -> 覆盖
-/// - 模板变了、本地文件被改过 -> 冲突，跳过并上报
-/// - 含受管块的文本文件 -> 合并注入（替换既有块 / 追加进 legacy 文件并报 needs_review）
-/// - `.cargo/config.toml` 等 TOML 受管文件 -> 结构化合并（表级并集、键级去重、冲突跳过并上报）
-/// - `package.json` -> JSON 并集合并，同名键以用户为准、模板只补缺失
+/// 项目更新选项
+#[derive(Debug, Clone, Default)]
+pub struct UpdateOptions {
+    /// 强制对齐纯受管技能资产（无托管块的工具技能或脚本），直接拉平覆盖为最新模板并刷新清单
+    pub sync_skills: bool,
+}
+
+/// 按 manifest 记录把模板的最新内容同步到已生成的项目（默认选项）
+pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<UpdateReport> {
+    update_project_with_options(templates, project_dir, &UpdateOptions::default())
+}
+
+/// 同步模板更新到已生成项目（支持选项）：
+/// - 黑名单文件 -> 跳过（不覆盖/不删除/不报冲突）
+/// - 普通文本 -> 替换为新模板
+/// - 含受管块文本 -> 原位替换块区间，保留块外用户内容
+/// - TOML 受管配置（.cargo/config.toml）-> 结构化表级并集合并 + 等值去重 + 冲突跳过
+/// - VS Code settings（.vscode/settings.json / *.code-workspace）-> 增量合并
+/// - JSON 并集文件（package.json）-> 结构化并集合并
+/// - 纯受管技能资产（若开启 sync_skills）-> 直接对齐覆盖为最新模板
 /// - 模板新增文件 -> 创建（本地已有同名文件则跳过并上报）
 /// - 模板删除文件 -> 不动本地文件，仅上报
 /// - 层声明的 `update_ignore` 黑名单文件 -> 完全跳过（不覆盖/不冲突/不删除上报），归用户所有
-pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<UpdateReport> {
+pub fn update_project_with_options(
+    templates: &Templates,
+    project_dir: &Path,
+    options: &UpdateOptions,
+) -> Result<UpdateReport> {
     let mut manifest = ProjectManifest::load(project_dir)?;
     // 过滤掉已从模板中移除/废弃的层，保留当前模板仍支持的层
     let metas = templates.layer_metas()?;
@@ -1560,6 +1575,28 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
                             "{rel_str}：模板托管块已{action}，请人工检查是否与原有内容重复"
                         ));
                     }
+                }
+                continue;
+            }
+        }
+
+        // 纯模板受管技能资产（若启用 sync_skills）：
+        // 凡属于 .agents/skills/ 的文件（含纯工具技能主文档、scripts 脚本、references 等），
+        // 且模板和磁盘均不含受管块时，sync_skills 模式下直接覆盖对齐最新模板，避免误判冲突
+        if options.sync_skills && skill_name_of(rel).is_some() && target.is_file() {
+            let cur = std::fs::read(&target).unwrap_or_default();
+            let cur_has_block = is_text(&cur)
+                && crate::block::extract_managed_block(&String::from_utf8_lossy(&cur)).is_some();
+            let tpl_has_block = is_text(bytes)
+                && crate::block::extract_managed_block(&String::from_utf8_lossy(bytes)).is_some();
+            if !cur_has_block && !tpl_has_block {
+                if cur.as_slice() == *bytes {
+                    unchanged += 1;
+                    new_files.insert(rel_str.clone(), new_sha);
+                } else {
+                    write_file(&target, bytes)?;
+                    new_files.insert(rel_str.clone(), new_sha);
+                    updated.push(rel_str);
                 }
                 continue;
             }
@@ -4714,6 +4751,87 @@ mod tests {
         let script_item4 = rep4.items.iter().find(|i| i.path == "script.sh").unwrap();
         assert_eq!(script_item4.status, AuditFileStatus::LocallyModifiedFile);
         assert!(script_item4.diff.as_ref().unwrap().contains("hacked"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_update_project_with_options_sync_skills() {
+        let tmp =
+            std::env::temp_dir().join(format!("pengj_test_sync_skills_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let tpl_dir = tmp.join("templates");
+        let proj_dir = tmp.join("myproject");
+
+        // 构造层 agent
+        let agent_layer = tpl_dir.join("agent");
+        std::fs::create_dir_all(agent_layer.join(".agents/skills/caveman")).unwrap();
+        std::fs::write(
+            agent_layer.join("layer.toml"),
+            "name = \"agent\"\ndescription = \"Agent 层\"\n",
+        )
+        .unwrap();
+        // 纯技能 caveman 无托管块
+        std::fs::write(
+            agent_layer.join(".agents/skills/caveman/SKILL.md"),
+            "---\nname: caveman\ndescription: caveman\n---\n# Caveman V1\n",
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl_dir);
+        let mut opts = BTreeMap::new();
+        opts.insert("skills".to_string(), serde_json::json!(["caveman"]));
+        generate(&templates, "myproject", &["agent".to_string()], opts, &tmp).unwrap();
+
+        // 模拟上游模板升级了 caveman
+        std::fs::write(
+            agent_layer.join(".agents/skills/caveman/SKILL.md"),
+            "---\nname: caveman\ndescription: caveman\n---\n# Caveman V2 Updated\n",
+        )
+        .unwrap();
+
+        // 模拟本地磁盘存在修改（无托管块）
+        std::fs::write(
+            proj_dir.join(".agents/skills/caveman/SKILL.md"),
+            "---\nname: caveman\ndescription: caveman\n---\n# Caveman V1 Local Tweaked\n",
+        )
+        .unwrap();
+
+        // 1. sync_skills = false 时更新：应当判定为冲突
+        let rep_no_sync = update_project_with_options(
+            &templates,
+            &proj_dir,
+            &UpdateOptions { sync_skills: false },
+        )
+        .unwrap();
+        assert!(
+            rep_no_sync
+                .conflicted
+                .iter()
+                .any(|c| c.path.contains("caveman")),
+            "sync_skills = false 时应当报冲突"
+        );
+
+        // 2. sync_skills = true 时更新：纯技能应当平滑覆盖更新
+        let rep_sync = update_project_with_options(
+            &templates,
+            &proj_dir,
+            &UpdateOptions { sync_skills: true },
+        )
+        .unwrap();
+        assert!(
+            rep_sync.conflicted.is_empty(),
+            "开启 sync_skills 不应当产生冲突"
+        );
+        assert!(
+            rep_sync.updated.iter().any(|u| u.contains("caveman")),
+            "应当被更新覆盖"
+        );
+
+        // 验证文件内容已被更新为 V2
+        let content =
+            std::fs::read_to_string(proj_dir.join(".agents/skills/caveman/SKILL.md")).unwrap();
+        assert!(content.contains("Caveman V2 Updated"));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
