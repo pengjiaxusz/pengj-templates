@@ -18,14 +18,28 @@ Workflow for auditing downstream project alignment, updating downstream projects
 
 ## Quick Start
 
+### Fast-Track Pipeline (Recommended)
+
+Prefer running the bundled fast-track pipeline script `sync-template.ps1`. It detects precompiled binaries for sub-second startup, supports batch project directories, strictly enforces the selective staging red line (never `git add .`), and can close the loop (audit -> update -> selective add -> commit -> push) in a single tool call:
+
+```powershell
+# Fast-track dry-run audit for one or multiple projects
+pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<project-dir-1>", "<project-dir-2>")
+
+# Fast-track one-click batch update with selective staging, commit and push
+pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<project-dir-1>", "<project-dir-2>") -Apply -Commit -Push
+```
+
+### Direct CLI Commands
+
 Run from `pengj-templates` repo or ensure `pengj-templates-cli` is in PATH / `PENGJ_TEMPLATES` is set:
 
 ```powershell
-# 0. Audit template alignment & drifts (read-only inspection, checks tampering)
-cargo run -p pengj-templates-cli -- audit --dir <project-dir> --diff
+# 0. Audit template alignment & drifts (supports single --dir or batch --dirs)
+cargo run -p pengj-templates-cli -- audit --dirs <dir1,dir2> --diff
 
-# 1. Update an already managed project (has .pengj-templates.json)
-cargo run -p pengj-templates-cli -- update --dir <project-dir>
+# 1. Update managed projects (with --sync-skills to align pure skill assets without blocks)
+cargo run -p pengj-templates-cli -- update --dirs <dir1,dir2> --sync-skills
 
 # 2. Adopt / Apply templates to an existing project (no manifest yet)
 cargo run -p pengj-templates-cli -- adopt --dir <project-dir> --layers <layer1,layer2> [options]
@@ -43,11 +57,16 @@ Check whether the target project has `.pengj-templates.json`:
 
 ### 2A. Update Mode (Sync Upstream Changes)
 
-1. Run the update command:
+1. Run the fast-track script or CLI update:
    ```powershell
-   cargo run -p pengj-templates-cli -- update --dir <project-dir>
+   # Recommended: fast-track script
+   pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<project-dir>") -Apply
+
+   # Or via CLI directly
+   cargo run -p pengj-templates-cli -- update --dir <project-dir> --sync-skills
    ```
 2. The engine reads `.pengj-templates.json` to reuse original options (`edition`, `skills`, `skill_lang`, etc.) and performs baseline-driven sync:
+   - **Pure skill assets (`.agents/skills/`)**: When `--sync-skills` is enabled (default in fast-track script), pure skills and helper scripts without managed blocks are cleanly updated to the latest template without raising false conflicts.
    - **Unmodified files**: Overwritten cleanly with the latest template.
    - **Files with managed blocks (`PENGJ_TEMPLATE_START/END`)**: Managed block is replaced in place; user-owned area outside is preserved.
    - **TOML / JSON (`.cargo/config.toml`, `package.json`)**: Structured union merge.
@@ -145,14 +164,28 @@ Inspect the CLI execution report:
 
 ## 快速开始
 
+### 极速流水线通道（推荐）
+
+优先调用技能内置的极速流水线脚本 `sync-template.ps1`。该脚本毫秒级直调预编译二进制产物、支持批量项目目录、原生守护「精准暂存红线（严禁 `git add .`）」、并可在单次工具调用内闭环「扫描 -> 更新 -> 精准暂存 -> 约定提交 -> 推送」：
+
+```powershell
+# 快速预检：1 秒内快速诊断单项目或多项目的漂移状态（Dry Run）
+pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<项目目录1>", "<项目目录2>")
+
+# 一键流水线：批量更新、精准暂存、生成约定式提交并推送到远端（一次调用全自动闭环）
+pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<项目目录1>", "<项目目录2>") -Apply -Commit -Push
+```
+
+### 原生 CLI 命令
+
 在 `pengj-templates` 仓库根目录运行，或确保 `pengj-templates-cli` 在 PATH 中 / 已设置 `PENGJ_TEMPLATES` 环境变量：
 
 ```powershell
-# 0. 巡检项目模板对齐状态（只读排查违规篡改与漂移）
-cargo run -p pengj-templates-cli -- audit --dir <目标项目目录> --diff
+# 0. 巡检项目模板对齐状态（支持单目录 --dir 或多目录 --dirs，只读排查篡改与漂移）
+cargo run -p pengj-templates-cli -- audit --dirs <目录1,目录2> --diff
 
-# 1. 更新已纳管项目（已有 .pengj-templates.json）
-cargo run -p pengj-templates-cli -- update --dir <目标项目目录>
+# 1. 更新已纳管项目（建议带上 --sync-skills 确保纯技能资产平滑对齐覆盖）
+cargo run -p pengj-templates-cli -- update --dirs <目录1,目录2> --sync-skills
 
 # 2. 纳管/应用模板到存量项目（尚无 manifest）
 cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <层1,层2> [选项]
@@ -170,11 +203,16 @@ cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <�
 
 ### 2A. Update 模式（同步上游更新）
 
-1. 执行更新命令：
+1. 执行极速脚本或更新命令：
    ```powershell
-   cargo run -p pengj-templates-cli -- update --dir <目标项目目录>
+   # 推荐：极速流水线脚本
+   pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<目标项目目录>") -Apply
+
+   # 或通过 CLI 直接调用
+   cargo run -p pengj-templates-cli -- update --dir <目标项目目录> --sync-skills
    ```
 2. 引擎自动从 manifest 读取固化的选项（`edition`、`skills`、`skill_lang` 等）并重渲染比对：
+   - **纯受管技能资产（`.agents/skills/`）**：开启 `--sync-skills` 时（极速脚本默认启用），纯工具技能与脚本即使无托管块也会平滑对齐覆盖为最新模板版本，不判定为冲突；
    - **磁盘未改动文件**：直接覆盖为最新模板；
    - **含受管块文本（`PENGJ_TEMPLATE_START/END`）**：受管块内原位替换，块外项目专属内容完整保留；
    - **TOML / JSON（`.cargo/config.toml`、`package.json`）**：结构化并集合并；
