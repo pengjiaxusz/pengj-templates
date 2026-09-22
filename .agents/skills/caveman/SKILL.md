@@ -1,9 +1,9 @@
 ---
 name: caveman
 description: >-
-  超压缩通信模式。通过省略填充词、冠词和客套话，将 token 用量降低约 75%，同时保持完整的技术准确性。
-  当用户说 "caveman mode"、"talk like caveman"、"use caveman"、"less tokens"、"be brief" 或调用 /caveman 时使用。
+  超压缩通信模式。通过省略填充词、冠词和客套话，将 token 用量降低约 75%，同时保持完整的技术准确性。当用户说 "caveman mode"、"talk like caveman"、"use caveman"、"less tokens"、"be brief" 或调用 /caveman 时使用。
 ---
+
 
 # Caveman 模式
 

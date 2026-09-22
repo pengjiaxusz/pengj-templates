@@ -6,7 +6,7 @@ const subjectLanguagePlugin = {
         return [true];
       }
       if (!subject) {
-        return [false, '提交标题 (subject) 不能为空'];
+        return [false, '提交标题 (subject) 不能为空 / commit subject cannot be empty'];
       }
 
       const trimmedSubject = subject.trim();

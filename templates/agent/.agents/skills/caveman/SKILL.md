@@ -1,11 +1,11 @@
 ---
 name: caveman
 description: >-
-{% if options["skill_lang"] == "en" %}
+{%- if options["skill_lang"] == "en" %}
   Ultra-compressed communication mode. Cut token usage ~75% by dropping filler words, articles, and pleasantries while keeping full technical accuracy. Use when the user says "caveman mode", "talk like caveman", "use caveman", "less tokens", "be brief", or invokes /caveman.
-{% else %}
+{%- else %}
   超压缩通信模式。通过省略填充词、冠词和客套话，将 token 用量降低约 75%，同时保持完整的技术准确性。当用户说 "caveman mode"、"talk like caveman"、"use caveman"、"less tokens"、"be brief" 或调用 /caveman 时使用。
-{% endif %}
+{%- endif %}
 ---
 
 {% if options["skill_lang"] == "en" %}
