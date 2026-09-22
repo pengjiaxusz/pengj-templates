@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.34.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.33.0-beta.1...v0.34.0-beta.1) (2026-09-22)
+
+
+### Features
+
+* **agent:** 引入 template-sync 极速流水线脚本与使用指南 ([38f4216](https://github.com/pengjiaxusz/pengj-templates/commit/38f4216e57b2e70a223492fc66c75824c1ae9a24))
+* **cli:** 支持批量项目路径与技能同步命令行参数 ([6c6588f](https://github.com/pengjiaxusz/pengj-templates/commit/6c6588f071a7beca94ad8f869db38eeebc4d1cf2))
+* **core:** 支持受管技能资产更新对齐选项与单测 ([1854306](https://github.com/pengjiaxusz/pengj-templates/commit/18543065d44526f3ed0b90e245eda4e392f601cd))
+
 ## [0.33.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.32.0-beta.1...v0.33.0-beta.1) (2026-09-22)
 
 
