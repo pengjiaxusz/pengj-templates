@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.33.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.32.0-beta.1...v0.33.0-beta.1) (2026-09-22)
+
+
+### Features
+
+* **core:** 优化模板更新状态判定与审计巡检逻辑 ([583de3d](https://github.com/pengjiaxusz/pengj-templates/commit/583de3d43a1889b4e6fad949a2aaba1db5819d43))
+* **templates:** 完善分层种子保护与技能模板空白符修剪 ([a1f6f07](https://github.com/pengjiaxusz/pengj-templates/commit/a1f6f074dc0e125b200fed4ca48a4bd76df99088))
+
 ## [0.32.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.31.0-beta.1...v0.32.0-beta.1) (2026-09-21)
 
 
