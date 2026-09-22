@@ -1584,6 +1584,21 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
                         new_files.insert(rel_str.clone(), new_sha);
                         updated.push(rel_str);
                     }
+                    Some(cur)
+                        if sha256_hex(&cur) == new_sha
+                            || (is_text(&cur)
+                                && is_text(bytes)
+                                && String::from_utf8_lossy(&cur)
+                                    .replace("\r\n", "\n")
+                                    .trim_end()
+                                    == String::from_utf8_lossy(bytes)
+                                        .replace("\r\n", "\n")
+                                        .trim_end()) =>
+                    {
+                        // 本地内容已对齐到新模板（含换行符归一化），直接记为未变并记录新 sha
+                        unchanged += 1;
+                        new_files.insert(rel_str.clone(), new_sha);
+                    }
                     Some(_) => {
                         // 本地被用户改过且无受管块可合并，保持冲突跳过
                         new_files.insert(rel_str.clone(), old_sha.clone());
@@ -1805,6 +1820,32 @@ pub fn audit_project(
                 diff: None,
             });
             continue;
+        }
+
+        // 2.5 VS Code settings 文件
+        if rel == Path::new(VSCODE_SETTINGS_REL) {
+            let src = vscode_settings_source(&ctx, &fm, project_dir)?;
+            if let Some(src_map) = src.as_object() {
+                let cur_str = std::fs::read_to_string(&target).unwrap_or_default();
+                let settings =
+                    serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&cur_str)
+                        .unwrap_or_default();
+                let mut dummy = settings.clone();
+                if merge_vscode_settings(&mut dummy, src_map, &ctx) {
+                    items.push(AuditItem {
+                        path: rel_str,
+                        status: AuditFileStatus::UpstreamNewer,
+                        diff: None,
+                    });
+                } else {
+                    items.push(AuditItem {
+                        path: rel_str,
+                        status: AuditFileStatus::ProjectCustomized,
+                        diff: None,
+                    });
+                }
+                continue;
+            }
         }
 
         // 3. TOML 受管文件（如 .cargo/config.toml）
