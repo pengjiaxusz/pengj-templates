@@ -82,12 +82,21 @@ enum Command {
         /// 项目目录（默认当前目录）
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
+        /// 批量更新多个项目目录（逗号分隔，如 dir1,dir2）
+        #[arg(long, value_delimiter = ',')]
+        dirs: Option<Vec<PathBuf>>,
+        /// 纯受管技能资产与脚本直接对齐覆盖（即使无托管块也不判定为冲突）
+        #[arg(long)]
+        sync_skills: bool,
     },
     /// 巡检项目的模板对齐状态（只读诊断受管文件与托管块漂移）
     Audit {
         /// 目标项目目录（默认当前目录）
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
+        /// 批量巡检多个项目目录（逗号分隔，如 dir1,dir2）
+        #[arg(long, value_delimiter = ',')]
+        dirs: Option<Vec<PathBuf>>,
         /// 显示详细差异对比（diff）
         #[arg(long)]
         diff: bool,
@@ -169,8 +178,54 @@ fn main() -> anyhow::Result<()> {
             skills.as_deref(),
             &output,
         ),
-        Command::Update { dir } => cmd_update(&templates, &dir),
-        Command::Audit { dir, diff, json } => cmd_audit(&templates, &dir, diff, json),
+        Command::Update {
+            dir,
+            dirs,
+            sync_skills,
+        } => {
+            let targets = match dirs {
+                Some(ds) if !ds.is_empty() => ds,
+                _ => vec![dir],
+            };
+            for d in &targets {
+                if targets.len() > 1 {
+                    println!(
+                        "\n==================== 更新项目: {} ====================",
+                        d.display()
+                    );
+                }
+                cmd_update(&templates, d, sync_skills)?;
+            }
+            Ok(())
+        }
+        Command::Audit {
+            dir,
+            dirs,
+            diff,
+            json,
+        } => {
+            let targets = match dirs {
+                Some(ds) if !ds.is_empty() => ds,
+                _ => vec![dir],
+            };
+            let mut any_violations = false;
+            for d in &targets {
+                if targets.len() > 1 && !json {
+                    println!(
+                        "\n==================== 巡检项目: {} ====================",
+                        d.display()
+                    );
+                }
+                let has_violations = cmd_audit(&templates, d, diff, json)?;
+                if has_violations {
+                    any_violations = true;
+                }
+            }
+            if any_violations {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         Command::Adopt {
             dir,
             layers,
@@ -316,8 +371,14 @@ fn cmd_create(
     Ok(())
 }
 
-fn cmd_update(templates: &pengj_core::Templates, dir: &Path) -> anyhow::Result<()> {
-    let report = pengj_core::update_project(templates, dir).context("更新项目失败")?;
+fn cmd_update(
+    templates: &pengj_core::Templates,
+    dir: &Path,
+    sync_skills: bool,
+) -> anyhow::Result<()> {
+    let opts = pengj_core::UpdateOptions { sync_skills };
+    let report = pengj_core::update_project_with_options(templates, dir, &opts)
+        .with_context(|| format!("更新项目 {} 失败", dir.display()))?;
     println!(
         "项目: {}（层: {}）",
         report.project_name,
@@ -352,16 +413,13 @@ fn cmd_audit(
     dir: &Path,
     show_diff: bool,
     json: bool,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<bool> {
     let report =
         pengj_core::audit_project(templates, dir, show_diff).context("审计项目模板对齐状态失败")?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
-        if report.has_violations {
-            std::process::exit(1);
-        }
-        return Ok(());
+        return Ok(report.has_violations);
     }
 
     println!(
@@ -435,10 +493,9 @@ fn cmd_audit(
         eprintln!("  1. 若改动具备通用价值，应反馈至上游 pengj-templates 模板；");
         eprintln!("  2. 若为项目特化环境，应迁移至托管块外「项目专属区」声明配置；");
         eprintln!("  3. 严禁下游私自保留对模板托管脚本及托管块内的 hack。\n");
-        std::process::exit(1);
     }
 
-    Ok(())
+    Ok(report.has_violations)
 }
 
 #[allow(clippy::too_many_arguments)]
