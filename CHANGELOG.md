@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.34.0-beta.1...v0.35.0-beta.1) (2026-09-23)
+
+
+### Features
+
+* **agent:** 增强分支同步防漏防覆盖机制并支持单调用闭环 ([1a853a9](https://github.com/pengjiaxusz/pengj-templates/commit/1a853a95e2cee1cc602302bc7d8089dbe92c91e3))
+
 ## [0.34.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.33.0-beta.1...v0.34.0-beta.1) (2026-09-22)
 
 
