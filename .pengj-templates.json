@@ -34,7 +34,7 @@
     ".agents\\skills\\arch-align\\references\\GENERATE-DOC.md": "7cbd5aca4240f88d8ccce5b7a8278778de791aa7152c3c912c243ec2808511df",
     ".agents\\skills\\arch-align\\references\\GENERATE-INDEX.md": "8631df67a99bc9eb96096b4edc28d050e1d63151ef6f05be545ba37fb73396bb",
     ".agents\\skills\\branch-sync\\SKILL.md": "b092fdafcab5aa8ce4e09c64e6342bf34164f3e7f22409145685407454b479d5",
-    ".agents\\skills\\branch-sync\\scripts\\sync-branch.ps1": "300df1eef94191d4bd355147cdaf7374d82c43028e8712cc80e38c9522b92a95",
+    ".agents\\skills\\branch-sync\\scripts\\sync-branch.ps1": "5e6246f01a642e4a5d7060869ca5ceb5e2dc208b55aed8bfd1e9ae21e105005b",
     ".agents\\skills\\caveman\\SKILL.md": "56a31b9be677ca0afcc24e2273846931841534990657251e1d47815adf661914",
     ".agents\\skills\\commit\\SKILL.md": "d165ddce41a392641335400b37c823c9a1ef55918a378b7ca0da3fc5c5ce9027",
     ".agents\\skills\\grill-me\\SKILL.md": "b0efcedde0094c2ef8540027142f2897fc640f734978003d39c72d0cdaad0a44",
@@ -43,12 +43,13 @@
     ".agents\\skills\\subrepo-sync\\SKILL.md": "252954cb9f96ac1253ac22e96e2f1150421deee9eadd5811d03a48da0a2c9e82",
     ".agents\\skills\\subrepo-sync\\scripts\\show-unapplied-commits.ps1": "c44b1193d07dd7b85140620feafa5ebd40e0defe753b7cfe0758868d5df57c01",
     ".agents\\skills\\template-sync\\SKILL.md": "2a69173bdabee8fae0885190b4622a658e6411cb118c49a6cedae78fb0b35580",
+    ".agents\\skills\\template-sync\\scripts\\sync-template.ps1": "2d9e50bc34a0d5e8d9cf553fdb1d65c9ee3d13297fd03a8fbc2299962b209fe8",
     ".agents\\skills\\write-a-skill\\SKILL.md": "36c18c4cdb1a5b21a19b5d9e09010d9e34876ef8b8b663b33fd3cd4add6a433a",
     ".cargo\\config.toml": "1b06aced2448d86dc3dffeba01ffac746b65059315367c4d54e5801e5af7b98d",
     ".gitattributes": "b5099197608cab315182fadad3cdf0e06ad5ab9b21f3decf8ace9e328cb9a121",
     ".gitignore": "d6994127ac82b65c180fd075f68ee31cb9cfeb84a9204dc87a7390dc117b484d",
     "AGENTS.md": "0786740acfbe92ddaed3691007b8d1e591634a7f8cd623be2d4e2324f88b8e7d",
     "commitlint.base.js": "3067231e1559d023504d2f0a51f06b301b7ea058eac4e92a3b545d5077da471f",
-    "package.json": "9fb19e03ab21a84a0a183333432c2bb10b868725a844c2f8c80133b4640858dc"
+    "package.json": "eae934fd8fe0fc16f3c2d218c6c18b9fc6fa31c42a16ae54576ef30803275d70"
   }
 }
