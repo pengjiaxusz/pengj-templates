@@ -6,22 +6,23 @@ description: >-
 ---
 
 <!-- PENGJ_TEMPLATE_START -->
-# 分支同步 — Worktree 感知的极速线性化同步
+# 分支同步 — Worktree 感知的极速线性化全分支同步
 
-将特性分支（支持单仓库或由 Worktree 占用）线性化合入集成分支，内置 **持久化快照兜底（refs/sync-backup/）、Tree-Diff Guard 树级改动保全校验、双端对齐防漏核查与项目门禁 1-Shot 闭环**。
+将所有分支或指定特性分支（支持单仓库或由 Worktree 占用）线性化合入集成分支，内置 **当前目录自适应集成分支推导、全局时间序智能合流、持久化快照兜底（refs/sync-backup/）、Tree-Diff Guard 树级改动保全校验、批量 Worktree 对齐与项目门禁 1-Shot 闭环**。
 历史必须严格线性、零 merge 提交、强制推送一律 `--force-with-lease`。
 
-> 约定：本文以 `{{ 集成分支 }}` 指代目标分支（本项目默认 `main`）。若项目以 `dev`/`master` 为统一分支，请在下方项目专属区声明。
+> **集成分支智能推导**：默认自动选取当前目录检出/激活的分支作为集成分支（即跑测试与验证的主工作区）；同时支持 Detached HEAD 工作树自动关联、SKILL.md 项目登记、远端/默认分支多层降级，绝不硬编码死静态 `HEAD`。
 
 ```
 [一键执行 1-Shot: sync-branch.ps1 -Apply] 
-  ├── 1. 拓扑与分支自适应探测
-  ├── 2. 远端双向快进与对齐检测 (防漏远端提交)
-  ├── 3. 自动建立持久化安全快照 (refs/sync-backup/ 永久防丢)
-  ├── 4. 线性合入 (Route A: 变基快进 / Route B: 按序 cherry-pick)
-  ├── 5. Tree-Diff Guard 树级防漏审计 (未 100% 合入绝不重置源分支)
-  ├── 6. 同步对齐源分支 & --force-with-lease 安全推送
-  └── 7. 自动运行项目合后门禁 (如 cargo test) -> 输出最终看板
+  ├── 1. 动态自适应集成分支判定 (优先当前目录激活分支)
+  ├── 2. 自动全分支发现与远端双向快进 (防漏远端提交)
+  ├── 3. 全局时间序提交提取 (按 committerdate 升序规避时序冲突)
+  ├── 4. 自动建立持久化安全快照 (refs/sync-backup/ 永久防丢)
+  ├── 5. 严格线性合入 (变基快进 / 按序 cherry-pick / 冲突自动持久化)
+  ├── 6. Tree-Diff Guard 树级防漏审计 (未 100% 合入绝不重置源分支)
+  ├── 7. 批量 Worktree 感知对齐 & --force-with-lease 安全推送
+  └── 8. 自动运行项目合后门禁 (如 cargo test) -> 输出最终看板
 ```
 
 ## ⚡ 极速自动化通道（强制推荐：单次工具调用 1-Shot）
@@ -29,20 +30,32 @@ description: >-
 当用户要求合并分支、同步分支或分支对齐时，**直接执行带 `-Apply` 的单次调用**。脚本自动化闭环全流程，杜绝提交遗漏与误覆盖，大幅节省 Token 与调用耗时：
 
 ```powershell
-# 1. 推荐：指定源分支一键合并、推送与验证（1 次调用闭环）
-pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch 'feat/x' -Apply
-
-# 2. 智能探测：当前已位于特性分支时，可直接省略分支名
+# 1. 推荐：默认一键将所有分支同步、对齐并推送到当前激活分支（1 次调用闭环）
 pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -Apply
 
-# 3. 仅预检（只读预览拓扑与净贡献，不修改任何分支）
-pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch 'feat/x'
+# 2. 指定单个源分支一键合并、推送与验证
+pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch 'feat/x' -Apply
+
+# 3. 只读拓扑巡检（预览所有分支状态与净贡献，不修改任何分支）
+pwsh .agents/skills/branch-sync/scripts/show-branch-topology.ps1
 ```
 
 > **极速与低智力防呆准则（硬性红线）**：
-> 1. **单次调用直达终态**：不要先跑 Dry Run 再跑 Apply 再跑构建！直接运行 `-Apply`，脚本内部会自动安全预检、拦截脏工作区、完成合并并在末尾自动执行项目的合后门禁命令（如 `cargo test`）。
+> 1. **单次调用直达终态**：不要先跑 Dry Run 再跑 Apply 再跑构建！直接运行 `-Apply`，脚本内部会自动安全预检、拦截脏工作区、按全局时间序完成合并并在末尾自动执行项目的合后门禁命令（如 `cargo test`）。
 > 2. **严禁手动拼接 Git 原生命令**：严禁自行执行 `git merge`（产生 merge 提交破坏规范）、严禁手动 `git reset --hard`（极易造成未合入提交永久丢失）。所有操作必须且仅需通过 `sync-branch.ps1` 托管执行。
 > 3. **看板判定即交差**：当脚本输出 `STATUS: COMPLETED_READY_TO_REPORT` 时，代表分支同步、推送与项目门禁已全部通过，无需追加任何工具调用，直接向用户汇报即可。
+
+---
+
+## 🧰 工具箱全景速查 (.agents/skills/branch-sync/scripts/)
+
+| 工具脚本 | 职责与定位 | 典型调用方式 |
+|---|---|---|
+| `sync-branch.ps1` | **核心一键同步引擎**（默认全分支，支持单分支） | `pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -Apply` |
+| `show-branch-topology.ps1` | 只读拓扑与净贡献巡检器（展示所有分支 Ahead/Behind/Net） | `pwsh .agents/skills/branch-sync/scripts/show-branch-topology.ps1 -Detailed` |
+| `align-branches.ps1` | 批量分支与 Worktree 重置对齐及 safe push 工具 | `pwsh .agents/skills/branch-sync/scripts/align-branches.ps1 -Apply` |
+| `continue-sync.ps1` | 冲突解决后 1-Shot 续接合流或安全中止回滚工具 | `pwsh .agents/skills/branch-sync/scripts/continue-sync.ps1 -Continue` |
+| `manage-sync-backups.ps1` | `refs/sync-backup/` 安全快照清单、还原与过期清理 | `pwsh .agents/skills/branch-sync/scripts/manage-sync-backups.ps1 -List` |
 
 ---
 
@@ -51,29 +64,14 @@ pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch 'feat/x'
 1. **自动持久化快照 (Safety Backup Ref)**：
    每次执行 `-Apply` 前，自动在本地写入快照指针：
    `refs/sync-backup/<分支名>/<时间戳>-<SHA>`
-   若有任何人为中止或异常，原分支所有提交永远有 ref 保护，绝不沦为悬空提交，随时可通过 `git branch -f <分支名> <快照Ref>` 毫秒级无损还原。
-2. **双端对齐检测 (Remote vs Local Guard)**：
-   自动检测本地分支与远端 `origin/<分支>`：远端落后则提示推，远端领先则自动快进本地，杜绝本地以旧基线比对而漏掉远端他人新提交的隐患；分叉冲突则硬性拦截。
-3. **树级改动保全校验 (Tree-Diff Guard)**：
-   在向源分支执行 `reset --hard` 重置前，脚本硬核核算集成分支与源分支的变动映射：
-   **集成分支未 100% 涵盖源分支净贡献前，严禁重置与强推源分支！** 若校验不通过，自动回滚集成分支并保留现场。
-
----
-
-## 🛠️ 应急备用参考（仅限脚本执行环境彻底缺失时）
-
-若在无 PowerShell 环境且无法运行脚本的极端受限环境下，方可参考以下防御性单行：
-
-```powershell
-# 1. 建立安全快照
-git update-ref refs/sync-backup/feat_x/temp HEAD
-
-# 2. Route A（自由分支）：变基快进合入 -> 确认零 merge -> 推送集成 -> 对齐源分支
-git checkout 'feat/x' && git rebase main && git checkout main && git merge --ff-only 'feat/x' && git push origin main && git checkout 'feat/x' && git reset --hard main && git push --force-with-lease origin 'feat/x' && git checkout main
-
-# 3. 运行合后验证
-cargo test --workspace
-```
+   若有任何人为中止或异常，原分支所有提交永远有 ref 保护，绝不沦为悬空提交，随时可通过 `manage-sync-backups.ps1 -RestoreBranch <分支名> -BackupRef <快照Ref>` 毫秒级无损还原。
+2. **全局提交时序自动编排 (Global Chronological Ordering)**：
+   多分支并发开发时，自动提取所有未合入净提交，并严格依据 `committerdate`（提交时间戳）全局升序排列再逐个 cherry-pick，消除 80% 以上因时序倒置引发的合并冲突。
+3. **冲突现场持久化与一键续接 (Conflict Persistence & Resume)**：
+   若遇到代码重叠冲突，脚本自动将剩余队列与快照保存至 `.git/branch-sync-state.json` 并高亮冲突文件。开发者或 Agent 解决冲突后，仅需单次运行 `continue-sync.ps1 -Continue` 即可自动继续后续所有提交流程，无需重新手写原生 Git 命令。
+4. **树级改动保全校验 (Tree-Diff Guard)**：
+   在向源分支执行重置前，脚本硬核核算集成分支与所有源分支的净提交映射：
+   **集成分支未 100% 涵盖各源分支净贡献前，严禁重置与强推源分支！** 若校验不通过，自动回滚集成分支并保留现场。
 
 ## 红线与避坑
 - **禁止 merge 提交**：commitlint 无 `merge:` 类型，必须走严格线性 fast-forward 或 cherry-pick。

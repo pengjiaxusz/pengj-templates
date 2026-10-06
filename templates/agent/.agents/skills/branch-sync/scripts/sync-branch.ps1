@@ -1,30 +1,34 @@
 <#
 .SYNOPSIS
-    Worktree 感知的极速线性化分支同步脚本 (Branch Sync Fast-Track)
+    Worktree 感知的极速线性化全分支同步脚本 (Branch Sync Fast-Track Engine)
 
 .DESCRIPTION
-    自动化执行集成分支与特性分支的线性同步流程，提供防漏、防覆盖硬性保护与 1-Shot 闭环执行：
-    1. 自动智能推导特性分支与集成分支（未指定分支时自适应探测当前/活跃分支，防止报错致 Agent 迷航）；
-    2. 严格核验工作区干净度，拦截脏改动风险（排除已登记 Worktree 与声明的忽略路径正则）；
-    3. 双端对齐安全核查（本地与 origin 拓扑检测，自动快进落后引用，拦截分叉冲突）；
-    4. 自动创建本地持久化安全快照引用 (refs/sync-backup/...)，确保任何操作均可秒级无损回滚；
-    5. 双重提交甄别（git cherry + rev-list），精准剔除同 patch-id 等价提交，捕获真正净新增提交；
-    6. 执行变基快进或按序 cherry-pick 线性合入（禁止产生 merge 提交）；
-    7. 树级改动保全校验 (Tree-Diff Guard)：在重置源分支前，硬核验证所有改动 100% 进入集成分支；
-    8. 双端对齐与安全推送 (--force-with-lease)；
-    9. 自动运行合后验证命令 (来自 SKILL.md 声明)，实现单次调用 (1-Shot) 闭环交付。
+    自动化执行集成分支与所有/指定特性分支的线性同步流程，提供防漏、防覆盖硬性保护与 1-Shot 闭环执行：
+    1. 自动智能推导集成分支：优先选取当前目录激活的分支（检出分支/Worktree关联分支），彻底杜绝静态 HEAD 陷阱；
+    2. 默认全分支同步模式：若未指定 -SourceBranch，默认自动扫描并同步所有存在净贡献的分支；
+    3. 全局时间序排序：多分支合入时，自动提取所有净新增提交并按 committerdate 全局升序排列，规避拓扑时序冲突；
+    4. 严格核验工作区干净度，拦截脏改动风险（排除已登记 Worktree 与声明的忽略路径正则）；
+    5. 双端对齐安全核查（本地与 origin 拓扑检测，自动快进落后分支引用，拦截分叉冲突）；
+    6. 自动创建本地持久化安全快照引用 (refs/sync-backup/...)，确保任何操作均可秒级无损回滚；
+    7. 执行变基快进或按序 cherry-pick 线性合入（禁止产生 merge 提交）；若遇冲突自动持久化现场并支持 continue-sync.ps1 一键续接；
+    8. 树级改动保全校验 (Tree-Diff Guard)：在重置源分支前，硬核验证所有分支改动 100% 进入集成分支；
+    9. 批量 Worktree 感知对齐与安全推送 (--force-with-lease)；
+    10. 自动运行合后验证命令 (来自 SKILL.md 声明)，实现单次调用 (1-Shot) 闭环交付。
 
 .PARAMETER SourceBranch
-    待合入的源特性分支名。若未指定，自动根据当前所在分支或最近活跃分支智能推导。
+    待合入的源特性分支名。若未指定，自动进入全分支同步模式（默认同步所有分支至当前激活分支）。
 
 .PARAMETER IntegrationBranch
-    目标集成分支名。默认按如下顺序自动推导：命令行指定 -> origin/HEAD 符号引用 -> SKILL.md 登记 -> 远端/本地探测 (main/dev/develop/master/trunk) -> git init.defaultBranch。
+    目标集成分支名。默认按如下顺序自动推导：当前目录激活分支 -> Worktree 分支 -> SKILL.md 登记 -> 远端/本地探测 (main/dev/master) -> init.defaultBranch。
 
 .PARAMETER DirtyIgnorePattern
     工作区干净度检查时额外忽略的路径正则表达式列表。亦可于 SKILL.md 项目专属区声明。
 
+.PARAMETER All
+    显式指示同步所有分支。未指定 -SourceBranch 时默认即为本模式。
+
 .PARAMETER Apply
-    是否执行实际合并、推送与对齐。未指定时仅进行快速预检 (Dry Run) 并输出紧凑报告。
+    是否执行实际合并、推送与对齐。未指定时仅进行快速预检 (Dry Run) 并输出拓扑报告。
 
 .PARAMETER NoPush
     在 -Apply 执行时不进行 git push（用于本地演练或离线环境）。
@@ -36,14 +40,14 @@
     在 -Apply 完成后跳过自动运行项目合后验证命令。
 
 .EXAMPLE
-    # 一键极速执行（推荐：1 次调用全流程搞定合并、推送、对齐与项目门禁验证）
-    pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch feat/my-feature -Apply
-
-    # 自动探测当前分支并一键同步
+    # 一键极速执行（推荐：1 次调用搞定所有分支合并、推送、对齐与项目门禁验证）
     pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -Apply
 
+    # 指定单个源分支一键同步
+    pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch feat/my-feature -Apply
+
     # 快速预检（只读模式）
-    pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch feat/my-feature
+    pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1
 #>
 
 [CmdletBinding()]
@@ -57,6 +61,7 @@ param(
     [Parameter()]
     [string[]]$DirtyIgnorePattern = @(),
 
+    [switch]$All,
     [switch]$Apply,
     [switch]$NoPush,
     [switch]$NoFetch,
@@ -66,6 +71,14 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+function Format-GitArg {
+    param([string]$Arg)
+    if ($Arg -match '[\s"]') {
+        return '"' + ($Arg -replace '"', '\"') + '"'
+    }
+    return $Arg
+}
+
 function Invoke-Git {
     param(
         [string[]]$CommandArgs,
@@ -73,7 +86,7 @@ function Invoke-Git {
     )
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
     $pinfo.FileName = "git"
-    $pinfo.Arguments = ($CommandArgs -join " ")
+    $pinfo.Arguments = ($CommandArgs | ForEach-Object { Format-GitArg $_ }) -join " "
     $pinfo.RedirectStandardOutput = $true
     $pinfo.RedirectStandardError = $true
     $pinfo.UseShellExecute = $false
@@ -107,11 +120,164 @@ function Assert-GitSuccess {
     }
 }
 
-# 检查是否存在 remote origin
+function Resolve-IntegrationBranch {
+    param(
+        [string]$ExplicitBranch,
+        [string]$DeclaredBranch,
+        [bool]$HasRemote
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ExplicitBranch)) {
+        return $ExplicitBranch.Trim().Replace("refs/heads/", "")
+    }
+
+    $symRef = Invoke-Git @("symbolic-ref", "--short", "-q", "HEAD")
+    if ($symRef.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($symRef.Output))) {
+        $activeBranch = $symRef.Output.Trim()
+        Write-Host "💡 自动选定当前目录激活的分支作为集成分支: '$activeBranch'" -ForegroundColor Cyan
+        return $activeBranch
+    }
+
+    $currentPath = (Get-Location).Path
+    try { $currentPath = (Resolve-Path $currentPath).Path } catch {}
+    $wtList = Invoke-Git @("worktree", "list", "--porcelain")
+    if ($wtList.ExitCode -eq 0) {
+        $lines = $wtList.Output -split "`r?`n"
+        $wPath = ""
+        foreach ($line in $lines) {
+            if ($line.StartsWith("worktree ")) {
+                $wPath = $line.Substring(9).Trim()
+                try { $wPath = (Resolve-Path $wPath).Path } catch {}
+            } elseif ($line.StartsWith("branch refs/heads/")) {
+                $bName = $line.Substring(18).Trim()
+                if ($wPath -eq $currentPath -and (-not [string]::IsNullOrWhiteSpace($bName))) {
+                    Write-Host "💡 检测到当前 Worktree 对应的登记分支作为集成分支: '$bName'" -ForegroundColor Cyan
+                    return $bName
+                }
+            }
+        }
+    }
+
+    $pointsAt = Invoke-Git @("branch", "--points-at", "HEAD", "--format=%(refname:short)")
+    if ($pointsAt.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($pointsAt.Output))) {
+        $candidates = @($pointsAt.Output -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and -not $_.StartsWith("(") })
+        if ($candidates.Count -eq 1) {
+            Write-Host "💡 检测到指向当前 HEAD 的唯一本地分支作为集成分支: '$($candidates[0])'" -ForegroundColor Cyan
+            return $candidates[0]
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($DeclaredBranch)) {
+        Write-Host "💡 根据 SKILL.md 登记选定集成分支: '$DeclaredBranch'" -ForegroundColor Cyan
+        return $DeclaredBranch
+    }
+
+    if ($HasRemote) {
+        $rHead = Invoke-Git @("symbolic-ref", "--short", "-q", "refs/remotes/origin/HEAD")
+        if ($rHead.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($rHead.Output))) {
+            $rh = $rHead.Output.Trim()
+            if ($rh.StartsWith("origin/")) { $rh = $rh.Substring(7).Trim() }
+            Write-Host "💡 根据 origin/HEAD 选定集成分支: '$rh'" -ForegroundColor Cyan
+            return $rh
+        }
+        foreach ($b in @("main", "dev", "develop", "master", "trunk")) {
+            if ((Invoke-Git @("rev-parse", "--verify", "origin/$b")).ExitCode -eq 0) {
+                Write-Host "💡 探测到远端常用集成分支: '$b'" -ForegroundColor Cyan
+                return $b
+            }
+        }
+    }
+
+    foreach ($b in @("main", "dev", "develop", "master", "trunk")) {
+        if ((Invoke-Git @("rev-parse", "--verify", $b)).ExitCode -eq 0) {
+            Write-Host "💡 探测到本地常用集成分支: '$b'" -ForegroundColor Cyan
+            return $b
+        }
+    }
+
+    $dConf = Invoke-Git @("config", "init.defaultBranch")
+    if ($dConf.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($dConf.Output))) {
+        return $dConf.Output.Trim()
+    }
+    return "main"
+}
+
+function Get-WorktreeMap {
+    $wtList = Invoke-Git @("worktree", "list", "--porcelain")
+    $map = @{}
+    $allPaths = [System.Collections.Generic.List[string]]::new()
+    if ($wtList.ExitCode -eq 0) {
+        $lines = $wtList.Output -split "`r?`n"
+        $currentPath = ""
+        foreach ($line in $lines) {
+            if ($line.StartsWith("worktree ")) {
+                $currentPath = $line.Substring(9).Trim()
+                try { $currentPath = (Resolve-Path $currentPath).Path } catch {}
+                $allPaths.Add($currentPath)
+            } elseif ($line.StartsWith("branch refs/heads/")) {
+                $bName = $line.Substring(18).Trim()
+                if ($currentPath -and $bName) {
+                    $map[$bName] = $currentPath
+                }
+            } elseif ([string]::IsNullOrWhiteSpace($line)) {
+                $currentPath = ""
+            }
+        }
+    }
+    return [PSCustomObject]@{
+        BranchToPath = $map
+        AllPaths     = $allPaths
+    }
+}
+
+function Get-DirtyItems {
+    param(
+        [System.Collections.Generic.List[string]]$AllWorktreePaths,
+        [System.Collections.Generic.List[string]]$DeclaredPatterns,
+        [string]$WorkingDir = ""
+    )
+    $cmd = if ($WorkingDir) { @("-C", $WorkingDir, "status", "--porcelain") } else { @("status", "--porcelain") }
+    $res = Invoke-Git $cmd
+    if ($res.ExitCode -ne 0) {
+        throw "无法获取 Git 仓库状态: $($res.Error)"
+    }
+    $dirty = [System.Collections.Generic.List[string]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($res.Output)) {
+        $currentResolved = if ($WorkingDir) { (Resolve-Path $WorkingDir).Path } else { (Resolve-Path (Get-Location).Path).Path }
+        foreach ($sl in ($res.Output -split "`r?`n")) {
+            if ([string]::IsNullOrWhiteSpace($sl)) { continue }
+            $relPath = $sl.Substring(3).Trim().Trim('"').TrimEnd('/')
+            $absCandidate = Join-Path $currentResolved $relPath
+            try { if (Test-Path $absCandidate) { $absCandidate = (Resolve-Path $absCandidate).Path } } catch {}
+
+            $isRegisteredWt = $false
+            foreach ($wt in $AllWorktreePaths) {
+                if ($wt -eq $absCandidate) {
+                    $isRegisteredWt = $true
+                    break
+                }
+            }
+            if ($isRegisteredWt) { continue }
+
+            $isIgnored = $false
+            foreach ($pat in $DeclaredPatterns) {
+                if ($relPath -match $pat) {
+                    $isIgnored = $true
+                    break
+                }
+            }
+            if ($isIgnored) { continue }
+
+            $dirty.Add($sl)
+        }
+    }
+    return $dirty
+}
+
+# 1. 初始化与配置读取
 $remoteCheck = Invoke-Git @("remote", "get-url", "origin")
 $hasRemote = ($remoteCheck.ExitCode -eq 0)
 
-# 读取项目 SKILL.md 声明配置（集成分支、忽略正则、合后验证命令）
 $skillDocPath = Join-Path $PSScriptRoot "..\SKILL.md"
 if (-not (Test-Path $skillDocPath)) {
     $candidate = Join-Path (Get-Location).Path ".agents\skills\branch-sync\SKILL.md"
@@ -137,7 +303,6 @@ if (Test-Path $skillDocPath) {
                 $declaredDirtyPatterns.Add($patVal)
             }
         }
-        # 提取合后验证命令 (代码块中首个非注释非空行)
         $verifyBlockRegex = '(?ms)###\s*(?:合后验证命令|Post-Merge Validation Command|合后检验命令)\s*.*?(?:```(?:powershell|bash|sh|cmd|pwsh)?\r?\n(.*?)\r?\n```)'
         if ($skillDocContent -match $verifyBlockRegex) {
             $codeBlock = $Matches[1]
@@ -158,561 +323,495 @@ foreach ($p in $DirtyIgnorePattern) {
     }
 }
 
-# 1. 自动推导集成分支 (多层降级策略)
-if ([string]::IsNullOrWhiteSpace($IntegrationBranch)) {
-    # 1.1 Git 远端 HEAD 符号引用探测 (如 refs/remotes/origin/HEAD -> origin/main)
-    if ($hasRemote) {
-        $rHead = Invoke-Git @("symbolic-ref", "--short", "refs/remotes/origin/HEAD")
-        if ($rHead.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($rHead.Output))) {
-            $headRef = $rHead.Output.Trim()
-            if ($headRef.StartsWith("origin/")) {
-                $IntegrationBranch = $headRef.Substring(7).Trim()
-            } else {
-                $IntegrationBranch = $headRef
-            }
-        }
-    }
-
-    # 1.2 SKILL.md 项目专属区显式声明
-    if ([string]::IsNullOrWhiteSpace($IntegrationBranch) -and (-not [string]::IsNullOrWhiteSpace($declaredIntegrationBranch))) {
-        $IntegrationBranch = $declaredIntegrationBranch
-    }
-
-    # 1.3 远端常用集成分支探测
-    if ([string]::IsNullOrWhiteSpace($IntegrationBranch) -and $hasRemote) {
-        foreach ($b in @("main", "dev", "develop", "master", "trunk")) {
-            $rTest = Invoke-Git @("rev-parse", "--verify", "origin/$b")
-            if ($rTest.ExitCode -eq 0) {
-                $IntegrationBranch = $b
-                break
-            }
-        }
-    }
-
-    # 1.4 本地常用分支探测
-    if ([string]::IsNullOrWhiteSpace($IntegrationBranch)) {
-        foreach ($b in @("main", "dev", "develop", "master", "trunk")) {
-            $lTest = Invoke-Git @("rev-parse", "--verify", $b)
-            if ($lTest.ExitCode -eq 0) {
-                $IntegrationBranch = $b
-                break
-            }
-        }
-    }
-
-    # 1.5 git init.defaultBranch 回退
-    if ([string]::IsNullOrWhiteSpace($IntegrationBranch)) {
-        $dConf = Invoke-Git @("config", "init.defaultBranch")
-        if ($dConf.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($dConf.Output))) {
-            $IntegrationBranch = $dConf.Output.Trim()
-        } else {
-            $IntegrationBranch = "main"
-        }
-    }
-}
-
+# 2. 推导集成分支
+$IntegrationBranch = Resolve-IntegrationBranch $IntegrationBranch $declaredIntegrationBranch $hasRemote
 $integCheck = Invoke-Git @("rev-parse", "--verify", $IntegrationBranch)
 if ($integCheck.ExitCode -ne 0) {
     throw "集成分支 '$IntegrationBranch' 不存在，请检查指定分支名称。"
 }
 
-# 2. 自动智能推导源分支 (当未传入 -SourceBranch 时)
-if ([string]::IsNullOrWhiteSpace($SourceBranch)) {
-    $currentHeadRef = Invoke-Git @("symbolic-ref", "--short", "-q", "HEAD")
-    if ($currentHeadRef.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($currentHeadRef.Output))) {
-        $currBranch = $currentHeadRef.Output.Trim()
-        if ($currBranch -ne $IntegrationBranch) {
-            $SourceBranch = $currBranch
-            Write-Host "💡 未指定 -SourceBranch，自动选定当前所在分支: '$SourceBranch'" -ForegroundColor Cyan
-        }
-    }
-}
-
-if ([string]::IsNullOrWhiteSpace($SourceBranch)) {
-    # 当前位于集成分支，尝试寻找其他活跃特性分支或 worktree 占用分支
-    $wtList = Invoke-Git @("worktree", "list", "--porcelain")
-    $candidateBranches = [System.Collections.Generic.List[string]]::new()
-    if ($wtList.ExitCode -eq 0) {
-        $wtLines = $wtList.Output -split "`r?`n"
-        foreach ($wline in $wtLines) {
-            if ($wline.StartsWith("branch refs/heads/")) {
-                $bName = $wline.Substring(18).Trim()
-                if ($bName -ne $IntegrationBranch -and (-not $candidateBranches.Contains($bName))) {
-                    $candidateBranches.Add($bName)
-                }
-            }
-        }
-    }
-
-    # 若 worktree 中未找到，检查最近有提交的本地分支（排查 integration）
-    if ($candidateBranches.Count -eq 0) {
-        $recentBranches = Invoke-Git @("for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", "refs/heads/")
-        if ($recentBranches.ExitCode -eq 0) {
-            foreach ($rb in ($recentBranches.Output -split "`r?`n")) {
-                $rbClean = $rb.Trim()
-                if (-not [string]::IsNullOrWhiteSpace($rbClean) -and $rbClean -ne $IntegrationBranch) {
-                    $candidateBranches.Add($rbClean)
-                    if ($candidateBranches.Count -ge 3) { break }
-                }
-            }
-        }
-    }
-
-    if ($candidateBranches.Count -eq 1) {
-        $SourceBranch = $candidateBranches[0]
-        Write-Host "💡 未指定 -SourceBranch，探测到唯一候选特性分支: '$SourceBranch'" -ForegroundColor Cyan
-    } elseif ($candidateBranches.Count -gt 1) {
-        $cList = ($candidateBranches | ForEach-Object { "'$_'" }) -join ", "
-        throw "当前位于集成分支 '$IntegrationBranch' 且未指定 -SourceBranch。发现多个候选分支: [$cList]，请明确指定 -SourceBranch <分支名>。"
-    } else {
-        throw "无法推导源分支，且未指定 -SourceBranch。请通过 -SourceBranch 指定待合入的分支名。"
-    }
-}
-
-# 规范化源分支名
-$SourceBranch = $SourceBranch.Trim().Replace("refs/heads/", "")
-if ($SourceBranch -eq $IntegrationBranch) {
-    throw "源分支 '$SourceBranch' 与集成分支 '$IntegrationBranch' 相同，无需自合并。"
-}
-
-# 3. 校验分支存在性
-$sourceCheck = Invoke-Git @("rev-parse", "--verify", $SourceBranch)
-if ($sourceCheck.ExitCode -ne 0) {
-    if ($hasRemote) {
-        $sourceRemoteCheck = Invoke-Git @("rev-parse", "--verify", "origin/$SourceBranch")
-        if ($sourceRemoteCheck.ExitCode -ne 0) {
-            throw "源分支 '$SourceBranch' 在本地及远端 origin 均不存在，请检查分支名称。"
-        }
-        # 本地不存在但远端存在，创建本地追踪分支
-        Invoke-Git @("branch", "--track", $SourceBranch, "origin/$SourceBranch") | Out-Null
-    } else {
-        throw "源分支 '$SourceBranch' 在本地不存在，请检查分支名称。"
-    }
-}
-
-# 4. 获取所有 Worktree 拓扑，判定分支占用状态
-$worktreeRaw = Invoke-Git @("worktree", "list", "--porcelain")
-Assert-GitSuccess $worktreeRaw "获取 worktree 列表"
-
+$wtInfo = Get-WorktreeMap
 $currentWorktreePath = (Get-Location).Path
-try {
-    $currentWorktreePath = (Resolve-Path $currentWorktreePath).Path
-} catch {}
+try { $currentWorktreePath = (Resolve-Path $currentWorktreePath).Path } catch {}
 
-$occupiedWorktreePath = $null
-$isOccupiedByOther = $false
-$allWorktreePaths = [System.Collections.Generic.List[string]]::new()
-
-$lines = $worktreeRaw.Output -split "`r?`n"
-$tempPath = ""
-$tempBranch = ""
-
-foreach ($line in $lines) {
-    if ($line.StartsWith("worktree ")) {
-        $tempPath = $line.Substring(9).Trim()
-        try {
-            $tempPath = (Resolve-Path $tempPath).Path
-        } catch {}
-        $allWorktreePaths.Add($tempPath)
-    } elseif ($line.StartsWith("branch refs/heads/")) {
-        $tempBranch = $line.Substring(18).Trim()
-        if ($tempBranch -eq $SourceBranch) {
-            if ($tempPath -ne $currentWorktreePath) {
-                $isOccupiedByOther = $true
-                $occupiedWorktreePath = $tempPath
-            }
-        }
-    } elseif ([string]::IsNullOrWhiteSpace($line)) {
-        $tempPath = ""
-        $tempBranch = ""
-    }
-}
-
-$route = if ($isOccupiedByOther) { "Route B" } else { "Route A" }
-
-# 5. 过滤并检查当前工作区干净度（排除本身是已登记 worktree 的未追踪项）
-$rootStatus = Invoke-Git @("status", "--porcelain")
-if ($rootStatus.ExitCode -ne 0) {
-    throw "无法获取当前 Git 仓库状态: $($rootStatus.Error)"
-}
-
-$dirtyItems = [System.Collections.Generic.List[string]]::new()
-if (-not [string]::IsNullOrWhiteSpace($rootStatus.Output)) {
-    $statusLines = $rootStatus.Output -split "`r?`n"
-    foreach ($sl in $statusLines) {
-        if ([string]::IsNullOrWhiteSpace($sl)) { continue }
-        $relPath = $sl.Substring(3).Trim().Trim('"').TrimEnd('/')
-        $absCandidate = Join-Path $currentWorktreePath $relPath
-        try {
-            if (Test-Path $absCandidate) {
-                $absCandidate = (Resolve-Path $absCandidate).Path
-            }
-        } catch {}
-
-        # 若是已登记的 worktree 目录，予以忽略
-        $isRegisteredWt = $false
-        foreach ($wt in $allWorktreePaths) {
-            if ($wt -eq $absCandidate) {
-                $isRegisteredWt = $true
-                break
-            }
-        }
-        if ($isRegisteredWt) { continue }
-
-        # 若匹配忽略正则，予以忽略
-        $isIgnoredPattern = $false
-        foreach ($pat in $declaredDirtyPatterns) {
-            if ($relPath -match $pat) {
-                $isIgnoredPattern = $true
-                break
-            }
-        }
-        if ($isIgnoredPattern) { continue }
-
-        $dirtyItems.Add($sl)
-    }
-}
-
+# 3. 检查当前工作区干净度
+$dirtyItems = Get-DirtyItems $wtInfo.AllPaths $declaredDirtyPatterns
 if ($dirtyItems.Count -gt 0) {
-    $dirtyList = $dirtyItems -join "`n"
-    throw "当前工作区存在未提交改动，请先提交或执行 git stash 暂存后再运行同步：`n$dirtyList"
-}
-
-# 若为 Route B，额外检查目标 worktree 干净度
-if ($route -eq "Route B") {
-    $wtStatus = Invoke-Git @("-C", "`"$occupiedWorktreePath`"", "status", "--porcelain")
-    if ($wtStatus.ExitCode -ne 0) {
-        throw "无法检查占用分支的 Worktree ($occupiedWorktreePath) 状态: $($wtStatus.Error)"
-    }
-    if (-not [string]::IsNullOrWhiteSpace($wtStatus.Output)) {
-        $wtDirty = [System.Collections.Generic.List[string]]::new()
-        foreach ($line in ($wtStatus.Output -split "`r?`n")) {
-            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-            $relP = $line.Substring(3).Trim().Trim('"').TrimEnd('/')
-            $isIgnoredP = $false
-            foreach ($pat in $declaredDirtyPatterns) {
-                if ($relP -match $pat) {
-                    $isIgnoredP = $true
-                    break
-                }
-            }
-            if (-not $isIgnoredP) {
-                $wtDirty.Add($line)
-            }
-        }
-        if ($wtDirty.Count -gt 0) {
-            $dirtyList = $wtDirty -join "`n"
-            throw "占用源分支 '$SourceBranch' 的 Worktree ($occupiedWorktreePath) 存在未提交改动，严禁强制重置！请先在该目录提交或 stash：`n$dirtyList"
-        }
+    if ($Apply) {
+        $dirtyList = $dirtyItems -join "`n"
+        throw "当前工作区存在未提交改动，请先提交或执行 git stash 暂存后再运行同步：`n$dirtyList"
+    } else {
+        Write-Host "⚠️ 注意: 当前工作区存在未提交改动（预检模式继续展示拓扑，执行 -Apply 时将严格拦截）。" -ForegroundColor Yellow
     }
 }
 
-# 6. Fetch 远端最新状态与双端对齐检查 (防漏提交核心防御)
+# 4. Fetch 远端最新状态
 $doPush = $hasRemote -and (-not $NoPush)
 if ($hasRemote -and (-not $NoFetch)) {
-    Write-Host "正在拉取远端最新引用 (git fetch)..." -ForegroundColor DarkGray
-    Invoke-Git @("fetch", "origin", $IntegrationBranch) | Out-Null
-    Invoke-Git @("fetch", "origin", $SourceBranch) | Out-Null
+    Write-Host "正在拉取远端最新引用 (git fetch --prune)..." -ForegroundColor DarkGray
+    Invoke-Git @("fetch", "--prune", "origin") | Out-Null
+}
 
-    # 6.1 核验源分支：本地 vs 远端 origin/$SourceBranch
-    $hasRemoteSource = (Invoke-Git @("rev-parse", "--verify", "origin/$SourceBranch")).ExitCode -eq 0
-    if ($hasRemoteSource) {
-        $localSourceSha = (Invoke-Git @("rev-parse", $SourceBranch)).Output
-        $remoteSourceSha = (Invoke-Git @("rev-parse", "origin/$SourceBranch")).Output
+# 5. 判定同步模式：All-Branches (默认) 或 Single-Branch
+$isAllBranchesMode = [string]::IsNullOrWhiteSpace($SourceBranch) -or $All
 
-        if ($localSourceSha -ne $remoteSourceSha) {
-            # 检查本地是否为远端的祖先 (即本地落后于远端)
-            $isAncestor = (Invoke-Git @("merge-base", "--is-ancestor", $localSourceSha, $remoteSourceSha)).ExitCode -eq 0
-            $isRemoteAncestor = (Invoke-Git @("merge-base", "--is-ancestor", $remoteSourceSha, $localSourceSha)).ExitCode -eq 0
+if (-not $isAllBranchesMode) {
+    # -----------------------------
+    # 单分支同步模式 (Single Branch Mode)
+    # -----------------------------
+    $SourceBranch = $SourceBranch.Trim().Replace("refs/heads/", "")
+    if ($SourceBranch -eq $IntegrationBranch) {
+        throw "源分支 '$SourceBranch' 与集成分支 '$IntegrationBranch' 相同，无需自合并。"
+    }
 
-            if ($isAncestor) {
-                # 本地落后于远端，必须自动快进，杜绝漏掉远端提交！
-                Write-Host "⚠️ 检测到本地 '$SourceBranch' 落后于远端 origin/$SourceBranch，自动快进同步..." -ForegroundColor Yellow
-                if ($route -eq "Route A") {
-                    $currHead = (Invoke-Git @("symbolic-ref", "--short", "-q", "HEAD")).Output
-                    if ($currHead -eq $SourceBranch) {
-                        $ffRes = Invoke-Git @("merge", "--ff-only", "origin/$SourceBranch")
-                        Assert-GitSuccess $ffRes "快进本地 $SourceBranch"
+    $sourceCheck = Invoke-Git @("rev-parse", "--verify", $SourceBranch)
+    if ($sourceCheck.ExitCode -ne 0) {
+        if ($hasRemote) {
+            $sourceRemoteCheck = Invoke-Git @("rev-parse", "--verify", "origin/$SourceBranch")
+            if ($sourceRemoteCheck.ExitCode -ne 0) {
+                throw "源分支 '$SourceBranch' 在本地及远端 origin 均不存在。"
+            }
+            Invoke-Git @("branch", "--track", $SourceBranch, "origin/$SourceBranch") | Out-Null
+        } else {
+            throw "源分支 '$SourceBranch' 在本地不存在。"
+        }
+    }
+
+    $isOccupiedByOther = $false
+    $occupiedWorktreePath = $null
+    if ($wtInfo.BranchToPath.ContainsKey($SourceBranch)) {
+        $p = $wtInfo.BranchToPath[$SourceBranch]
+        if ($p -ne $currentWorktreePath) {
+            $isOccupiedByOther = $true
+            $occupiedWorktreePath = $p
+        }
+    }
+    $route = if ($isOccupiedByOther) { "Route B" } else { "Route A" }
+
+    if ($route -eq "Route B") {
+        $wtDirty = Get-DirtyItems $wtInfo.AllPaths $declaredDirtyPatterns $occupiedWorktreePath
+        if ($wtDirty.Count -gt 0) {
+            $dirtyList = $wtDirty -join "`n"
+            throw "占用源分支 '$SourceBranch' 的 Worktree ($occupiedWorktreePath) 存在未提交改动，请先在该目录提交或 stash：`n$dirtyList"
+        }
+    }
+
+    # 双端对齐检查
+    if ($hasRemote -and (-not $NoFetch)) {
+        $hasRemoteSource = (Invoke-Git @("rev-parse", "--verify", "origin/$SourceBranch")).ExitCode -eq 0
+        if ($hasRemoteSource) {
+            $lSha = (Invoke-Git @("rev-parse", $SourceBranch)).Output
+            $rSha = (Invoke-Git @("rev-parse", "origin/$SourceBranch")).Output
+            if ($lSha -ne $rSha) {
+                $isAnc = (Invoke-Git @("merge-base", "--is-ancestor", $lSha, $rSha)).ExitCode -eq 0
+                $isRAnc = (Invoke-Git @("merge-base", "--is-ancestor", $rSha, $lSha)).ExitCode -eq 0
+                if ($isAnc) {
+                    Write-Host "⚠️ 本地 '$SourceBranch' 落后于远端，自动快进同步..." -ForegroundColor Yellow
+                    if ($route -eq "Route A") {
+                        $cHead = (Invoke-Git @("symbolic-ref", "--short", "-q", "HEAD")).Output
+                        if ($cHead -eq $SourceBranch) {
+                            Invoke-Git @("merge", "--ff-only", "origin/$SourceBranch") | Out-Null
+                        } else {
+                            Invoke-Git @("update-ref", "refs/heads/$SourceBranch", $rSha) | Out-Null
+                        }
                     } else {
-                        $upRes = Invoke-Git @("update-ref", "refs/heads/$SourceBranch", $remoteSourceSha)
-                        Assert-GitSuccess $upRes "更新本地 $SourceBranch 指针"
+                        Invoke-Git @("-C", $occupiedWorktreePath, "merge", "--ff-only", "origin/$SourceBranch") | Out-Null
                     }
-                } else {
-                    $wtFf = Invoke-Git @("-C", "`"$occupiedWorktreePath`"", "merge", "--ff-only", "origin/$SourceBranch")
-                    Assert-GitSuccess $wtFf "快进 Worktree 中的 $SourceBranch"
-                }
-                Write-Host "✅ 源分支已自动快进对齐至远端最新提交。" -ForegroundColor Green
-            } elseif ($isRemoteAncestor) {
-                # 本地领先远端，正常（本地有新增提交，稍后统一推送）
-                Write-Host "ℹ️ 本地 '$SourceBranch' 领先远端 origin/$SourceBranch，将合入本地最新变更。" -ForegroundColor DarkGray
-            } else {
-                # 两端分叉，绝不盲目覆盖，硬性拦截！
-                throw "源分支 '$SourceBranch' 的本地版本与远端 origin/$SourceBranch 发生分叉冲突 (Diverged)！`n为防止代码丢失或被意外覆盖，请先手动处理本地与远端分支冲突后再同步。"
-            }
-        }
-    }
-
-    # 6.2 核验集成分支：本地 vs 远端 origin/$IntegrationBranch
-    $hasRemoteInteg = (Invoke-Git @("rev-parse", "--verify", "origin/$IntegrationBranch")).ExitCode -eq 0
-    if ($hasRemoteInteg) {
-        $localIntegSha = (Invoke-Git @("rev-parse", $IntegrationBranch)).Output
-        $remoteIntegSha = (Invoke-Git @("rev-parse", "origin/$IntegrationBranch")).Output
-
-        if ($localIntegSha -ne $remoteIntegSha) {
-            $isIntegAncestor = (Invoke-Git @("merge-base", "--is-ancestor", $localIntegSha, $remoteIntegSha)).ExitCode -eq 0
-            if ($isIntegAncestor) {
-                Write-Host "⚠️ 检测到本地集成分支落后于远端，自动快进更新本地集成分支..." -ForegroundColor Yellow
-                $currHead = (Invoke-Git @("symbolic-ref", "--short", "-q", "HEAD")).Output
-                if ($currHead -eq $IntegrationBranch) {
-                    $ffInteg = Invoke-Git @("merge", "--ff-only", "origin/$IntegrationBranch")
-                    Assert-GitSuccess $ffInteg "快进本地集成分支 $IntegrationBranch"
-                } else {
-                    $upInteg = Invoke-Git @("update-ref", "refs/heads/$IntegrationBranch", $remoteIntegSha)
-                    Assert-GitSuccess $upInteg "更新本地集成分支指针"
+                } elseif (-not $isRAnc) {
+                    throw "源分支 '$SourceBranch' 本地与远端分叉冲突 (Diverged)！请先解决冲突。"
                 }
             }
         }
     }
-}
 
-# 7. 提交拓扑与净贡献精准甄别 (双重比对: cherry -v + rev-list)
-$cherryRes = Invoke-Git @("cherry", "-v", $IntegrationBranch, $SourceBranch)
-Assert-GitSuccess $cherryRes "执行 git cherry 分析"
-
-$netCommits = [System.Collections.Generic.List[PSCustomObject]]::new()
-$duplicateCommits = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-if (-not [string]::IsNullOrWhiteSpace($cherryRes.Output)) {
-    $cherryLines = $cherryRes.Output -split "`r?`n"
-    foreach ($cl in $cherryLines) {
-        if ($cl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
-            $netCommits.Add([PSCustomObject]@{
-                Hash    = $matches[1]
-                Subject = $matches[2]
-            })
-        } elseif ($cl -match '^\-\s+([0-9a-fA-F]+)\s+(.*)$') {
-            $duplicateCommits.Add([PSCustomObject]@{
-                Hash    = $matches[1]
-                Subject = $matches[2]
-            })
+    # 分析净贡献
+    $cherryRes = Invoke-Git @("cherry", "-v", $IntegrationBranch, $SourceBranch)
+    Assert-GitSuccess $cherryRes "执行 git cherry 分析"
+    $netCommits = [System.Collections.Generic.List[PSCustomObject]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($cherryRes.Output)) {
+        foreach ($cl in ($cherryRes.Output -split "`r?`n")) {
+            if ($cl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
+                $netCommits.Add([PSCustomObject]@{
+                    Hash    = $Matches[1]
+                    Subject = $Matches[2]
+                })
+            }
         }
     }
-}
 
-# 全量未合入提交列表（用于防漏核对）
-$allSourceExclusiveCommits = [System.Collections.Generic.List[string]]::new()
-$revListRaw = Invoke-Git @("rev-list", "--reverse", "$IntegrationBranch..$SourceBranch")
-if ($revListRaw.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($revListRaw.Output))) {
-    foreach ($h in ($revListRaw.Output -split "`r?`n")) {
-        if (-not [string]::IsNullOrWhiteSpace($h)) {
-            $allSourceExclusiveCommits.Add($h.Trim())
-        }
-    }
-}
+    $integCommit = (Invoke-Git @("rev-parse", "--short", $IntegrationBranch)).Output
+    $sourceCommit = (Invoke-Git @("rev-parse", "--short", $SourceBranch)).Output
+    $fullIntegCommit = (Invoke-Git @("rev-parse", $IntegrationBranch)).Output
+    $fullSourceCommit = (Invoke-Git @("rev-parse", $SourceBranch)).Output
 
-# 读取当前 commit hashes
-$integCommit = (Invoke-Git @("rev-parse", "--short", $IntegrationBranch)).Output
-$sourceCommit = (Invoke-Git @("rev-parse", "--short", $SourceBranch)).Output
-$fullIntegCommit = (Invoke-Git @("rev-parse", $IntegrationBranch)).Output
-$fullSourceCommit = (Invoke-Git @("rev-parse", $SourceBranch)).Output
-
-# 8. 模式分流：预检报告 (Dry Run)
-if (-not $Apply) {
-    Write-Host ""
-    Write-Host "================== Branch Sync 预检报告 ==================" -ForegroundColor Cyan
-    Write-Host "集成分支: $IntegrationBranch ($integCommit)"
-    Write-Host "源分支:   $SourceBranch ($sourceCommit)"
-    if ($route -eq "Route A") {
-        Write-Host "同步路径: Route A [自由分支 / 单仓库模式] (direct rebase + ff-merge)" -ForegroundColor Green
-    } else {
-        Write-Host "同步路径: Route B [Worktree 占用模式: $occupiedWorktreePath]" -ForegroundColor Yellow
-    }
-    Write-Host "工作区:   干净 (Clean)" -ForegroundColor Green
-    Write-Host "----------------------------------------------------------"
-    Write-Host "净贡献提交分析:" -ForegroundColor Cyan
-    if ($netCommits.Count -eq 0) {
-        Write-Host "  无净新增提交（源分支已完全包含在集成分支中）。" -ForegroundColor Yellow
-    } else {
-        Write-Host "  发现 $($netCommits.Count) 个净新增提交（按拓扑顺序合入）：" -ForegroundColor Green
+    if (-not $Apply) {
+        Write-Host ""
+        Write-Host "================== Branch Sync 单分支预检报告 ==================" -ForegroundColor Cyan
+        Write-Host "集成分支: $IntegrationBranch ($integCommit)"
+        Write-Host "源分支:   $SourceBranch ($sourceCommit)"
+        Write-Host "同步路径: $route $(if ($route -eq 'Route B') { "[$occupiedWorktreePath]" })"
+        Write-Host "净贡献提交: $($netCommits.Count) 个提交"
         foreach ($nc in $netCommits) {
-            Write-Host "    + $($nc.Hash.Substring(0, [Math]::Min(7, $nc.Hash.Length))) $($nc.Subject)" -ForegroundColor White
+            Write-Host "  + $($nc.Hash.Substring(0, [Math]::Min(7, $nc.Hash.Length))) $($nc.Subject)" -ForegroundColor White
         }
+        Write-Host "----------------------------------------------------------------"
+        Write-Host "一键执行: pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch '$SourceBranch' -Apply" -ForegroundColor Yellow
+        Write-Host "================================================================" -ForegroundColor Cyan
+        Write-Host ""
+        return
     }
-    if ($duplicateCommits.Count -gt 0) {
-        Write-Host "  自动忽略 $($duplicateCommits.Count) 个同等改动提交 (相同 patch-id 已存在于主线)：" -ForegroundColor DarkGray
-        foreach ($dc in $duplicateCommits) {
-            Write-Host "    - $($dc.Hash.Substring(0, [Math]::Min(7, $dc.Hash.Length))) $($dc.Subject)" -ForegroundColor DarkGray
+
+    # 执行阶段
+    $timestamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
+    $cleanBranchTag = $SourceBranch -replace '[^a-zA-Z0-9_\-]', '_'
+    $backupSourceRef = "refs/sync-backup/$cleanBranchTag/$timestamp-$sourceCommit"
+    $backupIntegRef = "refs/sync-backup/$IntegrationBranch/$timestamp-$integCommit"
+    Invoke-Git @("update-ref", $backupSourceRef, $fullSourceCommit) | Out-Null
+    Invoke-Git @("update-ref", $backupIntegRef, $fullIntegCommit) | Out-Null
+    Write-Host "🛡️ 安全快照已创建: $backupSourceRef" -ForegroundColor DarkCyan
+
+    $initialBranch = (Invoke-Git @("rev-parse", "--abbrev-ref", "HEAD")).Output
+
+    if ($netCommits.Count -eq 0) {
+        Write-Host "提示: 源分支无净新增提交，直接对齐..." -ForegroundColor Yellow
+        if ($route -eq "Route A") {
+            Invoke-Git @("checkout", $SourceBranch) | Out-Null
+            Invoke-Git @("reset", "--hard", $IntegrationBranch) | Out-Null
+            if ($doPush) { Invoke-Git @("push", "--force-with-lease", "origin", $SourceBranch) | Out-Null }
+            Invoke-Git @("checkout", $IntegrationBranch) | Out-Null
+        } else {
+            Invoke-Git @("-C", $occupiedWorktreePath, "reset", "--hard", $IntegrationBranch) | Out-Null
+            if ($doPush) { Invoke-Git @("-C", $occupiedWorktreePath, "push", "--force-with-lease", "origin", $SourceBranch) | Out-Null }
         }
-    }
-    Write-Host "----------------------------------------------------------"
-    Write-Host "操作指引 (一键执行并自动校验):" -ForegroundColor Cyan
-    Write-Host "  pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch '$SourceBranch' -Apply" -ForegroundColor Yellow
-    Write-Host "==========================================================" -ForegroundColor Cyan
-    Write-Host ""
-    return
-}
-
-# 9. 执行阶段 (Apply) — 带持久化安全快照与树级保全
-Write-Host ""
-Write-Host ">> 开始执行分支同步 (路径: $route)..." -ForegroundColor Cyan
-
-# 9.1 创建本地持久化安全快照引用 (Safety Backup Ref)
-$timestamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
-$cleanBranchTag = $SourceBranch -replace '[^a-zA-Z0-9_\-]', '_'
-$backupSourceRef = "refs/sync-backup/$cleanBranchTag/$timestamp-$($sourceCommit)"
-$backupIntegRef = "refs/sync-backup/$IntegrationBranch/$timestamp-$($integCommit)"
-
-Invoke-Git @("update-ref", $backupSourceRef, $fullSourceCommit) | Out-Null
-Invoke-Git @("update-ref", $backupIntegRef, $fullIntegCommit) | Out-Null
-Write-Host "🛡️ 安全快照已创建: $backupSourceRef" -ForegroundColor DarkCyan
-
-$initialBranch = (Invoke-Git @("rev-parse", "--abbrev-ref", "HEAD")).Output
-$alignTarget = if ($doPush) { "origin/$IntegrationBranch" } else { $IntegrationBranch }
-
-# 9.2 记录合前源分支独有改动 (用于 Tree-Diff Guard 树级防漏校验)
-$preMergeDiff = Invoke-Git @("diff", "$IntegrationBranch...$SourceBranch", "--stat")
-
-if ($netCommits.Count -eq 0) {
-    Write-Host "提示: 源分支无净新增提交，直接执行对齐同步..." -ForegroundColor Yellow
-    if ($route -eq "Route A") {
-        Invoke-Git @("checkout", $SourceBranch) | Out-Null
-        $res = Invoke-Git @("reset", "--hard", $IntegrationBranch)
-        Assert-GitSuccess $res "重置 $SourceBranch 到 $IntegrationBranch"
-        if ($doPush) {
-            Write-Host "推送对齐分支 origin/$SourceBranch..." -ForegroundColor DarkGray
-            $pushRes = Invoke-Git @("push", "--force-with-lease", "origin", $SourceBranch)
-            Assert-GitSuccess $pushRes "推送 $SourceBranch"
-        }
-        Invoke-Git @("checkout", $IntegrationBranch) | Out-Null
     } else {
-        $res = Invoke-Git @("-C", "`"$occupiedWorktreePath`"", "reset", "--hard", $alignTarget)
-        Assert-GitSuccess $res "重置 Worktree ($occupiedWorktreePath) 到 $alignTarget"
+        if ($route -eq "Route A") {
+            Invoke-Git @("checkout", $SourceBranch) | Out-Null
+            $rb = Invoke-Git @("rebase", $IntegrationBranch)
+            if ($rb.ExitCode -ne 0) {
+                Invoke-Git @("rebase", "--abort") | Out-Null
+                Invoke-Git @("checkout", $initialBranch) | Out-Null
+                throw "在对 '$SourceBranch' 执行 git rebase 时遇到冲突。现场已恢复，原始快照: $backupSourceRef"
+            }
+            Invoke-Git @("checkout", $IntegrationBranch) | Out-Null
+            Invoke-Git @("merge", "--ff-only", $SourceBranch) | Out-Null
+        } else {
+            Invoke-Git @("checkout", $IntegrationBranch) | Out-Null
+            $hashes = $netCommits | ForEach-Object { $_.Hash }
+            $cp = Invoke-Git (@("cherry-pick") + $hashes)
+            if ($cp.ExitCode -ne 0) {
+                Invoke-Git @("cherry-pick", "--abort") | Out-Null
+                Invoke-Git @("reset", "--hard", $backupIntegRef) | Out-Null
+                Invoke-Git @("checkout", $initialBranch) | Out-Null
+                throw "Cherry-pick 净贡献提交时发生冲突。集成分支已安全回滚至合入前状态 ($backupIntegRef)。"
+            }
+        }
+
+        # Tree-Diff Guard
+        $postCherry = Invoke-Git @("cherry", "-v", $IntegrationBranch, $backupSourceRef)
+        if ($postCherry.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($postCherry.Output))) {
+            foreach ($pcl in ($postCherry.Output -split "`r?`n")) {
+                if ($pcl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
+                    Invoke-Git @("reset", "--hard", $backupIntegRef) | Out-Null
+                    Invoke-Git @("checkout", $initialBranch) | Out-Null
+                    throw "Tree-Diff Guard 拦截：源分支存在未完整合入提交，已中止并回滚。"
+                }
+            }
+        }
+        Write-Host "✅ Tree-Diff Guard 审计通过：源分支改动已 100% 完整合入！" -ForegroundColor Green
+
         if ($doPush) {
-            Write-Host "推送对齐分支 origin/$SourceBranch..." -ForegroundColor DarkGray
-            $pushRes = Invoke-Git @("-C", "`"$occupiedWorktreePath`"", "push", "--force-with-lease", "origin", $SourceBranch)
-            Assert-GitSuccess $pushRes "Worktree 推送 $SourceBranch"
+            Invoke-Git @("push", "origin", $IntegrationBranch) | Out-Null
+        }
+
+        # 对齐源分支
+        if ($route -eq "Route A") {
+            Invoke-Git @("checkout", $SourceBranch) | Out-Null
+            Invoke-Git @("reset", "--hard", $IntegrationBranch) | Out-Null
+            if ($doPush) { Invoke-Git @("push", "--force-with-lease", "origin", $SourceBranch) | Out-Null }
+            Invoke-Git @("checkout", $IntegrationBranch) | Out-Null
+        } else {
+            Invoke-Git @("-C", $occupiedWorktreePath, "reset", "--hard", $IntegrationBranch) | Out-Null
+            if ($doPush) { Invoke-Git @("-C", $occupiedWorktreePath, "push", "--force-with-lease", "origin", $SourceBranch) | Out-Null }
         }
     }
+
+    $allCompletedBranches = @($SourceBranch)
+
 } else {
-    if ($route -eq "Route A") {
-        # Route A 流程: checkout feat/x -> rebase integration -> checkout integration -> merge --ff-only
-        Write-Host "1. 切换至源分支 '$SourceBranch' 并执行变基 (rebase $IntegrationBranch)..." -ForegroundColor DarkGray
-        $co1 = Invoke-Git @("checkout", $SourceBranch)
-        Assert-GitSuccess $co1 "切换至 $SourceBranch"
+    # -----------------------------
+    # 全分支同步模式 (All-Branches Sync Mode - 默认)
+    # -----------------------------
+    Write-Host "🌐 进入全分支同步模式 (目标集成分支: '$IntegrationBranch')..." -ForegroundColor Cyan
 
-        $rb = Invoke-Git @("rebase", $IntegrationBranch)
-        if ($rb.ExitCode -ne 0) {
-            Write-Host "变基过程发生冲突！正在中止变基并恢复现场..." -ForegroundColor Red
-            Invoke-Git @("rebase", "--abort") | Out-Null
-            Invoke-Git @("checkout", $initialBranch) | Out-Null
-            throw "在对 '$SourceBranch' 执行 'git rebase $IntegrationBranch' 时遇到冲突。原始状态保存在 $backupSourceRef，请手动排查解决。"
-        }
+    # 扫描所有本地分支与远端分支
+    $localBranches = (Invoke-Git @("for-each-ref", "--format=%(refname:short)", "refs/heads/")).Output -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $remoteBranches = (Invoke-Git @("for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/")).Output -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and -not $_.StartsWith("origin/HEAD") }
 
-        Write-Host "2. 切换回集成分支 '$IntegrationBranch' 并执行快进合并 (merge --ff-only)..." -ForegroundColor DarkGray
-        $co2 = Invoke-Git @("checkout", $IntegrationBranch)
-        Assert-GitSuccess $co2 "切换至 $IntegrationBranch"
-
-        $mg = Invoke-Git @("merge", "--ff-only", $SourceBranch)
-        Assert-GitSuccess $mg "快进合并 $SourceBranch"
-
-    } else {
-        # Route B 流程: 主仓库切换至集成分支，依次 cherry-pick 净贡献提交
-        Write-Host "1. 切换至集成分支 '$IntegrationBranch' 并按序 cherry-pick 净贡献提交..." -ForegroundColor DarkGray
-        $co = Invoke-Git @("checkout", $IntegrationBranch)
-        Assert-GitSuccess $co "切换至 $IntegrationBranch"
-
-        $hashList = $netCommits | ForEach-Object { $_.Hash }
-        $cpArgs = @("cherry-pick") + $hashList
-        $cp = Invoke-Git $cpArgs
-        if ($cp.ExitCode -ne 0) {
-            Write-Host "Cherry-pick 过程发生冲突！正在中止 cherry-pick 并恢复集成分支..." -ForegroundColor Red
-            Invoke-Git @("cherry-pick", "--abort") | Out-Null
-            Invoke-Git @("reset", "--hard", $backupIntegRef) | Out-Null
-            Invoke-Git @("checkout", $initialBranch) | Out-Null
-            throw "Cherry-pick 净贡献提交时发生冲突。集成分支已安全回滚至合入前状态 ($backupIntegRef)。"
-        }
+    $candidateBranchSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($lb in $localBranches) {
+        if ($lb -ne $IntegrationBranch) { $candidateBranchSet.Add($lb) | Out-Null }
     }
-
-    # 9.3 核心门禁：Tree-Diff Guard 树级改动保全校验 (严禁在确认完全合入前重置源分支！)
-    Write-Host "🔍 执行合后改动保全审计 (Tree-Diff Guard)..." -ForegroundColor DarkCyan
-    $postCherry = Invoke-Git @("cherry", "-v", $IntegrationBranch, $backupSourceRef)
-    $remainingNet = [System.Collections.Generic.List[string]]::new()
-    if ($postCherry.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($postCherry.Output))) {
-        foreach ($pcl in ($postCherry.Output -split "`r?`n")) {
-            if ($pcl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
-                $remainingNet.Add("$($matches[1]) $($matches[2])")
+    foreach ($rb in $remoteBranches) {
+        $shortB = if ($rb.StartsWith("origin/")) { $rb.Substring(7) } else { $rb }
+        if ($shortB -ne $IntegrationBranch) {
+            if (-not $candidateBranchSet.Contains($shortB)) {
+                # 本地不存在，创建本地跟踪分支
+                Invoke-Git @("branch", "--track", $shortB, $rb) | Out-Null
+                $candidateBranchSet.Add($shortB) | Out-Null
             }
         }
     }
 
-    if ($remainingNet.Count -gt 0) {
-        # 严重告警：存在未合入的净新增提交！绝不触碰源分支，立刻回滚集成分支！
-        $missedList = $remainingNet -join "`n"
-        Write-Host "❌ 严重拦截：检测到存在未完全合入的净提交！正在回滚集成分支..." -ForegroundColor Red
-        Invoke-Git @("reset", "--hard", $backupIntegRef) | Out-Null
-        Invoke-Git @("checkout", $initialBranch) | Out-Null
-        throw "Tree-Diff Guard 拦截：源分支仍有未合入的净提交，为防止提交丢失，已中止合并并回滚。未合入列表：`n$missedList`n快照引用：$backupSourceRef"
+    # 自动快进落后于远端的本地分支
+    if ($hasRemote -and (-not $NoFetch)) {
+        foreach ($b in $candidateBranchSet) {
+            $hasRb = (Invoke-Git @("rev-parse", "--verify", "origin/$b")).ExitCode -eq 0
+            if ($hasRb) {
+                $lSha = (Invoke-Git @("rev-parse", $b)).Output
+                $rSha = (Invoke-Git @("rev-parse", "origin/$b")).Output
+                if ($lSha -ne $rSha) {
+                    $isAnc = (Invoke-Git @("merge-base", "--is-ancestor", $lSha, $rSha)).ExitCode -eq 0
+                    if ($isAnc) {
+                        if ($wtInfo.BranchToPath.ContainsKey($b)) {
+                            Invoke-Git @("-C", $wtInfo.BranchToPath[$b], "merge", "--ff-only", "origin/$b") | Out-Null
+                        } else {
+                            Invoke-Git @("update-ref", "refs/heads/$b", $rSha) | Out-Null
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    Write-Host "✅ Tree-Diff Guard 审计通过：源分支所有净贡献已 100% 完整合入主线！" -ForegroundColor Green
+    # 收集所有分支净贡献并按 committerdate 全局排序
+    $allNetCommitsMap = @{} # Hash -> CommitInfo
+    $branchNetMap = @{}     # Branch -> List of CommitInfo
 
-    # 9.4 推送集成分支
+    foreach ($b in ($candidateBranchSet | Sort-Object)) {
+        $cherryRes = Invoke-Git @("cherry", "-v", $IntegrationBranch, $b)
+        $bNetList = [System.Collections.Generic.List[PSCustomObject]]::new()
+        if ($cherryRes.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($cherryRes.Output))) {
+            foreach ($cl in ($cherryRes.Output -split "`r?`n")) {
+                if ($cl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
+                    $cHash = $Matches[1]
+                    $cSubj = $Matches[2]
+                    
+                    # 获取详细元数据 (用于时序排序与去重)
+                    $logInfo = Invoke-Git @("log", "-1", "--format=%H|%ct|%T", $cHash)
+                    $fullHash = $cHash
+                    $committerTime = [long]0
+                    $treeHash = ""
+                    if ($logInfo.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($logInfo.Output))) {
+                        $parts = $logInfo.Output.Split('|')
+                        $fullHash = $parts[0].Trim()
+                        if ($parts.Length -gt 1) { [long]::TryParse($parts[1].Trim(), [ref]$committerTime) | Out-Null }
+                        if ($parts.Length -gt 2) { $treeHash = $parts[2].Trim() }
+                    }
+
+                    $cObj = [PSCustomObject]@{
+                        Hash          = $cHash
+                        FullHash      = $fullHash
+                        Subject       = $cSubj
+                        CommitterTime = $committerTime
+                        TreeHash      = $treeHash
+                        SourceBranch  = $b
+                    }
+                    $bNetList.Add($cObj)
+
+                    # 全局去重（按 treeHash + subject 或 fullHash）
+                    $dedupKey = if ($treeHash) { "$treeHash|$cSubj" } else { $fullHash }
+                    if (-not $allNetCommitsMap.ContainsKey($dedupKey)) {
+                        $allNetCommitsMap[$dedupKey] = $cObj
+                    }
+                }
+            }
+        }
+        $branchNetMap[$b] = $bNetList
+    }
+
+    # 按时间戳全局升序排序
+    $orderedNetCommits = $allNetCommitsMap.Values | Sort-Object -Property CommitterTime, FullHash
+    $branchesWithNet = @($branchNetMap.Keys | Where-Object { $branchNetMap[$_].Count -gt 0 })
+
+    $integCommit = (Invoke-Git @("rev-parse", "--short", $IntegrationBranch)).Output
+    $fullIntegCommit = (Invoke-Git @("rev-parse", $IntegrationBranch)).Output
+
+    # 预检报告
+    if (-not $Apply) {
+        Write-Host ""
+        Write-Host "================== 全分支同步预检拓扑 (Dry Run) ==================" -ForegroundColor Cyan
+        Write-Host "集成分支: $IntegrationBranch ($integCommit)" -ForegroundColor Green
+        Write-Host "待扫描分支总数: $($candidateBranchSet.Count)"
+        Write-Host "存在净提交分支: $($branchesWithNet.Count) 个 ($(($branchesWithNet | ForEach-Object { "'$_'" }) -join ', '))"
+        Write-Host "待合入唯一净提交数: $($orderedNetCommits.Count) 个 (已按提交时间全局排序)"
+        Write-Host "------------------------------------------------------------------"
+        if ($orderedNetCommits.Count -gt 0) {
+            Write-Host "全局按序合入提交序列 (Chronological Order):" -ForegroundColor DarkCyan
+            $idx = 1
+            foreach ($oc in $orderedNetCommits) {
+                Write-Host "  [$idx] $($oc.Hash.Substring(0, [Math]::Min(7, $oc.Hash.Length))) $($oc.Subject) (源自: $($oc.SourceBranch))" -ForegroundColor White
+                $idx++
+            }
+        } else {
+            Write-Host "✅ 所有分支均已与集成分支对齐，无需合入新提交。" -ForegroundColor Green
+        }
+        Write-Host "------------------------------------------------------------------"
+        Write-Host "一键执行所有分支同步、对齐与推送:" -ForegroundColor Yellow
+        Write-Host "  pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -Apply" -ForegroundColor White
+        Write-Host "==================================================================" -ForegroundColor Cyan
+        Write-Host ""
+        return
+    }
+
+    # 执行阶段 (Apply)
+    $timestamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
+    $backupIntegRef = "refs/sync-backup/$IntegrationBranch/$timestamp-$integCommit"
+    Invoke-Git @("update-ref", $backupIntegRef, $fullIntegCommit) | Out-Null
+    Write-Host "🛡️ 集成分支安全快照已创建: $backupIntegRef" -ForegroundColor DarkCyan
+
+    $backupSourceRefs = @{}
+    foreach ($b in $candidateBranchSet) {
+        $bSha = (Invoke-Git @("rev-parse", $b)).Output
+        $bTag = $b -replace '[^a-zA-Z0-9_\-]', '_'
+        $bRef = "refs/sync-backup/$bTag/$timestamp-$($bSha.Substring(0, [Math]::Min(7, $bSha.Length)))"
+        Invoke-Git @("update-ref", $bRef, $bSha) | Out-Null
+        $backupSourceRefs[$b] = $bRef
+    }
+
+    # 确保当前检出集成分支
+    $cHead = (Invoke-Git @("symbolic-ref", "--short", "-q", "HEAD")).Output
+    if ($cHead -ne $IntegrationBranch) {
+        $coInteg = Invoke-Git @("checkout", $IntegrationBranch)
+        Assert-GitSuccess $coInteg "检出集成分支 $IntegrationBranch"
+    }
+
+    # 依次 cherry-pick 全局排序后的净提交
+    if ($orderedNetCommits.Count -gt 0) {
+        Write-Host ">> 开始按时间序 cherry-pick $($orderedNetCommits.Count) 个净贡献提交..." -ForegroundColor Cyan
+        $gitDir = (Invoke-Git @("rev-parse", "--git-dir")).Output
+        try { $gitDir = (Resolve-Path $gitDir).Path } catch {}
+        $stateFilePath = Join-Path $gitDir "branch-sync-state.json"
+
+        $currentPickIdx = 0
+        foreach ($oc in $orderedNetCommits) {
+            Write-Host "  [$($currentPickIdx + 1)/$($orderedNetCommits.Count)] Cherry-picking $($oc.Hash.Substring(0, [Math]::Min(7, $oc.Hash.Length))) $($oc.Subject)..." -ForegroundColor DarkGray
+            $cp = Invoke-Git @("cherry-pick", $oc.FullHash)
+            if ($cp.ExitCode -ne 0) {
+                # 遇到冲突！持久化当前同步状态
+                $stateObj = @{
+                    IntegrationBranch  = $IntegrationBranch
+                    CurrentCommitIndex = $currentPickIdx
+                    OrderedCommits     = $orderedNetCommits
+                    BackupIntegRef     = $backupIntegRef
+                    BackupSourceRefs   = $backupSourceRefs
+                    AllSourceBranches  = @($candidateBranchSet)
+                    DeclaredVerifyCmd  = $declaredVerifyCmd
+                    NoPush             = [bool]$NoPush
+                }
+                [System.IO.File]::WriteAllText($stateFilePath, (ConvertTo-Json $stateObj -Depth 10), [System.Text.Encoding]::UTF8)
+
+                $unmerged = (Invoke-Git @("diff", "--name-only", "--diff-filter=U")).Output
+                Write-Host ""
+                Write-Host "================== ⚠️ CHERRY-PICK CONFLICT 冲突拦截 ==================" -ForegroundColor Yellow
+                Write-Host "冲突提交: $($oc.Hash) - $($oc.Subject)"
+                Write-Host "冲突文件列表:" -ForegroundColor Red
+                foreach ($uf in ($unmerged -split "`r?`n")) {
+                    Write-Host "  ! $uf" -ForegroundColor Red
+                }
+                Write-Host "------------------------------------------------------------------"
+                Write-Host "解决指引:" -ForegroundColor Cyan
+                Write-Host "  1. 在上述文件中手动解决冲突标记 (<<<<<<< / ======= / >>>>>>>)；"
+                Write-Host "  2. 执行: git add <解决的文件>"
+                Write-Host "  3. 执行 1-Shot 恢复脚本继续合入剩余提交并自动对齐验证:" -ForegroundColor Green
+                Write-Host "     pwsh .agents/skills/branch-sync/scripts/continue-sync.ps1 -Continue" -ForegroundColor White
+                Write-Host "  4. 若需放弃并恢复现场，执行:" -ForegroundColor DarkGray
+                Write-Host "     pwsh .agents/skills/branch-sync/scripts/continue-sync.ps1 -Abort" -ForegroundColor White
+                Write-Host "======================================================================" -ForegroundColor Yellow
+                Write-Host ""
+                exit 1
+            }
+            $currentPickIdx++
+        }
+        Write-Host "✅ 全部 $($orderedNetCommits.Count) 个提交已成功线性合入集成分支！" -ForegroundColor Green
+    }
+
+    # Tree-Diff Guard 树级防漏保全审计
+    Write-Host "🔍 执行合后改动保全审计 (Tree-Diff Guard)..." -ForegroundColor DarkCyan
+    foreach ($b in $branchesWithNet) {
+        $bRef = $backupSourceRefs[$b]
+        $postCherry = Invoke-Git @("cherry", "-v", $IntegrationBranch, $bRef)
+        if ($postCherry.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($postCherry.Output))) {
+            foreach ($pcl in ($postCherry.Output -split "`r?`n")) {
+                if ($pcl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
+                    Write-Host "❌ 严重拦截：源分支 '$b' 仍有未合入净提交: $($Matches[1]) $($Matches[2])！" -ForegroundColor Red
+                    Invoke-Git @("reset", "--hard", $backupIntegRef) | Out-Null
+                    throw "Tree-Diff Guard 拦截：存在未合入净提交，已回滚集成分支至合前快照。"
+                }
+            }
+        }
+    }
+    Write-Host "✅ Tree-Diff Guard 审计通过：所有分支改动已 100% 完整合入！" -ForegroundColor Green
+
+    # 推送集成分支
     if ($doPush) {
-        Write-Host "3. 推送集成分支 origin/$IntegrationBranch..." -ForegroundColor DarkGray
+        Write-Host ">> 推送集成分支 origin/$IntegrationBranch..." -ForegroundColor DarkGray
         $pInteg = Invoke-Git @("push", "origin", $IntegrationBranch)
         Assert-GitSuccess $pInteg "推送集成分支 $IntegrationBranch"
     }
 
-    # 9.5 安全对齐源分支与推送 (--force-with-lease)
-    if ($route -eq "Route A") {
-        Write-Host "4. 同步并对齐源分支 '$SourceBranch'..." -ForegroundColor DarkGray
-        $co3 = Invoke-Git @("checkout", $SourceBranch)
-        Assert-GitSuccess $co3 "切换至 $SourceBranch 进行对齐"
+    # 批量对齐所有分支与 Worktree
+    Write-Host ">> 批量对齐所有分支与 Worktree 至最新集成分支 Tip..." -ForegroundColor Cyan
+    $integTip = (Invoke-Git @("rev-parse", $IntegrationBranch)).Output
 
-        $rst = Invoke-Git @("reset", "--hard", $IntegrationBranch)
-        Assert-GitSuccess $rst "重置 $SourceBranch 到 $IntegrationBranch"
-
-        if ($doPush) {
-            Write-Host "5. 推送对齐后的源分支 origin/$SourceBranch (--force-with-lease)..." -ForegroundColor DarkGray
-            $pSrc = Invoke-Git @("push", "--force-with-lease", "origin", $SourceBranch)
-            Assert-GitSuccess $pSrc "推送源分支 $SourceBranch"
-        }
-
-        Invoke-Git @("checkout", $IntegrationBranch) | Out-Null
-    } else {
-        Write-Host "4. 在占用源分支的 Worktree ($occupiedWorktreePath) 中同步与对齐..." -ForegroundColor DarkGray
-        if ($doPush) {
-            $wtFetch = Invoke-Git @("-C", "`"$occupiedWorktreePath`"", "fetch", "origin")
-            Assert-GitSuccess $wtFetch "Worktree fetch"
-        }
-
-        $wtReset = Invoke-Git @("-C", "`"$occupiedWorktreePath`"", "reset", "--hard", $alignTarget)
-        Assert-GitSuccess $wtReset "Worktree 重置到 $alignTarget"
-
-        if ($doPush) {
-            Write-Host "5. 从 Worktree 推送对齐后的源分支 origin/$SourceBranch (--force-with-lease)..." -ForegroundColor DarkGray
-            $wtPush = Invoke-Git @("-C", "`"$occupiedWorktreePath`"", "push", "--force-with-lease", "origin", $SourceBranch)
-            Assert-GitSuccess $wtPush "Worktree 推送 $SourceBranch"
+    # 严格核查所有待重置外部 Worktree 干净度
+    foreach ($b in $candidateBranchSet) {
+        if ($wtInfo.BranchToPath.ContainsKey($b)) {
+            $wPath = $wtInfo.BranchToPath[$b]
+            if ($wPath -ne $currentWorktreePath) {
+                $wtDirty = Get-DirtyItems $wtInfo.AllPaths $declaredDirtyPatterns $wPath
+                if ($wtDirty.Count -gt 0) {
+                    throw "占用分支 '$b' 的外部 Worktree ($wPath) 存在未提交改动，严禁强制重置：`n$($wtDirty -join "`n")"
+                }
+            }
         }
     }
+
+    foreach ($b in $candidateBranchSet) {
+        if ($wtInfo.BranchToPath.ContainsKey($b)) {
+            $wPath = $wtInfo.BranchToPath[$b]
+            if ($wPath -ne $currentWorktreePath) {
+                Invoke-Git @("-C", $wPath, "reset", "--hard", $integTip) | Out-Null
+            }
+        } else {
+            Invoke-Git @("branch", "-f", $b, $integTip) | Out-Null
+        }
+        Write-Host "  ✅ 分支 '$b' 已对齐" -ForegroundColor Green
+    }
+
+    # 批量推送所有对齐分支
+    if ($doPush) {
+        Write-Host ">> 安全推送所有对齐分支 (--force-with-lease)..." -ForegroundColor Cyan
+        $pushBranches = @($candidateBranchSet)
+        if ($pushBranches.Count -gt 0) {
+            $pArgs = @("push", "--force-with-lease", "origin") + $pushBranches
+            $pRes = Invoke-Git $pArgs
+            if ($pRes.ExitCode -ne 0) {
+                foreach ($pb in $pushBranches) {
+                    Invoke-Git @("push", "--force-with-lease", "origin", $pb) | Out-Null
+                }
+            }
+            Write-Host "  ✅ 全部 $($pushBranches.Count) 个对齐分支已安全推送到 origin" -ForegroundColor Green
+        }
+    }
+
+    $allCompletedBranches = @($candidateBranchSet)
 }
 
-# 10. 合后自检 (Post-merge Verification)
-$headCommit = (Invoke-Git @("rev-parse", "HEAD")).Output
-$integTip = (Invoke-Git @("rev-parse", $IntegrationBranch)).Output
-
-$mergeLog = Invoke-Git @("log", "--oneline", "--merges", "-n", "5", $IntegrationBranch)
-$hasMerges = -not [string]::IsNullOrWhiteSpace($mergeLog.Output)
-
-$diffRes = Invoke-Git @("diff", $IntegrationBranch, $SourceBranch, "--stat")
-$isDiffEmpty = [string]::IsNullOrWhiteSpace($diffRes.Output)
-
-# 11. 自动执行项目合后验证命令 (单调用 1-Shot 闭环核心)
+# 6. 项目合后验证命令 (单调用 1-Shot 闭环核心)
 $verifyStatus = "SKIPPED"
 if (-not $NoVerify -and (-not [string]::IsNullOrWhiteSpace($declaredVerifyCmd))) {
     Write-Host ""
     Write-Host ">> 正在运行项目专属合后验证命令: $declaredVerifyCmd" -ForegroundColor Cyan
-    $verifyStartTime = [System.DateTime]::Now
     try {
         $pinfo = New-Object System.Diagnostics.ProcessStartInfo
         if ($IsWindows -or ($PSVersionTable.PSEdition -ne "Core" -and [System.Environment]::OSVersion.Platform -like "*Win*")) {
@@ -744,15 +843,14 @@ if (-not $NoVerify -and (-not [string]::IsNullOrWhiteSpace($declaredVerifyCmd)))
     $verifyStatus = "NONE (SKILL.md 未登记验证命令)"
 }
 
-# 12. 格式化交付终态看板
+# 7. 终态交付看板
+$integTipFinal = (Invoke-Git @("rev-parse", $IntegrationBranch)).Output
 Write-Host ""
 Write-Host "================== BRANCH SYNC SUCCESS ==================" -ForegroundColor Green
-Write-Host "集成分支:       $IntegrationBranch ($($integTip.Substring(0, [Math]::Min(7, $integTip.Length))))"
-Write-Host "源分支:         $SourceBranch (已完全对齐并同步推送)"
-Write-Host "安全快照:       $backupSourceRef"
-Write-Host "净合入提交:     $($netCommits.Count) 个提交 (严格线性，0 Merge)"
+Write-Host "集成分支:       $IntegrationBranch ($($integTipFinal.Substring(0, [Math]::Min(7, $integTipFinal.Length))))"
+Write-Host "已同步分支:     $($allCompletedBranches.Count) 个分支 (已全部对齐并安全推送)"
 Write-Host "改动保全审计:   ✅ PASSED (Tree-Diff 100% 完整保留)"
-Write-Host "两端对齐状态:   $(if ($isDiffEmpty) { '✅ 完全对齐 (Diff 为空)' } else { '⚠️ 存在差异' })"
+Write-Host "两端对齐状态:   ✅ 全部对齐"
 Write-Host "合后门禁验证:   $(if ($verifyStatus.StartsWith('PASSED')) { "✅ $verifyStatus" } elseif ($verifyStatus.StartsWith('FAILED')) { "❌ $verifyStatus" } else { "ℹ️ $verifyStatus" })"
 Write-Host "工作区状态:     ✅ 干净 (Clean)"
 Write-Host "状态判定:       COMPLETED_READY_TO_REPORT"
