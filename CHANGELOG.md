@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.36.0-beta.1...v0.36.1-beta.1) (2026-10-06)
+
+
+### Bug Fixes
+
+* **agent:** 移除 continue-sync 管道截断以满足 ps-pipeline-hygiene ([c3f37ed](https://github.com/pengjiaxusz/pengj-templates/commit/c3f37ede9bdb44f9fc61b6648436a4a8993940b0))
+
 ## [0.36.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.35.0-beta.1...v0.36.0-beta.1) (2026-10-06)
 
 
