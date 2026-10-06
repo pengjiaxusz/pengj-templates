@@ -35,7 +35,7 @@
     ".agents\\skills\\arch-align\\references\\GENERATE-INDEX.md": "8631df67a99bc9eb96096b4edc28d050e1d63151ef6f05be545ba37fb73396bb",
     ".agents\\skills\\branch-sync\\SKILL.md": "ed849ef43888fcd52a9056c82b4a5cacb75f496019587dfe0d4c734aba3605aa",
     ".agents\\skills\\branch-sync\\scripts\\align-branches.ps1": "026fe7f8e959a04891f31d83708e8fe9a360137d787bb53f4249067b4f1fe704",
-    ".agents\\skills\\branch-sync\\scripts\\continue-sync.ps1": "de4d32b1832f4b1b5c56c38add9fb722040bd8d5a869a7e3c7ccbb83aca9e72b",
+    ".agents\\skills\\branch-sync\\scripts\\continue-sync.ps1": "60a930fcecc702cf088fc0a6d293a466662c28ca7c16fb6b984899eeee487347",
     ".agents\\skills\\branch-sync\\scripts\\manage-sync-backups.ps1": "f0218628637e570fe0089a131c6d0a5c105a15db5a4233e095ee531f69778e37",
     ".agents\\skills\\branch-sync\\scripts\\show-branch-topology.ps1": "5a1ad89bf51bd8b93e7447fc9aedfba84bbe41fca94b7136302e8c55d82a291a",
     ".agents\\skills\\branch-sync\\scripts\\sync-branch.ps1": "aca8c75a9c0c69d8209a3469edcb74676c6845ddeca52517ac86058563cbb30f",
