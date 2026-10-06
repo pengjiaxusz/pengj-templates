@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.35.0-beta.1...v0.36.0-beta.1) (2026-10-06)
+
+
+### Features
+
+* **agent:** branch-sync支持默认全分支1-Shot同步与动态集成分支推导 ([906a947](https://github.com/pengjiaxusz/pengj-templates/commit/906a94719756061211ee12f5020f1f1378b37a48))
+
 ## [0.35.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.34.0-beta.1...v0.35.0-beta.1) (2026-09-23)
 
 
