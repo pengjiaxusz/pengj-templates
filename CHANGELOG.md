@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.36.2-beta.1...v0.36.3-beta.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* **agent:** 切换 Invoke-Git 至 ReadToEndAsync 彻底消除线程上下文异常与管道死锁 ([014b7f6](https://github.com/pengjiaxusz/pengj-templates/commit/014b7f6947e6bb09c6c024eb5c355ef857c2affc))
+
 ## [0.36.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.36.1-beta.1...v0.36.2-beta.1) (2026-10-07)
 
 
