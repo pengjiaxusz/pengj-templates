@@ -221,8 +221,7 @@ if ($Continue) {
     foreach ($sb in $allSourceBranches) {
         $checkRef = "refs/sync-backup/$($sb -replace '[^a-zA-Z0-9_\-]', '_')"
         # 查找最新的快照 ref
-        $refLines = @((Invoke-Git @("for-each-ref", "--sort=-committerdate", "--format=%(refname)", "$checkRef*")).Output -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        $bRef = if ($refLines.Count -gt 0) { $refLines[0].Trim() } else { "" }
+        $bRef = (Invoke-Git @("for-each-ref", "--sort=-committerdate", "--format=%(refname)", "$checkRef*")).Output -split "`r?`n" | Select-Object -First 1
         if (-not [string]::IsNullOrWhiteSpace($bRef)) {
             $postCherry = Invoke-Git @("cherry", "-v", $integBranch, $bRef)
             if ($postCherry.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($postCherry.Output))) {

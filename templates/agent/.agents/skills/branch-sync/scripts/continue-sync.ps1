@@ -53,7 +53,8 @@ function Format-GitArg {
 function Invoke-Git {
     param(
         [string[]]$CommandArgs,
-        [string]$WorkingDir = ""
+        [string]$WorkingDir = "",
+        [int]$TimeoutSeconds = 300
     )
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
     $pinfo.FileName = "git"
@@ -68,15 +69,60 @@ function Invoke-Git {
         $pinfo.WorkingDirectory = $WorkingDir
     }
 
-    $process = [System.Diagnostics.Process]::Start($pinfo)
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
+    # 防交互与外部编辑器挂死：禁用交互式凭据提示与外部编辑器弹窗
+    $isWin = [System.Environment]::OSVersion.Platform -like "*Win*" -or $IsWindows
+    $pinfo.Environment["GIT_TERMINAL_PROMPT"] = "0"
+    $pinfo.Environment["GIT_OPTIONAL_LOCKS"] = "0"
+    if ($isWin) {
+        $pinfo.Environment["GIT_EDITOR"] = "cmd.exe /c exit 0"
+    } else {
+        $pinfo.Environment["GIT_EDITOR"] = "true"
+    }
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $pinfo
+
+    $stdoutBuilder = New-Object System.Text.StringBuilder
+    $stderrBuilder = New-Object System.Text.StringBuilder
+
+    $outHandler = [System.Diagnostics.DataReceivedEventHandler]{
+        param($sender, $e)
+        if ($null -ne $e.Data) { [void]$stdoutBuilder.AppendLine($e.Data) }
+    }
+    $errHandler = [System.Diagnostics.DataReceivedEventHandler]{
+        param($sender, $e)
+        if ($null -ne $e.Data) { [void]$stderrBuilder.AppendLine($e.Data) }
+    }
+
+    $process.add_OutputDataReceived($outHandler)
+    $process.add_ErrorDataReceived($errHandler)
+
+    if (-not $process.Start()) {
+        throw "无法启动 Git 进程。"
+    }
+
+    $process.BeginOutputReadLine()
+    $process.BeginErrorReadLine()
+
+    $timeoutMs = if ($TimeoutSeconds -gt 0) { $TimeoutSeconds * 1000 } else { [System.Threading.Timeout]::Infinite }
+    $exited = $process.WaitForExit($timeoutMs)
+
+    if (-not $exited) {
+        try {
+            $process.Kill($true)
+        } catch {
+            try { $process.Kill() } catch {}
+        }
+        $cmdStr = "git " + (($CommandArgs | ForEach-Object { Format-GitArg $_ }) -join " ")
+        throw "Git 命令执行超时（超过 $($TimeoutSeconds)s）已被强制终止：$cmdStr"
+    }
+
     $process.WaitForExit()
 
     return [PSCustomObject]@{
         ExitCode = $process.ExitCode
-        Output   = $stdout.Trim()
-        Error    = $stderr.Trim()
+        Output   = $stdoutBuilder.ToString().Trim()
+        Error    = $stderrBuilder.ToString().Trim()
     }
 }
 
@@ -187,12 +233,28 @@ if ($Continue) {
         throw "仍有冲突文件未解决！请先在以下文件中解决冲突并执行 git add 后再继续：`n$($unmerged.Output)"
     }
 
-    Write-Host ">> 1. 继续当前 cherry-pick 提交..." -ForegroundColor Cyan
-    $contRes = Invoke-Git @("-c", "core.editor=true", "cherry-pick", "--continue")
-    if ($contRes.ExitCode -ne 0) {
-        throw "git cherry-pick --continue 执行失败: $($contRes.Error)"
+    Write-Host ">> 1. 检查并继续当前 cherry-pick 提交..." -ForegroundColor Cyan
+    $editorCmd = if ([System.Environment]::OSVersion.Platform -like "*Win*" -or $IsWindows) { "cmd.exe /c exit 0" } else { "true" }
+    $gitDirRes = Invoke-Git @("rev-parse", "--git-dir")
+    $gitDir = if ($gitDirRes.ExitCode -eq 0) { $gitDirRes.Output } else { ".git" }
+    try { $gitDir = (Resolve-Path $gitDir).Path } catch {}
+    $inCherryPick = (Test-Path (Join-Path $gitDir "CHERRY_PICK_HEAD"))
+
+    if ($inCherryPick) {
+        $contRes = Invoke-Git @("-c", "core.editor=$editorCmd", "cherry-pick", "--continue", "--no-edit")
+        if ($contRes.ExitCode -ne 0) {
+            throw "git cherry-pick --continue 执行失败: $($contRes.Error)"
+        }
+        Write-Host "✅ 当前提交合入成功！" -ForegroundColor Green
+    } else {
+        $lastLog = (Invoke-Git @("log", "-1", "--format=%s")).Output
+        $targetSubj = $orderedCommits[$currentIndex].Subject
+        if ($lastLog -match [regex]::Escape($targetSubj)) {
+            Write-Host "ℹ️ 检测到当前提交已在外部完成合入 ($targetSubj)，自动推进至后续队列。" -ForegroundColor Green
+        } else {
+            Write-Host "ℹ️ 当前无进行中的 cherry-pick 操作，继续后续队列检查。" -ForegroundColor Yellow
+        }
     }
-    Write-Host "✅ 当前提交合入成功！" -ForegroundColor Green
 
     # 继续处理后续提交
     $nextIndex = $currentIndex + 1
@@ -200,7 +262,7 @@ if ($Continue) {
         $c = $orderedCommits[$nextIndex]
         Write-Host ">> 应用剩余提交 [$($nextIndex + 1)/$($orderedCommits.Count)]: $($c.Hash.Substring(0, [Math]::Min(7, $c.Hash.Length))) $($c.Subject)..." -ForegroundColor DarkGray
         
-        $cp = Invoke-Git @("cherry-pick", $c.FullHash)
+        $cp = Invoke-Git @("-c", "core.editor=$editorCmd", "cherry-pick", $c.FullHash)
         if ($cp.ExitCode -ne 0) {
             # 再次冲突，更新索引并中断
             $state.CurrentCommitIndex = $nextIndex
