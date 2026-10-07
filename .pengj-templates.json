@@ -34,11 +34,11 @@
     ".agents\\skills\\arch-align\\references\\GENERATE-DOC.md": "7cbd5aca4240f88d8ccce5b7a8278778de791aa7152c3c912c243ec2808511df",
     ".agents\\skills\\arch-align\\references\\GENERATE-INDEX.md": "8631df67a99bc9eb96096b4edc28d050e1d63151ef6f05be545ba37fb73396bb",
     ".agents\\skills\\branch-sync\\SKILL.md": "ed849ef43888fcd52a9056c82b4a5cacb75f496019587dfe0d4c734aba3605aa",
-    ".agents\\skills\\branch-sync\\scripts\\align-branches.ps1": "026fe7f8e959a04891f31d83708e8fe9a360137d787bb53f4249067b4f1fe704",
-    ".agents\\skills\\branch-sync\\scripts\\continue-sync.ps1": "de4d32b1832f4b1b5c56c38add9fb722040bd8d5a869a7e3c7ccbb83aca9e72b",
-    ".agents\\skills\\branch-sync\\scripts\\manage-sync-backups.ps1": "f0218628637e570fe0089a131c6d0a5c105a15db5a4233e095ee531f69778e37",
-    ".agents\\skills\\branch-sync\\scripts\\show-branch-topology.ps1": "5a1ad89bf51bd8b93e7447fc9aedfba84bbe41fca94b7136302e8c55d82a291a",
-    ".agents\\skills\\branch-sync\\scripts\\sync-branch.ps1": "aca8c75a9c0c69d8209a3469edcb74676c6845ddeca52517ac86058563cbb30f",
+    ".agents\\skills\\branch-sync\\scripts\\align-branches.ps1": "6e2d5296ac294d713c74b1e193c92ef000a7fa82bc91a1115ae9dd76e40475ff",
+    ".agents\\skills\\branch-sync\\scripts\\continue-sync.ps1": "8932fdf3ad238e416661f4d21c570f57e0baa635305f55c06174a1cabee4442a",
+    ".agents\\skills\\branch-sync\\scripts\\manage-sync-backups.ps1": "3dcb20f651ab611bf7ca448fb2d51382b7a3732c4870eb1deff4651df2502654",
+    ".agents\\skills\\branch-sync\\scripts\\show-branch-topology.ps1": "10822e95063955a44142eb9273c2a3f147a18b896b96e07fe16f1ff351a57a61",
+    ".agents\\skills\\branch-sync\\scripts\\sync-branch.ps1": "a191e3ff8c7f43160b208b7c99fb41ffbe57626b82cf74781d035efd5617affc",
     ".agents\\skills\\caveman\\SKILL.md": "56a31b9be677ca0afcc24e2273846931841534990657251e1d47815adf661914",
     ".agents\\skills\\commit\\SKILL.md": "d165ddce41a392641335400b37c823c9a1ef55918a378b7ca0da3fc5c5ce9027",
     ".agents\\skills\\grill-me\\SKILL.md": "b0efcedde0094c2ef8540027142f2897fc640f734978003d39c72d0cdaad0a44",
@@ -54,6 +54,6 @@
     ".gitignore": "d6994127ac82b65c180fd075f68ee31cb9cfeb84a9204dc87a7390dc117b484d",
     "AGENTS.md": "0786740acfbe92ddaed3691007b8d1e591634a7f8cd623be2d4e2324f88b8e7d",
     "commitlint.base.js": "3067231e1559d023504d2f0a51f06b301b7ea058eac4e92a3b545d5077da471f",
-    "package.json": "2cf0af37377278f87665ecb1e64ed96b30c08e188ee0560969d23c00f34fdf9a"
+    "package.json": "9238748311262d5d82c0a9f7ddb9ca9840b78caa6450a98eac193d54b316a711"
   }
 }

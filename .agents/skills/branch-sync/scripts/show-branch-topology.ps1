@@ -39,7 +39,8 @@ function Format-GitArg {
 function Invoke-Git {
     param(
         [string[]]$CommandArgs,
-        [string]$WorkingDir = ""
+        [string]$WorkingDir = "",
+        [int]$TimeoutSeconds = 300
     )
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
     $pinfo.FileName = "git"
@@ -54,15 +55,40 @@ function Invoke-Git {
         $pinfo.WorkingDirectory = $WorkingDir
     }
 
+    # 防交互与外部编辑器挂死：禁用交互式凭据提示与外部编辑器弹窗
+    $isWin = [System.Environment]::OSVersion.Platform -like "*Win*" -or $IsWindows
+    $pinfo.Environment["GIT_TERMINAL_PROMPT"] = "0"
+    $pinfo.Environment["GIT_OPTIONAL_LOCKS"] = "0"
+    if ($isWin) {
+        $pinfo.Environment["GIT_EDITOR"] = "cmd.exe /c exit 0"
+    } else {
+        $pinfo.Environment["GIT_EDITOR"] = "true"
+    }
+
     $process = [System.Diagnostics.Process]::Start($pinfo)
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
+    $outTask = $process.StandardOutput.ReadToEndAsync()
+    $errTask = $process.StandardError.ReadToEndAsync()
+
+    $timeoutMs = if ($TimeoutSeconds -gt 0) { $TimeoutSeconds * 1000 } else { [System.Threading.Timeout]::Infinite }
+    $exited = $process.WaitForExit($timeoutMs)
+
+    if (-not $exited) {
+        try {
+            $process.Kill($true)
+        } catch {
+            try { $process.Kill() } catch {}
+        }
+        $cmdStr = "git " + (($CommandArgs | ForEach-Object { Format-GitArg $_ }) -join " ")
+        throw "Git 命令执行超时（超过 $($TimeoutSeconds)s）已被强制终止：$cmdStr"
+    }
+
     $process.WaitForExit()
+    [System.Threading.Tasks.Task]::WaitAll(@($outTask, $errTask))
 
     return [PSCustomObject]@{
         ExitCode = $process.ExitCode
-        Output   = $stdout.Trim()
-        Error    = $stderr.Trim()
+        Output   = $outTask.Result.Trim()
+        Error    = $errTask.Result.Trim()
     }
 }
 

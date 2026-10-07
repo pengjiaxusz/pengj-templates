@@ -53,7 +53,8 @@ function Format-GitArg {
 function Invoke-Git {
     param(
         [string[]]$CommandArgs,
-        [string]$WorkingDir = ""
+        [string]$WorkingDir = "",
+        [int]$TimeoutSeconds = 300
     )
     $pinfo = New-Object System.Diagnostics.ProcessStartInfo
     $pinfo.FileName = "git"
@@ -68,15 +69,40 @@ function Invoke-Git {
         $pinfo.WorkingDirectory = $WorkingDir
     }
 
+    # 防交互与外部编辑器挂死：禁用交互式凭据提示与外部编辑器弹窗
+    $isWin = [System.Environment]::OSVersion.Platform -like "*Win*" -or $IsWindows
+    $pinfo.Environment["GIT_TERMINAL_PROMPT"] = "0"
+    $pinfo.Environment["GIT_OPTIONAL_LOCKS"] = "0"
+    if ($isWin) {
+        $pinfo.Environment["GIT_EDITOR"] = "cmd.exe /c exit 0"
+    } else {
+        $pinfo.Environment["GIT_EDITOR"] = "true"
+    }
+
     $process = [System.Diagnostics.Process]::Start($pinfo)
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
+    $outTask = $process.StandardOutput.ReadToEndAsync()
+    $errTask = $process.StandardError.ReadToEndAsync()
+
+    $timeoutMs = if ($TimeoutSeconds -gt 0) { $TimeoutSeconds * 1000 } else { [System.Threading.Timeout]::Infinite }
+    $exited = $process.WaitForExit($timeoutMs)
+
+    if (-not $exited) {
+        try {
+            $process.Kill($true)
+        } catch {
+            try { $process.Kill() } catch {}
+        }
+        $cmdStr = "git " + (($CommandArgs | ForEach-Object { Format-GitArg $_ }) -join " ")
+        throw "Git 命令执行超时（超过 $($TimeoutSeconds)s）已被强制终止：$cmdStr"
+    }
+
     $process.WaitForExit()
+    [System.Threading.Tasks.Task]::WaitAll(@($outTask, $errTask))
 
     return [PSCustomObject]@{
         ExitCode = $process.ExitCode
-        Output   = $stdout.Trim()
-        Error    = $stderr.Trim()
+        Output   = $outTask.Result.Trim()
+        Error    = $errTask.Result.Trim()
     }
 }
 
@@ -187,12 +213,28 @@ if ($Continue) {
         throw "仍有冲突文件未解决！请先在以下文件中解决冲突并执行 git add 后再继续：`n$($unmerged.Output)"
     }
 
-    Write-Host ">> 1. 继续当前 cherry-pick 提交..." -ForegroundColor Cyan
-    $contRes = Invoke-Git @("-c", "core.editor=true", "cherry-pick", "--continue")
-    if ($contRes.ExitCode -ne 0) {
-        throw "git cherry-pick --continue 执行失败: $($contRes.Error)"
+    Write-Host ">> 1. 检查并继续当前 cherry-pick 提交..." -ForegroundColor Cyan
+    $editorCmd = if ([System.Environment]::OSVersion.Platform -like "*Win*" -or $IsWindows) { "cmd.exe /c exit 0" } else { "true" }
+    $gitDirRes = Invoke-Git @("rev-parse", "--git-dir")
+    $gitDir = if ($gitDirRes.ExitCode -eq 0) { $gitDirRes.Output } else { ".git" }
+    try { $gitDir = (Resolve-Path $gitDir).Path } catch {}
+    $inCherryPick = (Test-Path (Join-Path $gitDir "CHERRY_PICK_HEAD"))
+
+    if ($inCherryPick) {
+        $contRes = Invoke-Git @("-c", "core.editor=$editorCmd", "cherry-pick", "--continue", "--no-edit")
+        if ($contRes.ExitCode -ne 0) {
+            throw "git cherry-pick --continue 执行失败: $($contRes.Error)"
+        }
+        Write-Host "✅ 当前提交合入成功！" -ForegroundColor Green
+    } else {
+        $lastLog = (Invoke-Git @("log", "-1", "--format=%s")).Output
+        $targetSubj = $orderedCommits[$currentIndex].Subject
+        if ($lastLog -match [regex]::Escape($targetSubj)) {
+            Write-Host "ℹ️ 检测到当前提交已在外部完成合入 ($targetSubj)，自动推进至后续队列。" -ForegroundColor Green
+        } else {
+            Write-Host "ℹ️ 当前无进行中的 cherry-pick 操作，继续后续队列检查。" -ForegroundColor Yellow
+        }
     }
-    Write-Host "✅ 当前提交合入成功！" -ForegroundColor Green
 
     # 继续处理后续提交
     $nextIndex = $currentIndex + 1
@@ -200,7 +242,7 @@ if ($Continue) {
         $c = $orderedCommits[$nextIndex]
         Write-Host ">> 应用剩余提交 [$($nextIndex + 1)/$($orderedCommits.Count)]: $($c.Hash.Substring(0, [Math]::Min(7, $c.Hash.Length))) $($c.Subject)..." -ForegroundColor DarkGray
         
-        $cp = Invoke-Git @("cherry-pick", $c.FullHash)
+        $cp = Invoke-Git @("-c", "core.editor=$editorCmd", "cherry-pick", $c.FullHash)
         if ($cp.ExitCode -ne 0) {
             # 再次冲突，更新索引并中断
             $state.CurrentCommitIndex = $nextIndex
@@ -221,7 +263,8 @@ if ($Continue) {
     foreach ($sb in $allSourceBranches) {
         $checkRef = "refs/sync-backup/$($sb -replace '[^a-zA-Z0-9_\-]', '_')"
         # 查找最新的快照 ref
-        $bRef = (Invoke-Git @("for-each-ref", "--sort=-committerdate", "--format=%(refname)", "$checkRef*")).Output -split "`r?`n" | Select-Object -First 1
+        $refLines = @((Invoke-Git @("for-each-ref", "--sort=-committerdate", "--format=%(refname)", "$checkRef*")).Output -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        $bRef = if ($refLines.Count -gt 0) { $refLines[0].Trim() } else { "" }
         if (-not [string]::IsNullOrWhiteSpace($bRef)) {
             $postCherry = Invoke-Git @("cherry", "-v", $integBranch, $bRef)
             if ($postCherry.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($postCherry.Output))) {

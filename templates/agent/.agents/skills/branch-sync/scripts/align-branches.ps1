@@ -73,30 +73,9 @@ function Invoke-Git {
         $pinfo.Environment["GIT_EDITOR"] = "true"
     }
 
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $pinfo
-
-    $stdoutBuilder = New-Object System.Text.StringBuilder
-    $stderrBuilder = New-Object System.Text.StringBuilder
-
-    $outHandler = [System.Diagnostics.DataReceivedEventHandler]{
-        param($sender, $e)
-        if ($null -ne $e.Data) { [void]$stdoutBuilder.AppendLine($e.Data) }
-    }
-    $errHandler = [System.Diagnostics.DataReceivedEventHandler]{
-        param($sender, $e)
-        if ($null -ne $e.Data) { [void]$stderrBuilder.AppendLine($e.Data) }
-    }
-
-    $process.add_OutputDataReceived($outHandler)
-    $process.add_ErrorDataReceived($errHandler)
-
-    if (-not $process.Start()) {
-        throw "无法启动 Git 进程。"
-    }
-
-    $process.BeginOutputReadLine()
-    $process.BeginErrorReadLine()
+    $process = [System.Diagnostics.Process]::Start($pinfo)
+    $outTask = $process.StandardOutput.ReadToEndAsync()
+    $errTask = $process.StandardError.ReadToEndAsync()
 
     $timeoutMs = if ($TimeoutSeconds -gt 0) { $TimeoutSeconds * 1000 } else { [System.Threading.Timeout]::Infinite }
     $exited = $process.WaitForExit($timeoutMs)
@@ -112,11 +91,12 @@ function Invoke-Git {
     }
 
     $process.WaitForExit()
+    [System.Threading.Tasks.Task]::WaitAll(@($outTask, $errTask))
 
     return [PSCustomObject]@{
         ExitCode = $process.ExitCode
-        Output   = $stdoutBuilder.ToString().Trim()
-        Error    = $stderrBuilder.ToString().Trim()
+        Output   = $outTask.Result.Trim()
+        Error    = $errTask.Result.Trim()
     }
 }
 
