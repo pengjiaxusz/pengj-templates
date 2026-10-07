@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.36.1-beta.1...v0.36.2-beta.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* **agent:** 增强 branch-sync 异步管道与超时机制并杜绝无头编辑器阻塞 ([48b9276](https://github.com/pengjiaxusz/pengj-templates/commit/48b9276e8e37607937873efa53503ff377f0c55a))
+
 ## [0.36.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.36.0-beta.1...v0.36.1-beta.1) (2026-10-06)
 
 
