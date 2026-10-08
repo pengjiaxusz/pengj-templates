@@ -33,7 +33,8 @@
     ".agents\\skills\\arch-align\\SKILL.md": "911129a46fd7f8d9d22822c5474ffde63621c4b375b721327a8d84dd89cf518f",
     ".agents\\skills\\arch-align\\references\\GENERATE-DOC.md": "7cbd5aca4240f88d8ccce5b7a8278778de791aa7152c3c912c243ec2808511df",
     ".agents\\skills\\arch-align\\references\\GENERATE-INDEX.md": "8631df67a99bc9eb96096b4edc28d050e1d63151ef6f05be545ba37fb73396bb",
-    ".agents\\skills\\branch-sync\\SKILL.md": "ed849ef43888fcd52a9056c82b4a5cacb75f496019587dfe0d4c734aba3605aa",
+    ".agents\\skills\\branch-sync\\REFERENCE.md": "d024b16586dbbeb44b2b7022c184b43537e1c64b112353154f20812ac6708165",
+    ".agents\\skills\\branch-sync\\SKILL.md": "c9ce3d019f0db84121b2ca73c60b41d2841b2d83457a26c6e60dc31ad2b0e75e",
     ".agents\\skills\\branch-sync\\scripts\\align-branches.ps1": "6e2d5296ac294d713c74b1e193c92ef000a7fa82bc91a1115ae9dd76e40475ff",
     ".agents\\skills\\branch-sync\\scripts\\continue-sync.ps1": "8932fdf3ad238e416661f4d21c570f57e0baa635305f55c06174a1cabee4442a",
     ".agents\\skills\\branch-sync\\scripts\\manage-sync-backups.ps1": "3dcb20f651ab611bf7ca448fb2d51382b7a3732c4870eb1deff4651df2502654",
@@ -44,7 +45,7 @@
     ".agents\\skills\\grill-me\\SKILL.md": "b0efcedde0094c2ef8540027142f2897fc640f734978003d39c72d0cdaad0a44",
     ".agents\\skills\\subrepo-sync\\EXAMPLES.md": "cfc92b50bd39127855be86b9eb12308fcb5251cd32045debe50d20bf7b097daf",
     ".agents\\skills\\subrepo-sync\\REFERENCE.md": "06377e09923e924ad8618cb055e05679126111cc4256c9ffb2b24ce1fbdbeec7",
-    ".agents\\skills\\subrepo-sync\\SKILL.md": "252954cb9f96ac1253ac22e96e2f1150421deee9eadd5811d03a48da0a2c9e82",
+    ".agents\\skills\\subrepo-sync\\SKILL.md": "5d79009705613f1d8e6bf698fb24032eaf248c8e45611cbd684cca6801e38f8f",
     ".agents\\skills\\subrepo-sync\\scripts\\show-unapplied-commits.ps1": "c44b1193d07dd7b85140620feafa5ebd40e0defe753b7cfe0758868d5df57c01",
     ".agents\\skills\\template-sync\\SKILL.md": "2a69173bdabee8fae0885190b4622a658e6411cb118c49a6cedae78fb0b35580",
     ".agents\\skills\\template-sync\\scripts\\sync-template.ps1": "2d9e50bc34a0d5e8d9cf553fdb1d65c9ee3d13297fd03a8fbc2299962b209fe8",
@@ -54,6 +55,6 @@
     ".gitignore": "d6994127ac82b65c180fd075f68ee31cb9cfeb84a9204dc87a7390dc117b484d",
     "AGENTS.md": "0786740acfbe92ddaed3691007b8d1e591634a7f8cd623be2d4e2324f88b8e7d",
     "commitlint.base.js": "3067231e1559d023504d2f0a51f06b301b7ea058eac4e92a3b545d5077da471f",
-    "package.json": "9238748311262d5d82c0a9f7ddb9ca9840b78caa6450a98eac193d54b316a711"
+    "package.json": "93e54e4429f65f38a95639bc0ce7dbc4db4345a753dbdf345a35dc8b1e007587"
   }
 }

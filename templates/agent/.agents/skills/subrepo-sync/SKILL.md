@@ -38,6 +38,13 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
    - Sibling local dev worktree (`..\<name>`);
    - Environment variable `$env:<NAME>_DIR`;
    - Remote upstream branch (`origin/main` or `origin/master`).
+3. **When several pending commits each bumped the pin, settle the ordering before picking a target**:
+   the new pin must be a **descendant** of the old one, otherwise the features you merge in
+   **silently fail** (surfacing as missing properties or symbols at the API/QML layer).
+   Read each commit's pin (`git show <sha>:<lockfile> | grep <PIN variable>`), run
+   `git fetch origin <sha>` inside the subrepo first (the object is usually absent locally —
+   **the fetch is mandatory**), then check `git merge-base --is-ancestor <old> <new>`;
+   finally confirm the target capability really exists in the source tree actually used for builds.
 
 ### Step 2: Unapplied Commits & Semantic Impact Clustering
 Extract commits via `git log <old>..<new> --oneline --no-merges` and cluster:
@@ -55,6 +62,21 @@ Extract commits via `git log <old>..<new> --oneline --no-merges` and cluster:
 ### Step 4: Host Refactoring & Adaptation
 1. Replace duplicate host implementations with canonical components.
 2. Comply with project architecture red lines (declared in the project-specific area below).
+
+### ⚠️ Rebuild the Test Target First (Stale Artifact Trap)
+
+A normal build usually **produces only the main executable, not the test executables**; the dependency's
+modules (static libraries, resources, QML) are compiled into each test executable. If you run test gates
+right after bumping the dependency pin, **the old executables load the new source tree's resources with
+the old dependency modules**, producing a string of errors that look self-inflicted:
+
+- `Cannot assign to non-existent property "<newly added property>"`;
+- `Type <host component> unavailable`;
+- If host code was changed in parallel, unrelated errors of the same shape appear too
+  (same cause: the executable predates that property).
+
+**These are stale-artifact false positives, not regressions** — rebuild/relink the test target and they
+disappear. Before investigating, confirm the test executables were built *after* the dependency update.
 
 ### Step 5: Verification Gates & Conventional Commit
 1. Run host compilation, static checks, and unit tests.
@@ -94,6 +116,11 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
    - 本地同级联调目录（`..\<subrepo>`）；
    - 环境变量指定目录（`$env:<NAME>_DIR`）；
    - 远程主干分支（`origin/main` 或 `origin/master`）。
+3. **多个待合入提交各自 bump 过指针时，先判先后再定目标**：新指针必须是旧指针的**后代**才安全，
+   否则合入的功能会**静默失效**（QML/接口层面表现为属性或符号不存在）。
+   取各提交里的指针值（`git show <sha>:<锁文件> | grep <PIN 变量>`），在子仓库内
+   `git fetch origin <sha>` 之后（本地常缺该对象，**必须先 fetch**）用
+   `git merge-base --is-ancestor <旧> <新>` 判定；最后再对照实际构建用的源码目录确认目标能力确实存在。
 
 ### 步骤 2：提取未应用提交并进行语义聚类
 提取区间提交（`git log <旧Commit>..<新Commit> --oneline --no-merges`），按子系统聚类：
@@ -111,6 +138,19 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 ### 步骤 4：宿主代码适配与重构
 1. 检索宿主项目中是否有对应功能的自研手写实现，将其重构替换为规范组件；
 2. 严格遵循宿主架构红线（见托管块外的项目专属区）。
+
+### ⚠️ 升级后先重建测试目标（陈旧产物陷阱）
+
+常规构建命令通常**只产出主程序，不产出测试可执行文件**；而依赖模块（静态库、资源、QML 等）
+是编译进各个测试可执行文件的。升级依赖指针后若直接跑测试门禁，**旧可执行文件会用旧依赖模块去加载
+新源码树里的资源**，报出一串看似自伤的错：
+
+- `Cannot assign to non-existent property "<新增属性>"`；
+- `Type <宿主组件> unavailable`；
+- 若同时并行改过宿主自身的代码，还会冒出毫不相关的同类报错（同因：可执行文件早于该属性入库）。
+
+**这些是陈旧产物的假阳性，不是回归**——先重建（重链）测试目标即可消除。
+动手排查前，先确认测试可执行文件的构建时间是否晚于本次依赖更新。
 
 ### 步骤 5：门禁验证与规范提交
 1. 执行宿主技术栈的编译、类型检查与单元测试；

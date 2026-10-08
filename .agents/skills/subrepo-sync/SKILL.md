@@ -34,6 +34,11 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
    - 本地同级联调目录（`..\<subrepo>`）；
    - 环境变量指定目录（`$env:<NAME>_DIR`）；
    - 远程主干分支（`origin/main` 或 `origin/master`）。
+3. **多个待合入提交各自 bump 过指针时，先判先后再定目标**：新指针必须是旧指针的**后代**才安全，
+   否则合入的功能会**静默失效**（QML/接口层面表现为属性或符号不存在）。
+   取各提交里的指针值（`git show <sha>:<锁文件> | grep <PIN 变量>`），在子仓库内
+   `git fetch origin <sha>` 之后（本地常缺该对象，**必须先 fetch**）用
+   `git merge-base --is-ancestor <旧> <新>` 判定；最后再对照实际构建用的源码目录确认目标能力确实存在。
 
 ### 步骤 2：提取未应用提交并进行语义聚类
 提取区间提交（`git log <旧Commit>..<新Commit> --oneline --no-merges`），按子系统聚类：
@@ -51,6 +56,19 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 ### 步骤 4：宿主代码适配与重构
 1. 检索宿主项目中是否有对应功能的自研手写实现，将其重构替换为规范组件；
 2. 严格遵循宿主架构红线（见托管块外的项目专属区）。
+
+### ⚠️ 升级后先重建测试目标（陈旧产物陷阱）
+
+常规构建命令通常**只产出主程序，不产出测试可执行文件**；而依赖模块（静态库、资源、QML 等）
+是编译进各个测试可执行文件的。升级依赖指针后若直接跑测试门禁，**旧可执行文件会用旧依赖模块去加载
+新源码树里的资源**，报出一串看似自伤的错：
+
+- `Cannot assign to non-existent property "<新增属性>"`；
+- `Type <宿主组件> unavailable`；
+- 若同时并行改过宿主自身的代码，还会冒出毫不相关的同类报错（同因：可执行文件早于该属性入库）。
+
+**这些是陈旧产物的假阳性，不是回归**——先重建（重链）测试目标即可消除。
+动手排查前，先确认测试可执行文件的构建时间是否晚于本次依赖更新。
 
 ### 步骤 5：门禁验证与规范提交
 1. 执行宿主技术栈的编译、类型检查与单元测试；
