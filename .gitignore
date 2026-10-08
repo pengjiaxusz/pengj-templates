@@ -1,6 +1,7 @@
 /target
 /node_modules
 /.omo
+/.workbuddy
 
 # PENGJ_TEMPLATE_START
 # --- common 层 ---
