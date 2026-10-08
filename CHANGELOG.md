@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.37.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.36.3-beta.1...v0.37.0-beta.1) (2026-10-08)
+
+
+### Features
+
+* **agent:** branch-sync 上收沙箱适配与强推复核经验并新增深入参考 ([95a5ea2](https://github.com/pengjiaxusz/pengj-templates/commit/95a5ea2cb42b87c5cd59ffe61a3741dc1b790fa8))
+* **agent:** subrepo-sync 上收依赖指针先后判定与陈旧产物陷阱 ([78c463c](https://github.com/pengjiaxusz/pengj-templates/commit/78c463c5e58ee9558179be43afd688e9c7ad0e0f))
+
 ## [0.36.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.36.2-beta.1...v0.36.3-beta.1) (2026-10-07)
 
 
