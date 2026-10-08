@@ -52,9 +52,9 @@
     ".agents\\skills\\write-a-skill\\SKILL.md": "36c18c4cdb1a5b21a19b5d9e09010d9e34876ef8b8b663b33fd3cd4add6a433a",
     ".cargo\\config.toml": "1b06aced2448d86dc3dffeba01ffac746b65059315367c4d54e5801e5af7b98d",
     ".gitattributes": "b5099197608cab315182fadad3cdf0e06ad5ab9b21f3decf8ace9e328cb9a121",
-    ".gitignore": "d6994127ac82b65c180fd075f68ee31cb9cfeb84a9204dc87a7390dc117b484d",
+    ".gitignore": "10fc518efad9b43b5cff3dea30046f7f86a78b9aa771837d3768792ee50b0438",
     "AGENTS.md": "0786740acfbe92ddaed3691007b8d1e591634a7f8cd623be2d4e2324f88b8e7d",
     "commitlint.base.js": "3067231e1559d023504d2f0a51f06b301b7ea058eac4e92a3b545d5077da471f",
-    "package.json": "93e54e4429f65f38a95639bc0ce7dbc4db4345a753dbdf345a35dc8b1e007587"
+    "package.json": "c19706d850e5785ebb647a85251e64ad33a897eeac3a5a5692a4fad76f36090f"
   }
 }
