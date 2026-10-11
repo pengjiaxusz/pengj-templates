@@ -21,8 +21,8 @@ History must be strictly linear, zero merge commits, and force pushes must use `
 ```
 [1-Shot One-Line Execution: sync-branch.ps1 -Apply] 
   ├── 1. Dynamic integration branch resolution (active directory branch)
-  ├── 2. Auto-discovery of all candidate branches & remote fast-forwarding
-  ├── 3. Chronological net commit extraction (sorted by committer timestamp)
+   ├── 2. Remote-truth discovery via `git ls-remote` (never trust stale `refs/remotes/*`) & diverged-branch quarantine
+   ├── 3. Net-commit extraction from the true unreachable set (`rev-list --not`), patch-id dedup, chronological order
   ├── 4. Safety snapshot reference (refs/sync-backup/ permanent protection)
   ├── 5. Linear merge (Route A: rebase-ff / Route B: ordered cherry-pick)
   ├── 6. Tree-Diff Guard (strictly verifies 100% changes preserved)
@@ -48,7 +48,7 @@ pwsh .agents/skills/branch-sync/scripts/show-branch-topology.ps1
 > **Efficiency & Low-Intelligence Guardrails (Hard Rules)**:
 > 1. **1-Shot to Completion**: Do NOT split into multiple tool calls (dry-run -> apply -> build check). Run `-Apply` directly; the script inspects worktrees, prevents dirty overwrites, merges chronologically, pushes, and automatically runs the project's verification test (e.g. `cargo test`).
 > 2. **Never Hand-Craft Raw Git Commands**: Do NOT attempt manual `git merge` (violates commitlint) or manual `reset --hard` (causes irrevocable commit drops). Everything must go through `sync-branch.ps1`.
-> 3. **Dashboard Decides Completion**: When the script reports `STATUS: COMPLETED_READY_TO_REPORT`, all synchronization, pushes, and test checks have succeeded. Immediately report completion to the user without redundant tool calls.
+> 3. **Dashboard Decides Completion**: When the script reports `STATUS: COMPLETED_READY_TO_REPORT`, all synchronization, pushes, and test checks have succeeded. Immediately report completion to the user without redundant tool calls. If it reports diverged-branch quarantine (manual work required, non-zero exit), do NOT report success — follow the printed manual steps instead.
 
 ---
 
@@ -70,9 +70,16 @@ pwsh .agents/skills/branch-sync/scripts/show-branch-topology.ps1
    Before performing any destructive operation, the script snapshots branches to `refs/sync-backup/<branch>/<timestamp>-<sha>`. Restore at any time via `manage-sync-backups.ps1 -RestoreBranch <bName> -BackupRef <ref>`.
 2. **Global Chronological Ordering**:
    When merging multiple branches, all net commits are sorted by committer timestamp (`%ct`) ascending before cherry-picking, eliminating out-of-order temporal dependency conflicts.
-3. **Tree-Diff Guard**:
-   Before resetting branches, the script audits the integration branch:
-   **If any net commit from any source branch is missing, branches are NEVER reset or pushed**, and integration is rolled back automatically.
+3. **Tree-Diff Guard v2**:
+   Before resetting branches, the script audits the integration branch with a dual check —
+   (i) zero residual `git cherry -v` `+` lines AND (ii) every file changed between merge-base
+   and the source snapshot must also be changed between merge-base and integration.
+   **If either check fails for any branch, branches are NEVER reset or pushed**, and integration
+   is rolled back automatically. Empty cherry-picks are skipped (recorded, not treated as conflicts),
+   and every landed commit is verified line-by-line against its source.
+4. **Diverged-branch quarantine**: a branch diverged from remote truth is NEVER reset or pushed
+   by the script — it is excluded from the merge set and reported for manual handling
+   (see `REFERENCE.md` §3). The final board then reports manual work required instead of success.
 
 ## 🤖 Agent Environment Adaptation (Sandbox / Tool Constraints)
 
@@ -152,8 +159,8 @@ Declare the single post-merge verification command to run on integration:
 ```
 [一键执行 1-Shot: sync-branch.ps1 -Apply] 
   ├── 1. 动态自适应集成分支判定 (优先当前目录激活分支)
-  ├── 2. 自动全分支发现与远端双向快进 (防漏远端提交)
-  ├── 3. 全局时间序提交提取 (按 committerdate 升序规避时序冲突)
+   ├── 2. 远端真值发现（只信 `git ls-remote`，不受本地过期引用影响）与分叉分支隔离 (防漏远端提交)
+   ├── 3. 真不可达集提交提取（`rev-list --not`）+ patch-id 去重，全局时间序排列 (按 committerdate 升序规避时序冲突)
   ├── 4. 自动建立持久化安全快照 (refs/sync-backup/ 永久防丢)
   ├── 5. 严格线性合入 (变基快进 / 按序 cherry-pick / 冲突自动持久化)
   ├── 6. Tree-Diff Guard 树级防漏审计 (未 100% 合入绝不重置源分支)
@@ -179,7 +186,7 @@ pwsh .agents/skills/branch-sync/scripts/show-branch-topology.ps1
 > **极速与低智力防呆准则（硬性红线）**：
 > 1. **单次调用直达终态**：不要先跑 Dry Run 再跑 Apply 再跑构建！直接运行 `-Apply`，脚本内部会自动安全预检、拦截脏工作区、按全局时间序完成合并并在末尾自动执行项目的合后门禁命令（如 `cargo test`）。
 > 2. **严禁手动拼接 Git 原生命令**：严禁自行执行 `git merge`（产生 merge 提交破坏规范）、严禁手动 `git reset --hard`（极易造成未合入提交永久丢失）。所有操作必须且仅需通过 `sync-branch.ps1` 托管执行。
-> 3. **看板判定即交差**：当脚本输出 `STATUS: COMPLETED_READY_TO_REPORT` 时，代表分支同步、推送与项目门禁已全部通过，无需追加任何工具调用，直接向用户汇报即可。
+> 3. **看板判定即交差**：当脚本输出 `STATUS: COMPLETED_READY_TO_REPORT` 时，代表分支同步、推送与项目门禁已全部通过，无需追加任何工具调用，直接向用户汇报即可。若输出分叉隔离看板（非零退出、要求人工处置），不得报成功——按打印的人工步骤处理。
 
 ---
 
@@ -205,9 +212,15 @@ pwsh .agents/skills/branch-sync/scripts/show-branch-topology.ps1
    多分支并发开发时，自动提取所有未合入净提交，并严格依据 `committerdate`（提交时间戳）全局升序排列再逐个 cherry-pick，消除 80% 以上因时序倒置引发的合并冲突。
 3. **冲突现场持久化与一键续接 (Conflict Persistence & Resume)**：
    若遇到代码重叠冲突，脚本自动将剩余队列与快照保存至 `.git/branch-sync-state.json` 并高亮冲突文件。开发者或 Agent 解决冲突后，仅需单次运行 `continue-sync.ps1 -Continue` 即可自动继续后续所有提交流程，无需重新手写原生 Git 命令。
-4. **树级改动保全校验 (Tree-Diff Guard)**：
-   在向源分支执行重置前，脚本硬核核算集成分支与所有源分支的净提交映射：
-   **集成分支未 100% 涵盖各源分支净贡献前，严禁重置与强推源分支！** 若校验不通过，自动回滚集成分支并保留现场。
+4. **树级改动保全校验 (Tree-Diff Guard v2)**：
+   在向源分支执行重置前，脚本用双重判定硬核核算集成分支与所有源分支：
+   (i) `git cherry -v` 必须零 `+` 残留，(ii) merge-base 到源快照的改动文件清单必须被
+   merge-base 到集成分支的改动文件清单完全包含。
+   **任一分支任一判定不通过，严禁重置与强推源分支！** 若校验不通过，自动回滚集成分支并保留现场。
+   空 cherry-pick 按跳过记账（不视为冲突），每个落地提交逐行与源提交比对校验。
+5. **分叉分支隔离**：与远端真值分叉的分支脚本永不重置、不强推——自动移出合入集合，
+   在终态看板列出并给出人工处置步骤（见 `REFERENCE.md` §三）。此时看板不是成功态，
+   不得按 `COMPLETED_READY_TO_REPORT` 交差。
 
 ## 🤖 智能体环境适配（沙箱 / 工具约束）
 

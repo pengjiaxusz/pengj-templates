@@ -134,6 +134,44 @@ function Get-WorktreeMap {
     }
 }
 
+function Test-ContentPreserved {
+    param(
+        [string]$SourceHash,
+        [string]$LandedHash
+    )
+    $srcShow = Invoke-Git @("show", $SourceHash, "--format=", "--unified=0")
+    $landedShow = Invoke-Git @("show", $LandedHash, "--format=", "--unified=0")
+    if ($srcShow.ExitCode -ne 0 -or $landedShow.ExitCode -ne 0) {
+        return $false
+    }
+    function ConvertTo-ContentSet {
+        param([string]$PatchText)
+        $set = @{}
+        foreach ($ln in ($PatchText -split "`r?`n")) {
+            if ($ln.StartsWith("+++") -or $ln.StartsWith("---") -or $ln.StartsWith("@@") -or $ln.StartsWith("diff --git") -or $ln.StartsWith("index ")) {
+                continue
+            }
+            $t = $ln
+            if ($t.StartsWith("+") -or $t.StartsWith("-")) {
+                $t = $t.Substring(1)
+            }
+            $t = $t.Trim()
+            if (-not [string]::IsNullOrWhiteSpace($t)) {
+                $set[$t] = $true
+            }
+        }
+        return $set
+    }
+    $srcSet = ConvertTo-ContentSet $srcShow.Output
+    $landedSet = ConvertTo-ContentSet $landedShow.Output
+    foreach ($k in $srcSet.Keys) {
+        if (-not $landedSet.ContainsKey($k)) {
+            return $false
+        }
+    }
+    return $true
+}
+
 # 查找状态文件
 $gitDirRes = Invoke-Git @("rev-parse", "--git-dir")
 if ($gitDirRes.ExitCode -ne 0) {
@@ -244,37 +282,105 @@ if ($Continue) {
         
         $cp = Invoke-Git @("-c", "core.editor=$editorCmd", "cherry-pick", $c.FullHash)
         if ($cp.ExitCode -ne 0) {
-            # 再次冲突，更新索引并中断
+            $uCheck = Invoke-Git @("diff", "--name-only", "--diff-filter=U")
+            $uOut = if ($null -ne $uCheck.Output) { $uCheck.Output.Trim() } else { "" }
+            if ([string]::IsNullOrWhiteSpace($uOut)) {
+                # 空提交（已等价合入/重复）：跳过，不丢改动
+                Invoke-Git @("cherry-pick", "--skip") | Out-Null
+                Write-Host "ℹ️ 提交 $($c.Hash) 为空（改动已等价存在），已跳过。" -ForegroundColor Yellow
+                $state.CurrentCommitIndex = $nextIndex
+                [System.IO.File]::WriteAllText($stateFilePath, (ConvertTo-Json $state -Depth 10), [System.Text.Encoding]::UTF8)
+                $nextIndex++
+                continue
+            }
+            # 真冲突，更新索引并中断
             $state.CurrentCommitIndex = $nextIndex
             [System.IO.File]::WriteAllText($stateFilePath, (ConvertTo-Json $state -Depth 10), [System.Text.Encoding]::UTF8)
-            $unm = (Invoke-Git @("diff", "--name-only", "--diff-filter=U")).Output
+            $unm = $uOut
             Write-Host "⚠️ 在提交 $($c.Hash) 再次发生冲突！" -ForegroundColor Yellow
             Write-Host "冲突文件:`n$unm" -ForegroundColor Red
             Write-Host "请解决冲突、git add 后再次执行 continue-sync.ps1 -Continue" -ForegroundColor Cyan
             exit 1
+        }
+        $headTip = (Invoke-Git @("rev-parse", "HEAD")).Output
+        if (-not (Test-ContentPreserved $c.FullHash $headTip.Trim())) {
+            throw "内容校验失败：提交 $($c.Hash) - $($c.Subject) 落地后改动不完整，疑似内容丢失，已中断！"
         }
         $nextIndex++
     }
 
     Write-Host "✅ 所有净贡献提交已全部 cherry-pick 完成！" -ForegroundColor Green
 
-    # Tree-Diff Guard
+    # Tree-Diff Guard v2：cherry 残留 + 文件级内容包含双重审计
     Write-Host "🔍 执行合后改动保全审计 (Tree-Diff Guard)..." -ForegroundColor DarkCyan
-    foreach ($sb in $allSourceBranches) {
-        $checkRef = "refs/sync-backup/$($sb -replace '[^a-zA-Z0-9_\-]', '_')"
-        # 查找最新的快照 ref
-        $refLines = @((Invoke-Git @("for-each-ref", "--sort=-committerdate", "--format=%(refname)", "$checkRef*")).Output -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        $bRef = if ($refLines.Count -gt 0) { $refLines[0].Trim() } else { "" }
-        if (-not [string]::IsNullOrWhiteSpace($bRef)) {
-            $postCherry = Invoke-Git @("cherry", "-v", $integBranch, $bRef)
-            if ($postCherry.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($postCherry.Output))) {
-                foreach ($pcl in ($postCherry.Output -split "`r?`n")) {
-                    if ($pcl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
-                        throw "Tree-Diff Guard 拦截：源分支 '$sb' 仍有未合入净提交: $($Matches[1]) $($Matches[2])！"
+    $backupSourceRefs = $state.BackupSourceRefs
+    $guardFailures = [System.Collections.Generic.List[string]]::new()
+    if ($null -eq $backupSourceRefs) {
+        Write-Host "⚠️ 状态文件中缺失 BackupSourceRefs（旧状态文件），回退为快照模式巡检。" -ForegroundColor Yellow
+        foreach ($sb in $allSourceBranches) {
+            $checkRef = "refs/sync-backup/$($sb -replace '[^a-zA-Z0-9_\-]', '_')"
+            # 查找最新的快照 ref
+            $refLines = @((Invoke-Git @("for-each-ref", "--sort=-committerdate", "--format=%(refname)", "$checkRef*")).Output -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            $bRef = if ($refLines.Count -gt 0) { $refLines[0].Trim() } else { "" }
+            if (-not [string]::IsNullOrWhiteSpace($bRef)) {
+                $postCherry = Invoke-Git @("cherry", "-v", $integBranch, $bRef)
+                if ($postCherry.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($postCherry.Output))) {
+                    foreach ($pcl in ($postCherry.Output -split "`r?`n")) {
+                        if ($pcl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
+                            # 空提交无 patch-id、cherry 恒报 `+`：无文件改动即视为已合入。
+                            $emptyCheck = Invoke-Git @("diff-tree", "--no-commit-id", "--name-only", "-r", $Matches[1])
+                            if ($emptyCheck.ExitCode -eq 0 -and [string]::IsNullOrWhiteSpace($emptyCheck.Output)) {
+                                continue
+                            }
+                            $guardFailures.Add("源分支 '$sb' 仍有未合入净提交: $($Matches[1]) $($Matches[2])")
+                        }
                     }
                 }
             }
         }
+    } else {
+        foreach ($sb in $allSourceBranches) {
+            $bRef = ""
+            if ($backupSourceRefs -is [System.Collections.IDictionary]) {
+                if ($backupSourceRefs.Contains($sb)) { $bRef = [string]$backupSourceRefs[$sb] }
+            } else {
+                $prop = $backupSourceRefs.PSObject.Properties[$sb]
+                if ($null -ne $prop) { $bRef = [string]$prop.Value }
+            }
+            if ([string]::IsNullOrWhiteSpace($bRef)) { continue }
+            $postCherry = Invoke-Git @("cherry", "-v", $integBranch, $bRef)
+            if ($postCherry.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($postCherry.Output))) {
+                foreach ($pcl in ($postCherry.Output -split "`r?`n")) {
+                    if ($pcl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
+                        # 空提交无 patch-id、cherry 恒报 `+`：无文件改动即视为已合入。
+                        $emptyCheck = Invoke-Git @("diff-tree", "--no-commit-id", "--name-only", "-r", $Matches[1])
+                        if ($emptyCheck.ExitCode -eq 0 -and [string]::IsNullOrWhiteSpace($emptyCheck.Output)) {
+                            continue
+                        }
+                        $guardFailures.Add("源分支 '$sb' 仍有未合入净提交: $($Matches[1]) $($Matches[2])")
+                    }
+                }
+            }
+            $mbRes = Invoke-Git @("merge-base", $integBranch, $bRef)
+            if ($mbRes.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($mbRes.Output))) {
+                $mb = $mbRes.Output.Trim()
+                $srcFilesOut = (Invoke-Git @("diff", "--name-only", $mb, $bRef)).Output
+                $integFilesOut = (Invoke-Git @("diff", "--name-only", $mb, $integBranch)).Output
+                $srcFiles = @($srcFilesOut -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_.Trim() })
+                $integSet = @{}
+                foreach ($f in ($integFilesOut -split "`r?`n")) {
+                    $t = $f.Trim()
+                    if (-not [string]::IsNullOrWhiteSpace($t)) { $integSet[$t] = $true }
+                }
+                $missing = @($srcFiles | Where-Object { -not $integSet.ContainsKey($_) })
+                if ($missing.Count -gt 0) {
+                    $guardFailures.Add("源分支 '$sb' 文件级缺失: $($missing -join ', ')")
+                }
+            }
+        }
+    }
+    if ($guardFailures.Count -gt 0) {
+        throw "Tree-Diff Guard 拦截：`n$($guardFailures -join "`n")"
     }
     Write-Host "✅ Tree-Diff Guard 审计通过：所有分支改动已 100% 完整合入！" -ForegroundColor Green
 
