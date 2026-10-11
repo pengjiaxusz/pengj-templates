@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.37.0-beta.1...v0.37.1-beta.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **agent:** 同步分支技能防漏提交改造，远端真值发现与分叉隔离 ([e205681](https://github.com/pengjiaxusz/pengj-templates/commit/e20568136c36274d2c1554ccfb1eb5d7c8daaaa6))
+
 ## [0.37.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.36.3-beta.1...v0.37.0-beta.1) (2026-10-08)
 
 
