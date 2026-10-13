@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.37.1-beta.1...v0.37.2-beta.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **agent:** branch-sync Tree-Diff Guard 增加补丁上下文漂移时的增删行保全容错 ([63a7f4f](https://github.com/pengjiaxusz/pengj-templates/commit/63a7f4ff5f44cbc18d3bd464b6d7a335d4da2de9))
+
 ## [0.37.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.37.0-beta.1...v0.37.1-beta.1) (2026-10-11)
 
 
