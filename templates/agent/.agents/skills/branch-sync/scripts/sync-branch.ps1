@@ -416,10 +416,29 @@ function Test-BranchFullyMerged {
         foreach ($pcl in ($cherryRes.Output -split "`r?`n")) {
             if ($pcl -match '^\+\s+([0-9a-fA-F]+)\s+(.*)$') {
                 $resHash = $Matches[1]
+                $cSubj = $Matches[2].Trim()
                 # 空提交（无文件改动）永无 patch-id，cherry 恒报 `+`：内容为空即视为已合入，不计入缺失。
                 $emptyCheck = Invoke-Git @("diff-tree", "--no-commit-id", "--name-only", "-r", $resHash)
                 if ($emptyCheck.ExitCode -eq 0 -and [string]::IsNullOrWhiteSpace($emptyCheck.Output)) {
                     continue
+                }
+                # 补丁上下文漂移容错（见 REFERENCE 四）：若因并行分支合入顺序导致 patch-id 变化，
+                # 但落地提交的增删行已 100% 完整保留（Test-ContentPreserved），则判定已合入。
+                if (-not [string]::IsNullOrWhiteSpace($cSubj)) {
+                    $landedBySubj = Invoke-Git @("log", $TargetBranch, "--fixed-strings", "--grep=$cSubj", "-n", "5", "--format=%H")
+                    if ($landedBySubj.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($landedBySubj.Output))) {
+                        $matched = $false
+                        foreach ($candHash in ($landedBySubj.Output -split "`r?`n")) {
+                            $ch = $candHash.Trim()
+                            if (-not [string]::IsNullOrWhiteSpace($ch) -and (Test-ContentPreserved $resHash $ch)) {
+                                $matched = $true
+                                break
+                            }
+                        }
+                        if ($matched) {
+                            continue
+                        }
+                    }
                 }
                 $missingCommits.Add($pcl.Trim())
             }
