@@ -1358,6 +1358,58 @@ pub struct UpdateReport {
     pub unchanged: usize,
 }
 
+/// 平滑迁移 options 中的技能列表（向后兼容废弃或合并的技能）
+fn migrate_skills_option(
+    options: &mut BTreeMap<String, serde_json::Value>,
+    available_skills: &BTreeSet<String>,
+) {
+    if let Some(serde_json::Value::Array(skills_arr)) = options.get_mut("skills") {
+        let mut new_set = BTreeSet::new();
+        for v in skills_arr.iter() {
+            if let Some(s) = v.as_str() {
+                match s {
+                    // commit / branch-sync 合并升级为 git-workflow（若新模板提供 git-workflow）
+                    "commit" | "branch-sync" => {
+                        if available_skills.contains("git-workflow") {
+                            new_set.insert("git-workflow".to_string());
+                        } else if available_skills.contains(s) {
+                            new_set.insert(s.to_string());
+                        }
+                    }
+                    other => {
+                        if available_skills.contains(other) {
+                            new_set.insert(other.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        *skills_arr = new_set.into_iter().map(serde_json::Value::String).collect();
+    }
+}
+
+/// 递归清理因文件删除而变空的父目录（直到项目根目录停止）
+fn clean_empty_parent_dirs(file_path: &Path, project_dir: &Path) {
+    let mut current = file_path.parent();
+    while let Some(dir) = current {
+        if dir == project_dir || !dir.starts_with(project_dir) {
+            break;
+        }
+        if let Ok(mut entries) = std::fs::read_dir(dir) {
+            if entries.next().is_none() {
+                if std::fs::remove_dir(dir).is_err() {
+                    break;
+                }
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+        current = dir.parent();
+    }
+}
+
 /// 项目更新选项
 #[derive(Debug, Clone, Default)]
 pub struct UpdateOptions {
@@ -1379,7 +1431,7 @@ pub fn update_project(templates: &Templates, project_dir: &Path) -> Result<Updat
 /// - JSON 并集文件（package.json）-> 结构化并集合并
 /// - 纯受管技能资产（若开启 sync_skills）-> 直接对齐覆盖为最新模板
 /// - 模板新增文件 -> 创建（本地已有同名文件则跳过并上报）
-/// - 模板删除文件 -> 不动本地文件，仅上报
+/// - 模板删除文件 -> 本地未修改时安全物理删除并递归清理空父目录；本地被修改过时保留并标记冲突跳过
 /// - 层声明的 `update_ignore` 黑名单文件 -> 完全跳过（不覆盖/不冲突/不删除上报），归用户所有
 pub fn update_project_with_options(
     templates: &Templates,
@@ -1395,14 +1447,20 @@ pub fn update_project_with_options(
         .filter(|l| metas.contains_key(l))
         .collect();
     let ordered = templates.resolve_layers(&valid_layers)?;
-    if ordered.iter().any(|l| l == "agent") && !manifest.options.contains_key("skills") {
-        if let Ok(skills) = templates.list_skills() {
-            let all_skills: Vec<String> = skills.into_iter().map(|s| s.name).collect();
+    if ordered.iter().any(|l| l == "agent") {
+        let available_skills: BTreeSet<String> = templates
+            .list_skills()
+            .map(|list| list.into_iter().map(|s| s.name).collect())
+            .unwrap_or_default();
+        if !manifest.options.contains_key("skills") {
+            let all_skills: Vec<String> = available_skills.iter().cloned().collect();
             if !all_skills.is_empty() {
                 manifest
                     .options
                     .insert("skills".to_string(), serde_json::json!(all_skills));
             }
+        } else {
+            migrate_skills_option(&mut manifest.options, &available_skills);
         }
     }
     let ctx = RenderContext::new(
@@ -1662,14 +1720,55 @@ pub fn update_project_with_options(
         }
     }
 
-    let removed = manifest
-        .files
+    // 处理上游模板已删除/废弃的文件：
+    // - 规范化路径比对（统一斜杠风格）
+    // - 本地未修改（sha 与 manifest 记录一致）或已不在磁盘 -> 物理删除文件并清理空父目录，从 manifest 剔除，记入 removed
+    // - 本地已被修改（sha 改变）-> 保留文件，标记 conflicted，并保留在 new_files 中继续追踪
+    let tpl_keys_norm: BTreeSet<String> = bytes_map
         .keys()
-        .filter(|p| !bytes_map.contains_key(Path::new(p)))
-        // 黑名单文件不被模板接管，模板删除时不上报
-        .filter(|p| !ignores.contains(&PathBuf::from(p)))
-        .cloned()
-        .collect::<Vec<_>>();
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .collect();
+    let ignores_norm: BTreeSet<String> = ignores
+        .iter()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .collect();
+
+    let mut removed = Vec::new();
+    for (rel_str, old_sha) in &manifest.files {
+        let rel_norm = rel_str.replace('\\', "/");
+        if tpl_keys_norm.contains(&rel_norm) || ignores_norm.contains(&rel_norm) {
+            continue;
+        }
+
+        let target = project_dir.join(rel_str);
+        if target.is_file() {
+            let disk_bytes = std::fs::read(&target).unwrap_or_default();
+            let disk_sha = sha256_hex(&disk_bytes);
+            if disk_sha == *old_sha {
+                // 本地未修改，安全执行物理删除
+                if let Err(e) = std::fs::remove_file(&target) {
+                    conflicted.push(ConflictInfo {
+                        path: rel_str.clone(),
+                        reason: format!("移除废弃文件失败: {e}"),
+                    });
+                    new_files.insert(rel_str.clone(), old_sha.clone());
+                } else {
+                    clean_empty_parent_dirs(&target, project_dir);
+                    removed.push(rel_str.clone());
+                }
+            } else {
+                // 本地已被用户修改，严禁误删，保留在磁盘上并上报冲突
+                conflicted.push(ConflictInfo {
+                    path: rel_str.clone(),
+                    reason: "上游模板已删除此文件，但本地已被修改，跳过删除保留在磁盘".to_string(),
+                });
+                new_files.insert(rel_str.clone(), old_sha.clone());
+            }
+        } else {
+            // 磁盘上已不存在，正常从 manifest 清理
+            removed.push(rel_str.clone());
+        }
+    }
 
     // `.code-workspace` 工作区文件同步：无论 manifest 是否托管，都扫描项目根目录下
     // 的工作区文件，把模板的 fileNesting 配置合并进其 `settings` 节点。
@@ -1778,12 +1877,18 @@ pub fn audit_project(
         .collect();
     let ordered = templates.resolve_layers(&valid_layers)?;
     let mut options = manifest.options.clone();
-    if ordered.iter().any(|l| l == "agent") && !options.contains_key("skills") {
-        if let Ok(skills) = templates.list_skills() {
-            let all_skills: Vec<String> = skills.into_iter().map(|s| s.name).collect();
+    if ordered.iter().any(|l| l == "agent") {
+        let available_skills: BTreeSet<String> = templates
+            .list_skills()
+            .map(|list| list.into_iter().map(|s| s.name).collect())
+            .unwrap_or_default();
+        if !options.contains_key("skills") {
+            let all_skills: Vec<String> = available_skills.iter().cloned().collect();
             if !all_skills.is_empty() {
                 options.insert("skills".to_string(), serde_json::json!(all_skills));
             }
+        } else {
+            migrate_skills_option(&mut options, &available_skills);
         }
     }
     let ctx = RenderContext::new(&manifest.project_name, ordered.clone(), options.clone());
@@ -2015,10 +2120,18 @@ pub fn audit_project(
         });
     }
 
-    // 6. 检查 manifest 中存在但在模板中已不存在的文件
+    // 6. 检查 manifest 中存在但在模板中已不存在的文件（路径归一化比对）
+    let tpl_keys_norm: BTreeSet<String> = bytes_map
+        .keys()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .collect();
+    let ignores_norm: BTreeSet<String> = ignores
+        .iter()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .collect();
     for rel_str in manifest.files.keys() {
-        let rel = Path::new(rel_str);
-        if !bytes_map.contains_key(rel) && !ignores.contains(rel) {
+        let rel_norm = rel_str.replace('\\', "/");
+        if !tpl_keys_norm.contains(&rel_norm) && !ignores_norm.contains(&rel_norm) {
             items.push(AuditItem {
                 path: rel_str.clone(),
                 status: AuditFileStatus::OrphanInManifest,
@@ -4834,5 +4947,124 @@ mod tests {
         assert!(content.contains("Caveman V2 Updated"));
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_update_project_removes_unmodified_files_and_cleans_empty_dirs() {
+        let tmp = std::env::temp_dir().join(format!("pengj_test_remove_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let tpl_dir = tmp.join("templates");
+        let proj_dir = tmp.join("myproject");
+
+        let l1 = tpl_dir.join("layer1");
+        std::fs::create_dir_all(l1.join("sub")).unwrap();
+        std::fs::write(
+            l1.join("layer.toml"),
+            "name = \"layer1\"\ndescription = \"Test\"\n",
+        )
+        .unwrap();
+        std::fs::write(l1.join("sub/orphan.txt"), "delete me\n").unwrap();
+        std::fs::write(l1.join("modified_orphan.txt"), "keep my modifications\n").unwrap();
+        std::fs::write(l1.join("stay.txt"), "stay here\n").unwrap();
+
+        let templates = Templates::new(&tpl_dir);
+        generate(
+            &templates,
+            "myproject",
+            &["layer1".to_string()],
+            BTreeMap::new(),
+            &tmp,
+        )
+        .unwrap();
+
+        // 验证文件初始存在
+        assert!(proj_dir.join("sub/orphan.txt").is_file());
+        assert!(proj_dir.join("modified_orphan.txt").is_file());
+        assert!(proj_dir.join("stay.txt").is_file());
+
+        // 用户修改了 modified_orphan.txt，未动 sub/orphan.txt
+        std::fs::write(
+            proj_dir.join("modified_orphan.txt"),
+            "user modified content\n",
+        )
+        .unwrap();
+
+        // 模板移除了 sub/orphan.txt 与 modified_orphan.txt（仅保留 stay.txt）
+        std::fs::remove_file(l1.join("sub/orphan.txt")).unwrap();
+        std::fs::remove_dir(l1.join("sub")).unwrap();
+        std::fs::remove_file(l1.join("modified_orphan.txt")).unwrap();
+
+        // 执行 update
+        let rep = update_project(&templates, &proj_dir).unwrap();
+
+        // 1. 未修改的 orphan.txt 应当被物理删除，且空目录 sub 也被清理
+        assert!(
+            !proj_dir.join("sub/orphan.txt").exists(),
+            "未修改的废弃文件应当被物理删除"
+        );
+        assert!(!proj_dir.join("sub").exists(), "空父目录应当被递归清理");
+        assert!(
+            rep.removed
+                .iter()
+                .any(|r| r.replace('\\', "/").contains("sub/orphan.txt")),
+            "应当记录在 removed 报告中"
+        );
+
+        // 2. 被修改的 modified_orphan.txt 应当被保护，保留在磁盘上并上报冲突
+        assert!(
+            proj_dir.join("modified_orphan.txt").is_file(),
+            "被修改的废弃文件不应当被误删"
+        );
+        assert!(
+            rep.conflicted
+                .iter()
+                .any(|c| c.path.replace('\\', "/").contains("modified_orphan.txt")),
+            "应当作为冲突上报"
+        );
+
+        // 3. 检查 manifest 更新
+        let manifest = ProjectManifest::load(&proj_dir).unwrap();
+        assert!(
+            !manifest
+                .files
+                .keys()
+                .any(|k| k.replace('\\', "/").contains("sub/orphan.txt")),
+            "manifest 中应当已移除被删除文件"
+        );
+        assert!(
+            manifest
+                .files
+                .keys()
+                .any(|k| k.replace('\\', "/").contains("modified_orphan.txt")),
+            "manifest 中应当保留仍存在于磁盘的冲突文件"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_migrate_skills_option_migrates_commit_and_branch_sync_to_git_workflow() {
+        let mut opts = BTreeMap::new();
+        opts.insert(
+            "skills".to_string(),
+            serde_json::json!(["commit", "branch-sync", "caveman", "obsolete-skill"]),
+        );
+
+        let mut available = BTreeSet::new();
+        available.insert("git-workflow".to_string());
+        available.insert("caveman".to_string());
+
+        migrate_skills_option(&mut opts, &available);
+
+        let migrated = opts["skills"].as_array().unwrap();
+        let list: Vec<String> = migrated
+            .iter()
+            .map(|v| v.as_str().unwrap().to_string())
+            .collect();
+
+        assert_eq!(
+            list,
+            vec!["caveman".to_string(), "git-workflow".to_string()]
+        );
     }
 }
