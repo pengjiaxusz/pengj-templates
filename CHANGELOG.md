@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.37.2-beta.1...v0.38.0-beta.1) (2026-10-24)
+
+
+### Features
+
+* **core:** 支持模板废弃受管文件的安全物理移除与技能选项平滑迁移 ([02abfb0](https://github.com/pengjiaxusz/pengj-templates/commit/02abfb098cafa37a6c889a85f27266f4d7d32e7a))
+
 ## [0.37.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.37.1-beta.1...v0.37.2-beta.1) (2026-10-13)
 
 
