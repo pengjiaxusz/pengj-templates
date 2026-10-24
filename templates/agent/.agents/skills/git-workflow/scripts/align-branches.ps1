@@ -69,8 +69,12 @@ function Invoke-Git {
     $pinfo.Environment["GIT_OPTIONAL_LOCKS"] = "0"
     if ($isWin) {
         $pinfo.Environment["GIT_EDITOR"] = "cmd.exe /c exit 0"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     } else {
         $pinfo.Environment["GIT_EDITOR"] = "true"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     }
 
     $process = [System.Diagnostics.Process]::Start($pinfo)
@@ -248,7 +252,7 @@ function Get-DirtyItems {
 
 $skillDocPath = Join-Path $PSScriptRoot "..\SKILL.md"
 if (-not (Test-Path $skillDocPath)) {
-    $candidate = Join-Path (Get-Location).Path ".agents\skills\branch-sync\SKILL.md"
+    $candidate = Join-Path (Get-Location).Path ".agents\skills\git-workflow\SKILL.md"
     if (Test-Path $candidate) {
         $skillDocPath = $candidate
     }
@@ -342,7 +346,7 @@ Write-Host "------------------------------------------------------------------"
 if (-not $Apply) {
     Write-Host "⚠️ 当前为预检模式 (Dry Run)，未实际执行任何重置与推送。" -ForegroundColor Yellow
     Write-Host "执行对齐与推送请加 -Apply:" -ForegroundColor Cyan
-    Write-Host "  pwsh .agents/skills/branch-sync/scripts/align-branches.ps1 -TargetCommit '$TargetCommit' -Apply" -ForegroundColor White
+    Write-Host "  pwsh .agents/skills/git-workflow/scripts/align-branches.ps1 -TargetCommit '$TargetCommit' -Apply" -ForegroundColor White
     Write-Host "==================================================================" -ForegroundColor Cyan
     Write-Host ""
     return

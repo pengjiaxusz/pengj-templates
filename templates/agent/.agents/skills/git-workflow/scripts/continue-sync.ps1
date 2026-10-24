@@ -75,8 +75,12 @@ function Invoke-Git {
     $pinfo.Environment["GIT_OPTIONAL_LOCKS"] = "0"
     if ($isWin) {
         $pinfo.Environment["GIT_EDITOR"] = "cmd.exe /c exit 0"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     } else {
         $pinfo.Environment["GIT_EDITOR"] = "true"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     }
 
     $process = [System.Diagnostics.Process]::Start($pinfo)
@@ -225,8 +229,8 @@ if ($Status -or (-not $Continue -and -not $Abort)) {
     }
     Write-Host "------------------------------------------------------"
     Write-Host "操作指引:" -ForegroundColor Cyan
-    Write-Host "  继续同步: pwsh .agents/skills/branch-sync/scripts/continue-sync.ps1 -Continue" -ForegroundColor White
-    Write-Host "  中止回滚: pwsh .agents/skills/branch-sync/scripts/continue-sync.ps1 -Abort" -ForegroundColor White
+    Write-Host "  继续同步: pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Continue" -ForegroundColor White
+    Write-Host "  中止回滚: pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Abort" -ForegroundColor White
     Write-Host "======================================================" -ForegroundColor Cyan
     Write-Host ""
     return

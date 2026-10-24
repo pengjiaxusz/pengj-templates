@@ -61,8 +61,12 @@ function Invoke-Git {
     $pinfo.Environment["GIT_OPTIONAL_LOCKS"] = "0"
     if ($isWin) {
         $pinfo.Environment["GIT_EDITOR"] = "cmd.exe /c exit 0"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     } else {
         $pinfo.Environment["GIT_EDITOR"] = "true"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     }
 
     $process = [System.Diagnostics.Process]::Start($pinfo)
@@ -197,7 +201,7 @@ function Get-WorktreeMap {
 # 读取 SKILL.md
 $skillDocPath = Join-Path $PSScriptRoot "..\SKILL.md"
 if (-not (Test-Path $skillDocPath)) {
-    $candidate = Join-Path (Get-Location).Path ".agents\skills\branch-sync\SKILL.md"
+    $candidate = Join-Path (Get-Location).Path ".agents\skills\git-workflow\SKILL.md"
     if (Test-Path $candidate) {
         $skillDocPath = $candidate
     }
@@ -384,7 +388,7 @@ Write-Host "--------------------------------------------------------------------
 Write-Host "统计: 共扫描 $($branchReportList.Count) 个分支 | $branchesWithNetCommits 个分支有净提交 | 累计待合入净提交 $totalPendingCommits 个" -ForegroundColor Cyan
 if ($totalPendingCommits -gt 0) {
     Write-Host "⚡ 推荐一键 1-Shot 闭环同步所有分支:" -ForegroundColor Yellow
-    Write-Host "   pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -Apply" -ForegroundColor White
+    Write-Host "   pwsh .agents/skills/git-workflow/scripts/sync-branch.ps1 -Apply" -ForegroundColor White
 } else {
     Write-Host "✅ 所有分支均已包含在集成分支中，无需同步。" -ForegroundColor Green
 }

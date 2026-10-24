@@ -3,7 +3,7 @@
 > 供 AI 编码助手在修改本仓库时遵循。本文件内容与工具能力相关部分可能过时，以代码为准。
 > For AI coding assistants editing this repository. When in doubt, trust the code.
 >
-> 提交规范请以 `.agents/skills/commit` 技能为准（含提交前完整性检查与 pre-release 切发流程）。
+> 提交规范请以 `.agents/skills/git-workflow` 技能为准（含提交前完整性检查与 pre-release 切发流程）。
 
 ## 项目概览 / Overview
 
@@ -98,7 +98,7 @@
 
 ## 通用约定
 
-- 提交信息遵守约定式提交：`type(scope): 标题`，type 用英文、标题正文用中文（见 `.agents/skills/commit`）。
+- 提交信息遵守约定式提交：`type(scope): 标题`，type 用英文、标题正文用中文（见 `.agents/skills/git-workflow`）。
 - **回复前提交门禁（硬性拦截，禁止堆积）**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（完整性检查、语义拆分、commit 与 `git push`）作为最后一个工具调用步骤**。严禁在工作区留存已验证的代码修改就结束工具调用向用户汇报；严禁在多轮对话中拖延堆积改动或等待用户催促 `/commit`。
   - **规划模式（`/plan` / `/boost`）特别约束**：即使在规划模式下生成或更新了 `walkthrough.md`，写完文档亦绝不等于任务完结；**严禁仅写完 walkthrough 就直接交差，必须紧随其后执行 commit 与 push，未提交推送前严禁结束对话汇报**。
   - **无需提交的豁免情况**：仅当本轮对话为纯问答/无任何文件变动，或构建/测试失败正在排查取证阶段且需向用户提问时，方可不提交。
@@ -110,9 +110,8 @@
 
 ### 启用的技能
 
-- `commit` —— 见 `.agents/skills/commit/SKILL.md`
+- `git-workflow` —— 见 `.agents/skills/git-workflow/SKILL.md`
 - `arch-align` —— 见 `.agents/skills/arch-align/SKILL.md`
-- `branch-sync` —— 见 `.agents/skills/branch-sync/SKILL.md`
 - `caveman` —— 见 `.agents/skills/caveman/SKILL.md`
 - `grill-me` —— 见 `.agents/skills/grill-me/SKILL.md`
 - `template-sync` —— 见 `.agents/skills/template-sync/SKILL.md`

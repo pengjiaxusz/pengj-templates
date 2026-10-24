@@ -67,8 +67,12 @@ function Invoke-Git {
     $pinfo.Environment["GIT_OPTIONAL_LOCKS"] = "0"
     if ($isWin) {
         $pinfo.Environment["GIT_EDITOR"] = "cmd.exe /c exit 0"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     } else {
         $pinfo.Environment["GIT_EDITOR"] = "true"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     }
 
     $process = [System.Diagnostics.Process]::Start($pinfo)
@@ -184,6 +188,6 @@ if ($backups.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($backups.Output)) {
 }
 Write-Host "----------------------------------------------------------------------"
 Write-Host "还原命令示例:" -ForegroundColor DarkGray
-Write-Host "  pwsh .agents/skills/branch-sync/scripts/manage-sync-backups.ps1 -RestoreBranch 'dev' -BackupRef 'refs/sync-backup/...' " -ForegroundColor White
+Write-Host "  pwsh .agents/skills/git-workflow/scripts/manage-sync-backups.ps1 -RestoreBranch 'dev' -BackupRef 'refs/sync-backup/...' " -ForegroundColor White
 Write-Host "======================================================================" -ForegroundColor Cyan
 Write-Host ""

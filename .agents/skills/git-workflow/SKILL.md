@@ -1,0 +1,150 @@
+---
+name: git-workflow
+description: >-
+  通用 Git 操作与工作流自动化技能：包含约定式提交、Worktree 感知的极速线性分支同步、非交互变基与代码级冲突自主裁决。核心公用规则严格杜绝外部编辑器弹窗与挂起（GIT_EDITOR=true、--no-edit、严禁让用户手动编辑）。通过渐进式展开路由到提交、分支同步与变基子功能。
+  Triggers: git, git-workflow, commit, branch-sync, rebase, cherry-pick, merge, push, pull, 提交, 变基, 衍合, 同步分支, 分支同步, 合并分支, 合入主分支, worktree 同步.
+---
+
+<!-- PENGJ_TEMPLATE_START -->
+# Git Workflow — 通用 Git 操作与渐进式工作流规范
+
+统管约定式提交、Worktree 线性分支同步、非交互式变基与代码级冲突自主裁决的通用 Git 技能。
+
+---
+
+## ⚡ 0. 核心公用规则：全局非交互铁律（杜绝用户手动编辑）
+
+在 AI 智能体自动化运行环境中，Git 操作**严禁弹出任何外部编辑器**（nano、vim、notepad），**严禁挂起等待终端键盘输入**：
+1. **环境静默加固**：执行环境统一注入 `$env:GIT_EDITOR = "cmd.exe /c exit 0"`（Windows pwsh）或 `GIT_EDITOR=true`（POSIX shell）、`GIT_SEQUENCE_EDITOR=true` 与 `GIT_PAGER=cat`；
+2. **命令参数约束**：提交严格带 `-m "<标题>"`，修正/合并必须带 `--no-edit`，变基续接强制加 `-c core.editor=true`；
+3. **Agent 自主解决冲突**：发生变基或合流冲突时，Agent 拥有文件读写能力，必须就地在代码文件中查找并清除冲突标记（`<<<<<<<`），自主完成逻辑融合。**严禁要求用户手动打开外部编辑器合并**；
+4. **无法安全裁决时主动回滚**：若代码冲突涉及互斥架构变动无法安全推断，立即执行 `git rebase --abort`（或调用恢复脚本）恢复干净工作区，再向用户汇报决策选项，决不留下半变基挂起状态。
+
+完整环境配置与命令矩阵：[references/non-interactive.md](references/non-interactive.md)。
+
+---
+
+## 🚀 1. 子功能：约定式提交与完工推送 (Commit & Push)
+
+提交后立即 push，防止工作丢失。
+
+### 1.1 触发时机（主动触发规则）
+- **代码修改与阶段性完工（回复前硬性门禁，禁止堆积）**：凡本轮对话存在已通过构建/测试验证的代码修改，在向用户输出最终汇报前，**必须将运行提交流程（执行检查、拆分提交并 `git push`）作为最后一个工具调用步骤**。严禁在工作区留存已验证修改直接结束回复；在 `/plan` 等规划模式下生成 `walkthrough.md` 后，亦必须紧随其后执行提交与推送，不可中途停顿。
+- **任务收尾（硬性触发）**：任何开发或维护任务结束、向用户做最终交付前，必须确保工作区干净已推送，不留未提交修改。
+- **用户显式指令**：用户发送 `/commit`、"提交"、"commit & push" 等。
+
+### 1.2 提交前完整性检查 —— 项目自定义
+本步骤归**项目**所有，模板不硬编码具体检查：按下方托管块外「项目专属提交流程与红线」的定义执行。项目专属区未定义时执行兜底自检（扫 diff 校验构建/更新文档/跑格式化）。
+触及架构（新增/调整模块边界、数据流、生命周期、系统拓扑、核心不变式等）时，检查 `docs/architecture/README.md` 与对应领域文档是否已同步，详情参见 `.agents/skills/arch-align`。
+
+### 1.3 提交格式与立即推送
+执行 `git commit -m "<type>(<scope>): <标题>"` 后立即 `git push`。
+- 标题用中文短句（至少包含 2 个汉字，严禁写纯英文标题）；
+- type/scope 用英文（`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`）。
+
+提交规范、语义拆分与 Amend 约束详见：[references/commit.md](references/commit.md)。
+
+---
+
+## 🔄 2. 子功能：Worktree 感知的高效线性分支同步 (Branch Sync)
+
+默认以当前工作目录激活分支为底，**1-Shot** 闭环同步所有分支或指定特性分支，内置安全快照（`refs/sync-backup/`）、全局时间序与 Tree-Diff Guard 零丢改动校验：
+
+```powershell
+# 推荐：1-Shot 闭环同步所有分支到当前工作目录激活的分支
+pwsh .agents/skills/git-workflow/scripts/sync-branch.ps1 -Apply
+
+# 同步指定单一特性分支
+pwsh .agents/skills/git-workflow/scripts/sync-branch.ps1 -SourceBranch 'feat/x' -Apply
+
+# 只读拓扑巡检（零副作用查看所有分支 Ahead / Behind / Net 提交）
+pwsh .agents/skills/git-workflow/scripts/show-branch-topology.ps1 -Detailed
+```
+
+分支同步原理、Tree-Diff Guard 与灾备恢复：[references/branch-sync.md](references/branch-sync.md)。
+
+---
+
+## 🔀 3. 子功能：变基与冲突自主裁决 (Rebase & Conflict)
+
+平滑变基同步远端最新改动，杜绝污染分支历史：
+
+```bash
+# 线性拉取远端更新
+git pull --rebase --autostash
+
+# 若发生变基冲突：在代码中清除冲突标记并暂存后，静默续接：
+git add <resolved-files>
+git -c core.editor=true rebase --continue
+# 或在 sync-branch 管线中续接：
+pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Continue
+
+# 无法安全裁决时立即安全中止：
+git rebase --abort
+# 或在 sync-branch 管线中中止：
+pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Abort
+```
+
+变基步骤、冲突标记识别与安全回滚详见：[references/rebase-conflict.md](references/rebase-conflict.md)。
+
+---
+
+## 📚 4. 渐进式展开参考索引
+
+- [非交互式 Git 规范与加固清单](references/non-interactive.md)
+- [约定式提交规范与门禁](references/commit.md)
+- [分支同步与 Tree-Diff Guard 机制](references/branch-sync.md)
+- [变基与冲突自主裁决指南](references/rebase-conflict.md)
+<!-- PENGJ_TEMPLATE_END -->
+
+<!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
+## 项目专属提交流程、分支配置与红线
+
+> 本节归**项目**所有：模板更新只维护上方托管块，这里可以随意改写，不会丢失。
+> 本节包含上文提交流程的门禁检查定义，以及分支同步配置。
+
+### 1. 项目专属分支配置
+- 集成分支：`main`
+- 忽略未追踪路径正则：``
+- 合后验证命令：`cargo test --workspace`
+
+### 2. 提交前检查（项目自定义）
+
+每次提交前按顺序执行（PowerShell 兼容，仓库根运行）：
+
+```powershell
+# 1. 收集上下文
+git status; git --no-pager diff --stat; git --no-pager diff --cached --stat
+# 2. 构建与静态检查（按改动面选择，改 Rust/模板/配置必跑）
+cargo fmt --check 2>$null; cargo clippy --workspace --all-targets -- -D warnings 2>$null
+# 3. 架构文档一致性判断（见下方“领域完整性检查”）
+# 4. 前端改动时：pnpm --dir crates/app build
+# 5. 模板改动时：cargo run -q -p pengj-templates-cli -- create <tmp> --layers agent --skills git-workflow,arch-align --output <临时目录> 校验渲染
+```
+
+### 3. 领域完整性检查
+
+| # | 原则问题 | 命中 → 要查 |
+| --- | --- | --- |
+| 1 | 是否触及架构（新增/调整模块边界、数据流、生命周期、系统拓扑、跨层契约、核心不变式）？ | `docs/architecture/README.md` 索引与对应 `docs/architecture/<domain>.md` 是否已同步；必要时走 `.agents/skills/arch-align` 深度对齐 |
+| 2 | 是否改动模板层/引擎核心契约（`crates/core` 合并渲染、manifest、层依赖、受管块/TOML 合并）？ | `AGENTS.md` / `templates/README.md` / 层 `layer.toml` 说明是否同步；是否跑通端到端 `create`/`update` 验证 |
+| 3 | 是否新增对外接口/参数（CLI args、GUI invoke、生成选项 `options`、技能列表）？ | `README.md` / `--help` / GUI 文案是否完全自解释；`commitlint.config.js` scope 白名单是否更新 |
+| 4 | 是否改动构建/依赖/工具链（Cargo/pnpm/lefthook/CI）？ | `cargo check --workspace` / `cargo test --workspace` / `pnpm --dir crates/app build` / `just ci` 是否通过 |
+
+判定表速查：
+
+| 改动 | 命中的检查 |
+| --- | --- |
+| `crates/core/**`、`templates/**/layer.toml`、`crates/core/src/render.rs`/`toml_merge.rs`/`engine.rs` | 架构文档 + 模板文档 + 端到端验证 |
+| `templates/agent/**`、`.agents/skills/**`、技能 `SKILL.md` / `AGENTS.md` | 技能双语分支与托管块完整性；架构技能关联时检查架构索引是否登记 |
+| `crates/cli/**`、`crates/app/src-tauri/**`、`crates/app/src/**` | 对外接口文档与构建验证 |
+| `docs/architecture/**` | 索引 `docs/architecture/README.md` 路由是否可达（渐进式披露不堆细节） |
+| 纯测试、纯格式化、单函数修 bug 且不改行为/契约 | 无（快速路径） |
+
+### 4. 红线（agent 绝不能做）
+
+- 跳过完整性检查直接提交（含跳过架构文档一致性判断）
+- 触及架构却未同步 `docs/architecture/README.md` 与领域文档就提交
+- 把多个领域（架构+功能+文档+构建）混进一次提交
+- 为过检查而删除/伪造架构文档索引条目
+- 在 Git 操作中诱发交互式编辑器弹窗或等待用户手动编辑冲突

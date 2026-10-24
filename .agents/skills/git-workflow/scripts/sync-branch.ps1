@@ -41,13 +41,13 @@
 
 .EXAMPLE
     # 一键极速执行（推荐：1 次调用搞定所有分支合并、推送、对齐与项目门禁验证）
-    pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -Apply
+    pwsh .agents/skills/git-workflow/scripts/sync-branch.ps1 -Apply
 
     # 指定单个源分支一键同步
-    pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch feat/my-feature -Apply
+    pwsh .agents/skills/git-workflow/scripts/sync-branch.ps1 -SourceBranch feat/my-feature -Apply
 
     # 快速预检（只读模式）
-    pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1
+    pwsh .agents/skills/git-workflow/scripts/sync-branch.ps1
 #>
 
 [CmdletBinding()]
@@ -104,8 +104,12 @@ function Invoke-Git {
     $pinfo.Environment["GIT_OPTIONAL_LOCKS"] = "0"
     if ($isWin) {
         $pinfo.Environment["GIT_EDITOR"] = "cmd.exe /c exit 0"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     } else {
         $pinfo.Environment["GIT_EDITOR"] = "true"
+        $pinfo.Environment["GIT_SEQUENCE_EDITOR"] = $pinfo.Environment["GIT_EDITOR"]
+        $pinfo.Environment["GIT_PAGER"] = "cat"
     }
 
     $process = [System.Diagnostics.Process]::Start($pinfo)
@@ -482,7 +486,7 @@ $hasRemote = ($remoteCheck.ExitCode -eq 0)
 
 $skillDocPath = Join-Path $PSScriptRoot "..\SKILL.md"
 if (-not (Test-Path $skillDocPath)) {
-    $candidate = Join-Path (Get-Location).Path ".agents\skills\branch-sync\SKILL.md"
+    $candidate = Join-Path (Get-Location).Path ".agents\skills\git-workflow\SKILL.md"
     if (Test-Path $candidate) {
         $skillDocPath = $candidate
     }
@@ -657,7 +661,7 @@ if (-not $isAllBranchesMode) {
             Write-Host "  + $($nc.Hash.Substring(0, [Math]::Min(7, $nc.Hash.Length))) $($nc.Subject)" -ForegroundColor White
         }
         Write-Host "----------------------------------------------------------------"
-        Write-Host "一键执行: pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -SourceBranch '$SourceBranch' -Apply" -ForegroundColor Yellow
+        Write-Host "一键执行: pwsh .agents/skills/git-workflow/scripts/sync-branch.ps1 -SourceBranch '$SourceBranch' -Apply" -ForegroundColor Yellow
         Write-Host "================================================================" -ForegroundColor Cyan
         Write-Host ""
         return
@@ -926,7 +930,7 @@ if (-not $isAllBranchesMode) {
             Write-Host "------------------------------------------------------------------"
         }
         Write-Host "一键执行所有分支同步、对齐与推送:" -ForegroundColor Yellow
-        Write-Host "  pwsh .agents/skills/branch-sync/scripts/sync-branch.ps1 -Apply" -ForegroundColor White
+        Write-Host "  pwsh .agents/skills/git-workflow/scripts/sync-branch.ps1 -Apply" -ForegroundColor White
         Write-Host "==================================================================" -ForegroundColor Cyan
         Write-Host ""
         return
@@ -1004,9 +1008,9 @@ if (-not $isAllBranchesMode) {
                 Write-Host "  1. 在上述文件中手动解决冲突标记 (<<<<<<< / ======= / >>>>>>>)；"
                 Write-Host "  2. 执行: git add <解决的文件>"
                 Write-Host "  3. 执行 1-Shot 恢复脚本继续合入剩余提交并自动对齐验证:" -ForegroundColor Green
-                Write-Host "     pwsh .agents/skills/branch-sync/scripts/continue-sync.ps1 -Continue" -ForegroundColor White
+                Write-Host "     pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Continue" -ForegroundColor White
                 Write-Host "  4. 若需放弃并恢复现场，执行:" -ForegroundColor DarkGray
-                Write-Host "     pwsh .agents/skills/branch-sync/scripts/continue-sync.ps1 -Abort" -ForegroundColor White
+                Write-Host "     pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Abort" -ForegroundColor White
                 Write-Host "======================================================================" -ForegroundColor Yellow
                 Write-Host ""
                 exit 1

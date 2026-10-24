@@ -96,7 +96,7 @@ Inspect the target project workspace across the following dimensions:
   - If legacy custom skills exist, note that they will be taken over into transition zones (`needs_review`).
 - **Skill Selection (`--skills`)**:
   - Core baseline: `commit` (Conventional Commits), `template-sync` (upstream updates).
-  - Architecture & Collaboration: `arch-align` (architecture alignment), `branch-sync` (linear branch/worktree sync).
+  - Architecture & Collaboration: `arch-align` (architecture alignment), `git-workflow` (universal git, conventional commits & linear branch sync).
   - Utilities: `caveman` (token compression), `grill-me` (design grilling), `subrepo-sync` (submodule sync), `write-a-skill` (authoring skills). Default to all skills or tailored subsets.
 
 #### 2. Present Diagnosis & Consult the User (Provide a Recommended Profile)
@@ -242,7 +242,7 @@ AI 应首先巡检目标项目的工作区，按以下维度完成自动化诊�
   - 若已有自定义技能（无托管块），引擎会自动接管并将原内容下移至纳管过渡区（`needs_review`）。
 - **技能集精选（`--skills`）**：
   - 核心基线：`commit`（约定式提交）、`template-sync`（模板同步更新）。
-  - 架构与协作：`arch-align`（架构对齐）、`branch-sync`（高效分支/worktree 线性同步）。
+  - 架构与协作：`arch-align`（架构对齐）、`git-workflow`（通用 Git 操作、约定式提交与线性分支同步）。
   - 辅助增强：`caveman`（token 压缩）、`grill-me`（方案质询）、`subrepo-sync`（子模块/子仓库同步）、`write-a-skill`（技能创建）。默认全选或按需勾选。
 
 #### 2. 向用户呈现诊断报告并咨询选择（必须给推荐方案）
