@@ -403,7 +403,7 @@ fn cmd_update(
         println!("  [待复核] {f}");
     }
     for f in &report.removed {
-        println!("  [移除] {} （模板已删除，本地文件保留）", f);
+        println!("  [移除] {f}");
     }
     Ok(())
 }
