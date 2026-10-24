@@ -6,6 +6,7 @@ description: >-
 ---
 
 <!-- PENGJ_TEMPLATE_START -->
+
 # Git Workflow — 通用 Git 操作与渐进式工作流规范
 
 统管约定式提交、Worktree 线性分支同步、非交互式变基与代码级冲突自主裁决的通用 Git 技能。
@@ -39,8 +40,10 @@ description: >-
 
 ### 1.3 提交格式与立即推送
 执行 `git commit -m "<type>(<scope>): <标题>"` 后立即 `git push`。
+
 - 标题用中文短句（至少包含 2 个汉字，严禁写纯英文标题）；
 - type/scope 用英文（`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`）。
+
 
 提交规范、语义拆分与 Amend 约束详见：[references/commit.md](references/commit.md)。
 
@@ -95,6 +98,7 @@ pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Abort
 - [约定式提交规范与门禁](references/commit.md)
 - [分支同步与 Tree-Diff Guard 机制](references/branch-sync.md)
 - [变基与冲突自主裁决指南](references/rebase-conflict.md)
+
 <!-- PENGJ_TEMPLATE_END -->
 
 <!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->

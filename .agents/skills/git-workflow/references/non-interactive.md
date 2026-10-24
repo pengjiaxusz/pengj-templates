@@ -1,3 +1,4 @@
+
 # 非交互式 Git 规范与静默执行指南
 
 > **核心不变式**：在 AI 智能体自动化运行环境中，Git 操作**严禁弹出任何外部编辑器**（nano、vim、notepad），**严禁挂起等待终端键盘输入**。所有 Git 动作必须静默、非交互且确定性执行。
@@ -59,6 +60,6 @@ git --no-pager log -n 5 --oneline
    - 分支同步脚本场景：`pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Continue`
 
 3. **无法裁决时的安全中止与回滚**：
-   若冲突涉及互斥的底层架构变动或高风险业务意图冲突，无法通过代码分析安全裁决时：
+   若冲突涉及互斥的底层架构变动或高风险业务意图冲突，无法安全推断时：
    - 立即执行 `git rebase --abort`（或 `continue-sync.ps1 -Abort`）恢复到干净工作区；
    - 准备清晰的技术报告与明确的方案选项向用户汇报，决不把仓库留在半挂起状态。

@@ -1,3 +1,4 @@
+
 # Commit 提交流程与规范
 
 约定式提交流程、回复前硬性门禁、语义拆分与立即推送安全规范。
@@ -46,12 +47,14 @@ git --no-pager diff --cached --stat
 
 格式：`type(scope): 标题`
 
+
 - **标题用中文短句**、不加句号（硬性要求：必须包含至少 2 个汉字，严禁写纯英文）。
   - ❌ 严禁：`feat(cli): add new flags`
   - ✅ 必须：`feat(cli): 新增参数支持`
 - **type/scope 用英文**：
   - 常用 type：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
   - scope 参考项目 `commitlint.config.js` 的 scope-enum 白名单，无合适则省略。
+
 
 ---
 
