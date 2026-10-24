@@ -873,7 +873,7 @@ function UpdateTab() {
                       <div key={`r-${f}`} className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">移除</Badge>
                         <span>{f}</span>
-                        <span className="text-[10px] text-muted-foreground/60">(上游已删，本地保留)</span>
+                        <span className="text-[10px] text-muted-foreground/60">(已清理废弃文件)</span>
                       </div>
                     ))}
                     {report.updated.length === 0 &&
