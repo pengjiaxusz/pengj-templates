@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.38.0-beta.1...v0.38.1-beta.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **templates:** 将 Cargo.toml 纳入 rust 层 update_ignore ([ad63fa6](https://github.com/pengjiaxusz/pengj-templates/commit/ad63fa638947a1ff3d7476762550f2e3ded41ccc))
+
 ## [0.38.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.37.2-beta.1...v0.38.0-beta.1) (2026-10-24)
 
 
