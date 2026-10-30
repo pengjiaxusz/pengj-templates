@@ -1,0 +1,3 @@
+name = "bque"
+description = "Windows 全局编译排队、CPU 后台降级防卡顿与纯净基准测试保护（bque）"
+depends = ["common"]
