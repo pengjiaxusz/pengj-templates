@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.40.1-beta.1...v0.41.0-beta.1) (2026-10-30)
+
+
+### Features
+
+* **templates:** 缺失 bque 时提示一键安装命令并支持默认路径回退 ([8e4c946](https://github.com/pengjiaxusz/pengj-templates/commit/8e4c946ce8bbfd3af9b6d19f08a1043efe81ab6c))
+
 ## [0.40.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.40.0-beta.1...v0.40.1-beta.1) (2026-10-30)
 
 
