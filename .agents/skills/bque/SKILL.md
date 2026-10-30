@@ -37,10 +37,10 @@ AI 助手**绝对严禁**在终端中直接裸跑任何底层构建或编译测�
 
 | 严禁裸跑的原生命令 (FORBIDDEN RAW) | 危害与问题 | 强制替换调用的包装形式 (MANDATORY WRAPPED FORM) |
 | :--- | :--- | :--- |
-| ❌ `ninja -C <dir> <target>` / `ninja ...` | 抢占全部 CPU 逻辑核心导致系统卡死，多工作树冲突 | `just test-build <target>` 或 `pwsh tools/bque-runner.ps1 -Cmd "ninja -C <dir> <target>"` 或 `bque run -- ninja -C <dir> <target>` |
+| ❌ `ninja -C <dir> <target>` / `ninja ...` | 抢占全部 CPU 逻辑核心导致系统卡死，多工作树冲突 | `just test-build <target>` 或 `pwsh tools/bque-runner.ps1 -Cmd "ninja -C <dir> <target>"` |
 | ❌ `cmake --build <dir> ...` | 争用 CMake/Ninja 编译锁，打死前台交互 | `pwsh tools/locked-cmake-build.ps1 ...` 或 `just build` 或 `pwsh tools/bque-runner.ps1 -Cmd "cmake --build ..."` |
 | ❌ `cargo build` / `cargo test` / `cargo clippy` | 产生 cargo target/ 锁争用，打满 CPU | `just build` / `just test` / `just check` 或 `pwsh tools/bque-runner.ps1 -Cmd "cargo ..."` |
-| ❌ 原生基准测试（如 `ninja -C target/debug DuntingThumbnailPipelineBenchmark` 或 `./bench.exe`） | **致命跑分污染**：未冻结后台构建，CPU 与 L3 缓存严重受扰，测试数据失真 | `just test-bench` 或 `pwsh tools/bque-runner.ps1 -Bench -Cmd "..."` 或 `bque bench -- ...`（自动挂起后台编译以提供 0% 干扰环境） |
+| ❌ 原生基准测试（如 `ninja -C target/debug DuntingThumbnailPipelineBenchmark` 或 `./bench.exe`） | **致命跑分污染**：未冻结后台构建，CPU 与 L3 缓存严重受扰，测试数据失真 | `just test-bench` 或 `pwsh tools/bque-runner.ps1 -Bench -Cmd "..."`（自动挂起后台编译以提供 0% 干扰环境） |
 | ❌ `ctest ...` / `<TestBinary>.exe` | 未降级的多线程并发测试抢占 CPU 造成前台卡顿 | `just test` 或 `pwsh tools/run-tests.ps1` 或 `pwsh tools/bque-runner.ps1 -Cmd "ctest ..."` |
 | ❌ `pnpm build` / `tsc`（大型前端项目） | Node.js/V8 引擎内存与 CPU 突增卡顿 | `just build` 或 `pwsh tools/bque-runner.ps1 -Cmd "pnpm build"` |
 
@@ -69,14 +69,15 @@ pwsh tools/bque-runner.ps1 -Desc "Custom Build" -Cmd "cargo build --release"
 pwsh tools/bque-runner.ps1 -Bench -Desc "Custom Benchmark" -Cmd "pnpm bench"
 ```
 
-### 阶梯 3：原生 CLI 直调（独立运行或系统运维）
-在没有 justfile 或独立运维排查时直接调用 `bque`：
+### 阶梯 3：原生 CLI 直调（仅限无 runner 的外部目录或全局运维）
+在没有 `tools/bque-runner.ps1` 的独立外部目录执行临时排队时调用：
 ```powershell
 bque run -d "Heavy Task" -p idle -- cargo build --workspace
 bque bench -d "Performance Probe" -- cargo bench
 bque status
 bque clean
 ```
+在任何已接入的项目仓库内，**必须一律通过 `just` 或 `tools/bque-runner.ps1` 调度**，享受二进制自动探测、PATH 自动注入、防重复进队死锁与 CPU 优先级自动降级保护。
 
 ---
 

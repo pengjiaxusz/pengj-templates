@@ -34,9 +34,9 @@
     ".agents\\skills\\arch-align\\SKILL.md": "911129a46fd7f8d9d22822c5474ffde63621c4b375b721327a8d84dd89cf518f",
     ".agents\\skills\\arch-align\\references\\GENERATE-DOC.md": "7cbd5aca4240f88d8ccce5b7a8278778de791aa7152c3c912c243ec2808511df",
     ".agents\\skills\\arch-align\\references\\GENERATE-INDEX.md": "8631df67a99bc9eb96096b4edc28d050e1d63151ef6f05be545ba37fb73396bb",
-    ".agents\\skills\\bque\\SKILL.md": "14039f51dfffda280fe4c4f9fa99c842b87da11b6a9f9339d93fa98f739d02ae",
+    ".agents\\skills\\bque\\SKILL.md": "f27072b1e444670a85ea4f3de6f00c42508ac6542b359dbcae8db8f6a590affd",
     ".agents\\skills\\bque\\references\\install.md": "bda147fb0f1767c8b87a232a62358bc1a1c066f11da77c482e11393406468ef1",
-    ".agents\\skills\\bque\\references\\usage-matrix.md": "6f2066682c40c5e9e9823ecbdab890aa1a8cefeef98704ccc8080aaefb897166",
+    ".agents\\skills\\bque\\references\\usage-matrix.md": "0a78b98008b03e6fbda09dd1a919f4496e1d8fb1ec6c392cc5da35c9c5d842a9",
     ".agents\\skills\\caveman\\SKILL.md": "56a31b9be677ca0afcc24e2273846931841534990657251e1d47815adf661914",
     ".agents\\skills\\git-workflow\\SKILL.md": "03930f86554bfc752831d0f8a8aaa6beb42e8984f8930a042e26b116c4c91362",
     ".agents\\skills\\git-workflow\\references\\branch-sync.md": "635fe0348c4842ed9e3d6ac8c25e3ff9d2912ed768993a152a5be5a3e1ba7f42",
@@ -59,9 +59,9 @@
     ".cargo\\config.toml": "1b06aced2448d86dc3dffeba01ffac746b65059315367c4d54e5801e5af7b98d",
     ".gitattributes": "b5099197608cab315182fadad3cdf0e06ad5ab9b21f3decf8ace9e328cb9a121",
     ".gitignore": "10fc518efad9b43b5cff3dea30046f7f86a78b9aa771837d3768792ee50b0438",
-    "AGENTS.md": "ec25ffe9efbfff39dddd57474ddc0f3e10ddc7c213a7bd88374e0edd9b74fb87",
+    "AGENTS.md": "1b47580edd9265015008e67da8d9250cc7c54495f27f04996520ab0de2f7d959",
     "commitlint.base.js": "3067231e1559d023504d2f0a51f06b301b7ea058eac4e92a3b545d5077da471f",
-    "package.json": "e28dfa6fa1f78e62e95f602795dbe106411651d88e11d1684b21de05016b6da2",
+    "package.json": "510f38417f44ab137f1076565b395988166a98b6d6bd365977d78b6c9d1d243f",
     "tools\\bque-runner.ps1": "f4b9c5f42d4ea753aaf2a91539a77995a342e8dc2cc6f400a9e24790979b8591"
   }
 }

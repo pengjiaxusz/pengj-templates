@@ -48,14 +48,14 @@ Remove-Item test_out.log -ErrorAction SilentlyContinue
 If a process crashed abruptly or a build lock was left behind:
 ```powershell
 # 1. Inspect lock status
-just queue-status   # or: bque status
+just queue-status   # or: pwsh tools/bque-runner.ps1 -Status
 
 # 2. Force clean orphaned state files
-just queue-clean    # or: bque clean
+just queue-clean    # or: pwsh tools/bque-runner.ps1 -Clean
 
 # 3. Manually pause/resume builds when gaming or running profiling
-bque pause
-bque resume
+just queue-pause    # or: pwsh tools/bque-runner.ps1 -Pause
+just queue-resume   # or: pwsh tools/bque-runner.ps1 -Resume
 ```
 
 {% else %}
@@ -107,14 +107,14 @@ Remove-Item test_out.log -ErrorAction SilentlyContinue
 当由于断电、强制杀进程或异常崩溃导致编译锁残留时：
 ```powershell
 # 1. 检查当前持锁者与排队队列
-just queue-status   # 或 bque status
+just queue-status   # 或 pwsh tools/bque-runner.ps1 -Status
 
 # 2. 清理残留锁与孤儿等待记录
-just queue-clean    # 或 bque clean
+just queue-clean    # 或 pwsh tools/bque-runner.ps1 -Clean
 
 # 3. 手动暂停与恢复后台构建（在进行重度游戏或系统级压测时）
-bque pause
-bque resume
+just queue-pause    # 或 pwsh tools/bque-runner.ps1 -Pause
+just queue-resume   # 或 pwsh tools/bque-runner.ps1 -Resume
 ```
 
 {% endif %}
