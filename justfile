@@ -46,6 +46,10 @@ clippy:
 test:
     @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Test Workspace" -Cmd "cargo test --workspace"
 
+# 专项基准测试（bque bench 自动挂起后台编译以提供纯净 CPU 环境）
+bench *ARGS:
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Bench -Desc "Cargo Bench Workspace" -Cmd "cargo bench --workspace {{ARGS}}"
+
 # 构建所有 Rust crate（支持透传参数，如 `just build -r`）
 build FLAGS="":
     @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Build Workspace" -Cmd "cargo build {{FLAGS}}"
@@ -58,9 +62,9 @@ alias b := build
 frontend-install:
     pnpm --dir crates/app install
 
-# 前端构建（tsc + vite）
+# 前端构建（tsc + vite，受 bque 排队管控）
 frontend-build:
-    pnpm --dir crates/app build
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Frontend Build" -Cmd "pnpm --dir crates/app build"
 
 # 前端 dev server（浏览器调试用，纯前端无 Tauri 环境）
 frontend-dev:
@@ -94,3 +98,7 @@ update DIR=".":
 
 # CI 全量校验：格式化检查 + 编译 + clippy + 测试 + 前端构建
 ci: fmt check clippy test frontend-build
+
+# 一键门禁
+gate: ci
+alias check-gate := gate
