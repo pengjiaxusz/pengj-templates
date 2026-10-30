@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.44.0-beta.1...v0.45.0-beta.1) (2026-10-30)
+
+
+### Features
+
+* **templates:** 全面升级为原生 bque CLI 调度并精简 justfile ([5b93248](https://github.com/pengjiaxusz/pengj-templates/commit/5b932484e13a6404ba2326a528909232434c203c))
+
 ## [0.44.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.43.0-beta.1...v0.44.0-beta.1) (2026-10-30)
 
 
