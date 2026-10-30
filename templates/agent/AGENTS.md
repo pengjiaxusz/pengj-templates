@@ -14,7 +14,7 @@
 - **Task Conclusion**: Before concluding any task or delivering final responses, the working tree must be clean and all commits pushed to the remote repository.
 {%- endif %}
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
-- **Build & Test Execution Red Line (Strictly Prohibit Raw Build Commands)**: Directly running raw build/test commands (`ninja`, `cmake --build`, `cargo build/test/clippy`, `cl.exe`, `ctest`, `pnpm build`, etc.) in the terminal is strictly prohibited! All compilation, linting, tests, and benchmarks MUST run via unified `just` recipes (`just build`, `just check`, `just test`, `just bench`) or `tools/bque-runner.ps1` to ensure cross-worktree queue serialization and `Idle` CPU priority. Benchmarks must run in clean-room mode (`just bench`) to freeze background builds and guarantee 0% CPU disturbance (see `.agents/skills/bque/SKILL.md`).
+- **Build & Test Execution Red Line (Strictly Prohibit Raw Build Commands)**: Directly running raw build/test commands (`ninja`, `cmake --build`, `cargo build/test/clippy`, `cl.exe`, `ctest`, `pnpm build`, etc.) in the terminal is strictly prohibited! All compilation, linting, tests, and benchmarks MUST run via unified `just` recipes (`just build`, `just check`, `just test`, `just bench`) or native bque CLI (bque run -- <cmd>, bque bench -- <cmd>) to ensure cross-worktree queue serialization and `Idle` CPU priority. Benchmarks must run in clean-room mode (`just bench`) to freeze background builds and guarantee 0% CPU disturbance (see `.agents/skills/bque/SKILL.md`).
 {%- endif %}
 - **Template Anti-Tampering Red Line (Strict Protection)**: All files under `.agents/skills/*/scripts/` and all content inside `PENGJ_TEMPLATE_START/END` managed blocks belong to `pengj-templates`. Directly modifying managed script files or tampering with code inside managed blocks in downstream projects is strictly prohibited! When encountering environment mismatch or needing project-specific settings:
   1. Always declare configuration in the project-specific area outside the managed block in `SKILL.md` (e.g. integration branch declaration, untracked path ignore regex, or verification gates);
@@ -81,7 +81,7 @@
 - **任务收尾要求**：任何开发或维护任务结束、向用户做最终交差前，工作区必须保持干净，所有改动必须已提交并推送到远端（commit & push）。
 {%- endif %}
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
-- **构建与测试排队红线（严禁裸跑原生构建命令）**：严禁直接在命令行运行 `ninja`、`cmake --build`、`cargo build/test/clippy`、`cl.exe`、`ctest`、`pnpm build` 等底层构建/编译器工具！所有编译、检查、单测与性能跑分必须统一走 `just`（如 `just build`、`just check`、`just test`、`just bench`）或 `tools/bque-runner.ps1` 进行全局跨工作树排队调度与 `Idle` 降级，性能跑分必须走 bench 模式自动挂起后台编译以提供 0% 干扰的纯净环境（详见 `.agents/skills/bque/SKILL.md`）。
+- **构建与测试排队红线（严禁裸跑原生构建命令）**：严禁直接在命令行运行 `ninja`、`cmake --build`、`cargo build/test/clippy`、`cl.exe`、`ctest`、`pnpm build` 等底层构建/编译器工具！所有编译、检查、单测与性能跑分必须统一走 `just`（如 `just build`、`just check`、`just test`、`just bench`）或原生 bque 命令行（如 bque run -- <cmd>、bque bench -- <cmd>）进行全局跨工作树排队调度与 `Idle` 降级，性能跑分必须走 bench 模式自动挂起后台编译以提供 0% 干扰的纯净环境（详见 `.agents/skills/bque/SKILL.md`）。
 {%- endif %}
 - **模板受管区域防篡改禁令（硬性红线）**：`.agents/skills/*/scripts/` 脚本文件及所有带 `PENGJ_TEMPLATE_START/END` 的托管块区间归 `pengj-templates` 统一托管。严禁在下游仓库直接修改托管脚本文件或私自篡改托管块内代码！若遇到下游环境不适配或需要定制：
   1. 优先查阅对应技能的 `SKILL.md`，在托管块外「项目专属区」以声明式配置解决（如 `集成分支登记`、`忽略未追踪路径正则` 或项目门禁）；

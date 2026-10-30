@@ -49,7 +49,7 @@ AI assistants are **STRICTLY PROHIBITED** from executing raw build or compiler c
 
 ---
 
-## 🚀 3. Three Execution Tiers (Priority Order)
+## 🚀 3. Two Execution Tiers (Priority Order)
 
 ### Tier 1: Unified `just` Entry (Recommended)
 Always check the repository's `justfile` first. Standard targets automatically invoke bque:
@@ -74,13 +74,6 @@ bque bench -- pnpm bench
 # Introspection and queue cleanup
 bque status
 bque clean
-```
-
-### Tier 3: Universal Runner Shim (Backward Compatibility)
-For legacy scripts or backwards compatibility:
-```powershell
-pwsh tools/bque-runner.ps1 -Desc "Custom Build" -Cmd "cargo build --release"
-pwsh tools/bque-runner.ps1 -Bench -Cmd "pnpm bench"
 ```
 
 ---
@@ -140,7 +133,7 @@ AI 助手**绝对严禁**在终端中直接裸跑任何底层构建或编译测�
 
 ---
 
-## 🚀 3. 三阶梯执行规范（按优先级选用）
+## 🚀 3. 双阶梯执行规范（按优先级选用）
 
 ### 阶梯 1：统一优先使用 `just` 命令（首选）
 项目日常命令已由 `justfile` 原生接入 `bque`，AI 助手应优先运行 `just`：
@@ -165,13 +158,6 @@ bque bench -- pnpm bench
 # 状态查询与锁清理
 bque status
 bque clean
-```
-
-### 阶梯 3：通用代理脚本垫层（向后兼容旧脚本）
-针对存量脚本或老版本自动化兼容：
-```powershell
-pwsh tools/bque-runner.ps1 -Desc "Custom Build" -Cmd "cargo build --release"
-pwsh tools/bque-runner.ps1 -Bench -Cmd "pnpm bench"
 ```
 
 ---
