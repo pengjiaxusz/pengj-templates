@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.38.1-beta.1...v0.39.0-beta.1) (2026-10-30)
+
+
+### Features
+
+* **templates:** 新增 bque 模板层及编译排队与纯净跑分支持 ([7f2608b](https://github.com/pengjiaxusz/pengj-templates/commit/7f2608b893805cff0fcbbcb6e65e50c57e8b6530))
+
 ## [0.38.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.38.0-beta.1...v0.38.1-beta.1) (2026-10-29)
 
 
