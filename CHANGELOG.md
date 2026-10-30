@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.39.0-beta.1...v0.40.0-beta.1) (2026-10-30)
+
+
+### Features
+
+* **agent:** 新增 bque 全局编译排队与纯净跑分技能并精简 AGENTS.md ([dcd7864](https://github.com/pengjiaxusz/pengj-templates/commit/dcd786454a8cb60151a19b11228a05cef61577d0))
+
 ## [0.39.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.38.1-beta.1...v0.39.0-beta.1) (2026-10-30)
 
 
