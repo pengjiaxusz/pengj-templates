@@ -1,5 +1,4 @@
 # bque 安装与环境配置指南 / Installation & Setup
-
 {% if options["skill_lang"] == "en" %}
 ## One-Liner Quick Install (Recommended)
 
@@ -67,7 +66,6 @@ Expected output:
   (Queue is empty)
 ============================================================
 ```
-
 {% else %}
 ## 一键快速安装（推荐）
 
@@ -135,5 +133,4 @@ bque status
   (Queue is empty)
 ============================================================
 ```
-
 {% endif %}
