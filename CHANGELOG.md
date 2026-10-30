@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.43.0-beta.1...v0.44.0-beta.1) (2026-10-30)
+
+
+### Features
+
+* **templates:** 统一引导通过 bque-runner 调度并更新使用矩阵 ([2b8af46](https://github.com/pengjiaxusz/pengj-templates/commit/2b8af466c05d6398e7f7b08be7be7d8ea4df6233))
+
 ## [0.43.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.42.0-beta.1...v0.43.0-beta.1) (2026-10-30)
 
 
