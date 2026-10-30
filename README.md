@@ -74,8 +74,8 @@ lefthook 层用法：commitlint CLI 走本地依赖（`pnpm exec commitlint`）�
 ### GUI
 
 ```bash
-pnpm --dir crates/app install
-pnpm --dir crates/app tauri dev
+just frontend-install
+just dev
 ```
 
 生成项目时写入 `.pengj-templates.json` manifest（记录层与模板托管文件哈希），`update` 依据它只更新模板托管文件：本地未改动的文件直接覆盖、被改过的报冲突跳过、含受管块的文件做块级合并（TOML 结构化合并 / 文本托管块注入）、模板新增的自动创建。报告中 `needs_review` 列出建议人工复核的合并结果，adopt 的 `manual_steps` 给出需要手动完成的接线步骤。
@@ -93,6 +93,6 @@ templates/        # 层模板（common/ rust/ frontend/ ...），编译期嵌入
 ## 开发
 
 ```bash
-cargo check --workspace       # Rust 全部编译检查
-pnpm --dir crates/app build   # 前端构建
+just check            # Rust 全部编译检查
+just frontend-build   # 前端构建
 ```

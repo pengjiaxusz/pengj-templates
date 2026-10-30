@@ -36,7 +36,7 @@
 
 ## 前端规范 / Frontend (crates/app/src)
 
-- 构建：`pnpm --dir crates/app build`（tsc 类型检查 + vite 产物）。
+- 构建：`just frontend-build`（tsc 类型检查 + vite 产物）。
 - React + TypeScript + Tailwind v4 + shadcn/ui；组件放 `src/components/ui/`，页面逻辑放 `src/App.tsx` 或 `src/components/`。
 - UI 文案用中文；与 Tauri 通信走 `invoke("cmd_xxx", ...)`，命令定义在 `crates/app/src-tauri/src/lib.rs`。
 - 新增后端命令时：`#[tauri::command]` + `invoke_handler` 注册 + 前端 `invoke` 三处同步。
@@ -78,7 +78,7 @@
 改动提交前至少跑与改动面相关的检查：
 
 - Rust / 模板 / 构建配置：`cargo fmt` → `cargo clippy --workspace --all-targets -- -D warnings` → `cargo test --workspace`。
-- 前端（`crates/app/src` 等）：`pnpm --dir crates/app build`。
+- 前端（`crates/app/src` 等）：`just frontend-build`。
 - 模板改动：临时目录端到端验证，如 `cargo run -q -p pengj-templates-cli -- create demo --layers agent --skills commit,caveman --output <临时目录>`，检查生成文件与 AGENTS.md 渲染结果。
 - 全量 CI 校验：`just ci`（fmt check + 编译 + clippy + 测试 + 前端构建）。
 
