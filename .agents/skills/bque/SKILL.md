@@ -31,7 +31,22 @@ description: >-
 
 ---
 
-## 🚀 2. 三阶梯执行规范（按优先级选用）
+## 🛑 2. 严禁裸跑原生构建/测试命令（硬性禁令与自动转换表）
+
+AI 助手**绝对严禁**在终端中直接裸跑任何底层构建或编译测试命令！绕过 `bque` / `just` 会吃满所有 CPU 逻辑核心导致系统交互冻结、跨工作树产生编译锁争用、破坏性能跑分置信度，并在 PowerShell 管道下引发 4KB 匿名管道死锁。必须严格按下表映射为包装调用：
+
+| 严禁裸跑的原生命令 (FORBIDDEN RAW) | 危害与问题 | 强制替换调用的包装形式 (MANDATORY WRAPPED FORM) |
+| :--- | :--- | :--- |
+| ❌ `ninja -C <dir> <target>` / `ninja ...` | 抢占全部 CPU 逻辑核心导致系统卡死，多工作树冲突 | `just test-build <target>` 或 `pwsh tools/bque-runner.ps1 -Cmd "ninja -C <dir> <target>"` 或 `bque run -- ninja -C <dir> <target>` |
+| ❌ `cmake --build <dir> ...` | 争用 CMake/Ninja 编译锁，打死前台交互 | `pwsh tools/locked-cmake-build.ps1 ...` 或 `just build` 或 `pwsh tools/bque-runner.ps1 -Cmd "cmake --build ..."` |
+| ❌ `cargo build` / `cargo test` / `cargo clippy` | 产生 cargo target/ 锁争用，打满 CPU | `just build` / `just test` / `just check` 或 `pwsh tools/bque-runner.ps1 -Cmd "cargo ..."` |
+| ❌ 原生基准测试（如 `ninja -C target/debug DuntingThumbnailPipelineBenchmark` 或 `./bench.exe`） | **致命跑分污染**：未冻结后台构建，CPU 与 L3 缓存严重受扰，测试数据失真 | `just test-bench` 或 `pwsh tools/bque-runner.ps1 -Bench -Cmd "..."` 或 `bque bench -- ...`（自动挂起后台编译以提供 0% 干扰环境） |
+| ❌ `ctest ...` / `<TestBinary>.exe` | 未降级的多线程并发测试抢占 CPU 造成前台卡顿 | `just test` 或 `pwsh tools/run-tests.ps1` 或 `pwsh tools/bque-runner.ps1 -Cmd "ctest ..."` |
+| ❌ `pnpm build` / `tsc`（大型前端项目） | Node.js/V8 引擎内存与 CPU 突增卡顿 | `just build` 或 `pwsh tools/bque-runner.ps1 -Cmd "pnpm build"` |
+
+---
+
+## 🚀 3. 三阶梯执行规范（按优先级选用）
 
 ### 阶梯 1：统一优先使用 `just` 命令（首选）
 项目日常命令已由 `justfile` 自动接入 `bque-runner.ps1`，AI 助手应优先运行 `just`：
@@ -65,7 +80,7 @@ bque clean
 
 ---
 
-## 🛡️ 3. 构建安全两铁律（硬性红线）
+## 🛡️ 4. 构建安全两铁律（硬性红线）
 
 1. **管道卫生安全（严禁截断原生管道）**：
    - **反例（严禁）**：`cargo test 2>&1 | Select-Object -First 100` 或 `cmake --build ... | Select-Object -Last 50`（# pipeline-hygiene: ok 反例演示）。
@@ -77,7 +92,7 @@ bque clean
 
 ---
 
-## 🔧 4. 环境检测与安装指引
+## 🔧 5. 环境检测与安装指引
 
 若系统提示找不到 `bque` 命令，请引导或查阅安装指引：
 👉 详见 [references/install.md](references/install.md)。

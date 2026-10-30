@@ -3,10 +3,10 @@ name: bque
 description: >-
 {% if options["skill_lang"] == "en" %}
   Universal cross-worktree build queue serialization, CPU throttling, and clean-room benchmark protection skill. Enforces Idle priority, clean-room benchmark execution (auto-freezing background builds), queue introspection, pipeline hygiene (preventing 4KB anonymous pipe deadlocks on Windows), and deadlock recovery. Use when running builds, cargo, cmake, ninja, pnpm build, tests, benchmarks, profiling, or when encountering CPU contention, hanging commands, or build lock errors.
-  Triggers: bque, build-queue, queue, build queue, run build, cargo build, pnpm build, cmake build, bench, benchmark, profiling, queue-status, queue-clean, compile freeze, cpu throttle, pipeline deadlock.
+  Triggers: bque, build-queue, queue, build queue, run build, cargo build, pnpm build, cmake build, ninja, ninja -C, cmake, ctest, cargo test, cargo clippy, bench, benchmark, profiling, queue-status, queue-clean, compile freeze, cpu throttle, pipeline deadlock.
 {% else %}
   通用跨工作树全局编译排队、后台 CPU 降级防卡顿与纯净基准测试保护技能。规范 Agent 何时必须走排队调度、何时直跑，提供纯净跑分独占执行（秒级挂起后台构建）、构建管道安全铁律（防 Windows 4KB 管道永久死锁）、全局状态自省与死锁自愈。当需要执行重型构建、编译、检查、单测、性能跑分（bench）、性能画像分析，或遇到 CPU 占满卡顿、命令挂死、编译锁争用时使用。
-  Triggers: bque, build-queue, 排队构建, 全局排队, 编译排队, 跑分保护, 纯净跑分, 冻结后台构建, 挂起构建, cpu降级, idle优先级, queue-status, queue-clean, 编译锁, 管道死锁, 管道卫生.
+  Triggers: bque, build-queue, 排队构建, 全局排队, 编译排队, 跑分保护, 纯净跑分, 冻结后台构建, 挂起构建, cpu降级, idle优先级, queue-status, queue-clean, 编译锁, 管道死锁, 管道卫生, ninja, ctest, cmake, cargo, 编译, 构建, 跑测试, 运行测试, 单测, 性能跑分, bench, ninja -C, cmake --build, cargo build, cargo test.
 {% endif %}
 ---
 
@@ -34,7 +34,22 @@ See [references/usage-matrix.md](references/usage-matrix.md) for full scenario m
 
 ---
 
-## 🚀 2. Three Execution Tiers (Priority Order)
+## 🛑 2. Strictly Prohibited Raw Commands (Mandatory Wrappers)
+
+AI assistants are **STRICTLY PROHIBITED** from executing raw build or compiler commands directly in the terminal! Bypassing `bque` / `just` starves all CPU cores, freezes desktop interactivity, contaminates benchmark accuracy, and triggers Windows 4KB pipe deadlocks. Always convert raw commands into their wrapped forms:
+
+| Prohibited Raw Command (FORBIDDEN) | Hazards & Failure Modes | Mandatory Wrapped Alternative |
+| :--- | :--- | :--- |
+| ❌ `ninja -C <dir> <target>` / `ninja ...` | Consumes 100% CPU cores, freezes the system, causes worktree conflicts | `just test-build <target>` or `pwsh tools/bque-runner.ps1 -Cmd "ninja -C <dir> <target>"` or `bque run -- ninja -C <dir> <target>` |
+| ❌ `cmake --build <dir> ...` | Causes target lock collisions, starves foreground responsiveness | `pwsh tools/locked-cmake-build.ps1 ...` or `just build` or `pwsh tools/bque-runner.ps1 -Cmd "cmake --build ..."` |
+| ❌ `cargo build` / `cargo test` / `cargo clippy` | Cargo target directory lock collisions, heavy CPU contention | `just build` / `just test` / `just check` or `pwsh tools/bque-runner.ps1 -Cmd "cargo ..."` |
+| ❌ Raw Benchmark invocation (e.g. `ninja -C target/debug DuntingThumbnailPipelineBenchmark` or `./bench.exe`) | **Fatal Benchmark Corruption**: background builds pollute CPU cache, invalidating benchmark data | `just test-bench` or `pwsh tools/bque-runner.ps1 -Bench -Cmd "..."` or `bque bench -- ...` (auto-freezes background builds for 0% CPU disturbance) |
+| ❌ `ctest ...` / `<TestBinary>.exe` | Unthrottled multi-threaded test runner saturates CPU | `just test` or `pwsh tools/run-tests.ps1` or `pwsh tools/bque-runner.ps1 -Cmd "ctest ..."` |
+| ❌ `pnpm build` / `tsc` (in large frontend workspaces) | V8 engine multi-thread memory and CPU spikes | `just build` or `pwsh tools/bque-runner.ps1 -Cmd "pnpm build"` |
+
+---
+
+## 🚀 3. Three Execution Tiers (Priority Order)
 
 ### Tier 1: Unified `just` Entry (Recommended)
 Always check the repository's `justfile` first. Standard targets automatically invoke the bque runner:
@@ -68,7 +83,7 @@ bque clean
 
 ---
 
-## 🛡️ 3. Two Hard Ironclad Rules
+## 🛡️ 4. Two Hard Ironclad Rules
 
 1. **Pipeline Hygiene (Strictly Forbidden)**:
    - **FORBIDDEN**: Never pipe native console build commands into PowerShell truncation filters (e.g., `cargo test 2>&1 | Select-Object -First 100` # pipeline-hygiene: ok anti-pattern doc).
@@ -80,7 +95,7 @@ bque clean
 
 ---
 
-## 🔧 4. Environment & Installation
+## 🔧 5. Environment & Installation
 
 If `bque` is missing from system `PATH`, inspect and follow the installation guide:
 👉 See [references/install.md](references/install.md).
@@ -108,7 +123,22 @@ If `bque` is missing from system `PATH`, inspect and follow the installation gui
 
 ---
 
-## 🚀 2. 三阶梯执行规范（按优先级选用）
+## 🛑 2. 严禁裸跑原生构建/测试命令（硬性禁令与自动转换表）
+
+AI 助手**绝对严禁**在终端中直接裸跑任何底层构建或编译测试命令！绕过 `bque` / `just` 会吃满所有 CPU 逻辑核心导致系统交互冻结、跨工作树产生编译锁争用、破坏性能跑分置信度，并在 PowerShell 管道下引发 4KB 匿名管道死锁。必须严格按下表映射为包装调用：
+
+| 严禁裸跑的原生命令 (FORBIDDEN RAW) | 危害与问题 | 强制替换调用的包装形式 (MANDATORY WRAPPED FORM) |
+| :--- | :--- | :--- |
+| ❌ `ninja -C <dir> <target>` / `ninja ...` | 抢占全部 CPU 逻辑核心导致系统卡死，多工作树冲突 | `just test-build <target>` 或 `pwsh tools/bque-runner.ps1 -Cmd "ninja -C <dir> <target>"` 或 `bque run -- ninja -C <dir> <target>` |
+| ❌ `cmake --build <dir> ...` | 争用 CMake/Ninja 编译锁，打死前台交互 | `pwsh tools/locked-cmake-build.ps1 ...` 或 `just build` 或 `pwsh tools/bque-runner.ps1 -Cmd "cmake --build ..."` |
+| ❌ `cargo build` / `cargo test` / `cargo clippy` | 产生 cargo target/ 锁争用，打满 CPU | `just build` / `just test` / `just check` 或 `pwsh tools/bque-runner.ps1 -Cmd "cargo ..."` |
+| ❌ 原生基准测试（如 `ninja -C target/debug DuntingThumbnailPipelineBenchmark` 或 `./bench.exe`） | **致命跑分污染**：未冻结后台构建，CPU 与 L3 缓存严重受扰，测试数据失真 | `just test-bench` 或 `pwsh tools/bque-runner.ps1 -Bench -Cmd "..."` 或 `bque bench -- ...`（自动挂起后台编译以提供 0% 干扰环境） |
+| ❌ `ctest ...` / `<TestBinary>.exe` | 未降级的多线程并发测试抢占 CPU 造成前台卡顿 | `just test` 或 `pwsh tools/run-tests.ps1` 或 `pwsh tools/bque-runner.ps1 -Cmd "ctest ..."` |
+| ❌ `pnpm build` / `tsc`（大型前端项目） | Node.js/V8 引擎内存与 CPU 突增卡顿 | `just build` 或 `pwsh tools/bque-runner.ps1 -Cmd "pnpm build"` |
+
+---
+
+## 🚀 3. 三阶梯执行规范（按优先级选用）
 
 ### 阶梯 1：统一优先使用 `just` 命令（首选）
 项目日常命令已由 `justfile` 自动接入 `bque-runner.ps1`，AI 助手应优先运行 `just`：
@@ -142,7 +172,7 @@ bque clean
 
 ---
 
-## 🛡️ 3. 构建安全两铁律（硬性红线）
+## 🛡️ 4. 构建安全两铁律（硬性红线）
 
 1. **管道卫生安全（严禁截断原生管道）**：
    - **反例（严禁）**：`cargo test 2>&1 | Select-Object -First 100` 或 `cmake --build ... | Select-Object -Last 50`（# pipeline-hygiene: ok 反例演示）。
@@ -154,7 +184,7 @@ bque clean
 
 ---
 
-## 🔧 4. 环境检测与安装指引
+## 🔧 5. 环境检测与安装指引
 
 若系统提示找不到 `bque` 命令，请引导或查阅安装指引：
 👉 详见 [references/install.md](references/install.md)。

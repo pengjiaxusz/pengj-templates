@@ -54,8 +54,6 @@ bench *ARGS:
 build FLAGS="":
     @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Build Workspace" -Cmd "cargo build {{FLAGS}}"
 
-alias b := build
-
 # ---------- 前端 ----------
 
 # 安装前端依赖
@@ -98,7 +96,3 @@ update DIR=".":
 
 # CI 全量校验：格式化检查 + 编译 + clippy + 测试 + 前端构建
 ci: fmt check clippy test frontend-build
-
-# 一键门禁
-gate: ci
-alias check-gate := gate

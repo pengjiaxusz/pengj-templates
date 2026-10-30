@@ -11,6 +11,8 @@
 | `cargo test --workspace` | `just test` | `bque run` | `Idle` |
 | `pnpm build` | `just build` 或 `bque-runner.ps1 -Cmd "pnpm build"` | `bque run` | `Idle` |
 | `cmake --build target/debug` | `just build` | `bque run` | `Idle` |
+| `ninja -C target/debug <目标>` | `just test-build <目标>` 或 `bque-runner.ps1 -Cmd "ninja ..."` | `bque run` | `Idle` |
+| `ctest --output-on-failure` | `just test` 或 `run-tests.ps1` | `bque run` | `Idle` |
 | `cargo bench` | `just bench` | `bque bench` | `High`（自动秒级挂起后台编译） |
 | `pnpm bench` | `just bench` | `bque bench` | `High`（自动秒级挂起后台编译） |
 | `cargo fmt` | `cargo fmt`（直接运行） | **旁路直跑** | 前台默认优先级 |
