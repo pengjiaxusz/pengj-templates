@@ -107,6 +107,8 @@
   1. 优先查阅对应技能的 `SKILL.md`，在托管块外「项目专属区」以声明式配置解决（如 `集成分支登记`、`忽略未追踪路径正则` 或项目门禁）；
   2. 若模板缺乏相应扩展能力，应向上游 `pengj-templates` 反馈或进行通用化改造，严禁在下游私自保留本地 hack；
   3. 随时运行 `cargo run -p pengj-templates-cli -- audit --dir . --diff` 巡检模板对齐状态，确保违规漂移清零。
+- **全局跨工作树编译排队与优先级降低**：所有重型构建、检查与测试统一接入 bque 全局调度引擎（`Local\Bque_Global_Build_Lock` 排队互斥锁），默认将进程树置于 `Idle` 优先级，让路前台交互；跑分与性能测试通过 `bque bench`（或 `just bench`）自动挂起后台编译以提供纯净 CPU 环境。排队自省用 `just queue-status`，异常用 `just queue-clean`。
+- **构建管道安全规范**：严禁在原生构建/测试命令后使用 PowerShell 管道截断（如 `| Select-Object -First 100`，会触发 Windows 4KB 匿名管道永久死锁）。
 
 ### 启用的技能
 

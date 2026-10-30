@@ -6,7 +6,8 @@
     "common",
     "rust-workspace",
     "agent",
-    "lefthook"
+    "lefthook",
+    "bque"
   ],
   "options": {
     "channel": "stable",
@@ -54,8 +55,9 @@
     ".cargo\\config.toml": "1b06aced2448d86dc3dffeba01ffac746b65059315367c4d54e5801e5af7b98d",
     ".gitattributes": "b5099197608cab315182fadad3cdf0e06ad5ab9b21f3decf8ace9e328cb9a121",
     ".gitignore": "10fc518efad9b43b5cff3dea30046f7f86a78b9aa771837d3768792ee50b0438",
-    "AGENTS.md": "c1ab772a61d04f43096f6549425939da51492273848491ccb1a6a9d2003fd750",
+    "AGENTS.md": "9d0bd0fa10569bdd8c31580b9aa2fb96442a6978965eb9604252918a944eed9b",
     "commitlint.base.js": "3067231e1559d023504d2f0a51f06b301b7ea058eac4e92a3b545d5077da471f",
-    "package.json": "7b941da931217d509f10eaa44586a3fd4ea59d8551a847bd41e0d7f1ddd2385d"
+    "package.json": "9ec6ca496a30a9e1f1778fd43bb8e367fcb9db99a57383406c31caca6a0f1e11",
+    "tools\\bque-runner.ps1": "402ea345cb761b720cb5958f15053f3f6abc4b841fc64df54b06bd531945d2df"
   }
 }

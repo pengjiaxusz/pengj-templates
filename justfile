@@ -10,25 +10,45 @@ setup:
 # 默认执行任务：格式化 + 全量编译检查
 default: fmt check
 
+# ---------- bque 全局编译排队自省 ----------
+
+# 全局跨工作树编译排队状态
+queue-status:
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Status
+
+# 应急清理全局编译锁状态
+queue-clean:
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Clean
+
+# 手动暂停后台编译（让路游戏或交互压测）
+queue-pause:
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Pause
+
+# 手动恢复后台编译
+queue-resume:
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Resume
+
+# ---------- Rust 构建与检查 ----------
+
 # 格式化 Rust 代码
 fmt:
     cargo fmt
 
-# 编译检查（全 workspace）
+# 编译检查（全 workspace，受 bque 全局排队与优先级管控）
 check:
-    cargo check --workspace
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Check Workspace" -Cmd "cargo check --workspace"
 
 # clippy 检查（全 workspace，warnings 视为错误）
 clippy:
-    cargo clippy --workspace --all-targets -- -D warnings
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Clippy Workspace" -Cmd "cargo clippy --workspace --all-targets -- -D warnings"
 
 # 运行测试
 test:
-    cargo test --workspace
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Test Workspace" -Cmd "cargo test --workspace"
 
 # 构建所有 Rust crate（支持透传参数，如 `just build -r`）
 build FLAGS="":
-    cargo build {{FLAGS}}
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Build Workspace" -Cmd "cargo build {{FLAGS}}"
 
 alias b := build
 
@@ -54,7 +74,7 @@ dev:
 
 # 打包 GUI 安装包
 tauri-build:
-    pnpm --dir crates/app tauri build
+    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Tauri Build" -Cmd "pnpm --dir crates/app tauri build"
 
 # ---------- CLI ----------
 
