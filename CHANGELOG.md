@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.42.0-beta.1...v0.43.0-beta.1) (2026-10-30)
+
+
+### Features
+
+* **templates:** 强化裸跑原生构建命令硬性禁令，清理 just 别名与非必要 gate ([4e44c3f](https://github.com/pengjiaxusz/pengj-templates/commit/4e44c3f67fcd576fe7e08ab230ac9cda8263a990))
+
 ## [0.42.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.41.0-beta.1...v0.42.0-beta.1) (2026-10-30)
 
 
