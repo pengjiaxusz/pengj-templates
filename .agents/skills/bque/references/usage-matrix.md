@@ -7,12 +7,12 @@
 | :--- | :--- | :--- | :--- |
 | `cargo build` | `just build` | `bque run` | `Idle`（编译子进程树全量继承） |
 | `cargo check --workspace` | `just check` | `bque run` | `Idle` |
-| `cargo clippy -- -D warnings` | `just clippy` 或 `bque-runner.ps1 -Cmd "..."` | `bque run` | `Idle` |
+| `cargo clippy -- -D warnings` | `just clippy` 或 `bque run -- cargo clippy ...` | `bque run` | `Idle` |
 | `cargo test --workspace` | `just test` | `bque run` | `Idle` |
-| `pnpm build` | `just build` 或 `bque-runner.ps1 -Cmd "pnpm build"` | `bque run` | `Idle` |
+| `pnpm build` | `just build` 或 `bque run -- pnpm build` | `bque run` | `Idle` |
 | `cmake --build target/debug` | `just build` | `bque run` | `Idle` |
-| `ninja -C target/debug <目标>` | `just test-build <目标>` 或 `bque-runner.ps1 -Cmd "ninja ..."` | `bque run` | `Idle` |
-| `ctest --output-on-failure` | `just test` 或 `run-tests.ps1` | `bque run` | `Idle` |
+| `ninja -C target/debug <目标>` | `just test-build <目标>` 或 `bque run -- ninja ...` | `bque run` | `Idle` |
+| `ctest --output-on-failure` | `just test` 或 `bque run -- ctest ...` | `bque run` | `Idle` |
 | `cargo bench` | `just bench` | `bque bench` | `High`（自动秒级挂起后台编译） |
 | `pnpm bench` | `just bench` | `bque bench` | `High`（自动秒级挂起后台编译） |
 | `cargo fmt` | `cargo fmt`（直接运行） | **旁路直跑** | 前台默认优先级 |
@@ -49,13 +49,13 @@ Remove-Item test_out.log -ErrorAction SilentlyContinue
 当由于断电、强制杀进程或异常崩溃导致编译锁残留时：
 ```powershell
 # 1. 检查当前持锁者与排队队列
-just queue-status   # 或 pwsh tools/bque-runner.ps1 -Status
+just queue-status   # 或 bque status
 
 # 2. 清理残留锁与孤儿等待记录
-just queue-clean    # 或 pwsh tools/bque-runner.ps1 -Clean
+just queue-clean    # 或 bque clean
 
 # 3. 手动暂停与恢复后台构建（在进行重度游戏或系统级压测时）
-just queue-pause    # 或 pwsh tools/bque-runner.ps1 -Pause
-just queue-resume   # 或 pwsh tools/bque-runner.ps1 -Resume
+just queue-pause    # 或 bque pause
+just queue-resume   # 或 bque resume
 ```
 

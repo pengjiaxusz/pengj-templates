@@ -10,24 +10,24 @@ default:
 {% if "bque" in layers %}
 # 全局跨工作树编译排队状态
 queue-status:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Status
+    @bque status
 
 # 应急清理全局编译锁状态
 queue-clean:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Clean
+    @bque clean
 
 # 手动暂停后台编译（让路游戏或交互压测）
 queue-pause:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Pause
+    @bque pause
 
 # 手动恢复后台编译
 queue-resume:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Resume
+    @bque resume
 
 # 全工作区构建
 [windows]
 build *ARGS:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Build Workspace" -Cmd "cargo build --workspace {% raw %}{{ ARGS }}{% endraw %}"
+    @bque run -- cargo build --workspace {% raw %}{{ ARGS }}{% endraw %}
 
 [unix]
 build *ARGS:
@@ -36,7 +36,7 @@ build *ARGS:
 # 全工作区检查（clippy 警告视为错误）
 [windows]
 check *ARGS:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Clippy Workspace" -Cmd "cargo clippy --workspace --all-targets --all-features -- -D warnings {% raw %}{{ ARGS }}{% endraw %}"
+    @bque run -- cargo clippy --workspace --all-targets --all-features -- -D warnings {% raw %}{{ ARGS }}{% endraw %}
 
 [unix]
 check *ARGS:
@@ -45,7 +45,7 @@ check *ARGS:
 # 全工作区测试
 [windows]
 test *ARGS:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Test Workspace" -Cmd "cargo test --workspace --all-features {% raw %}{{ ARGS }}{% endraw %}"
+    @bque run -- cargo test --workspace --all-features {% raw %}{{ ARGS }}{% endraw %}
 
 [unix]
 test *ARGS:
@@ -54,7 +54,7 @@ test *ARGS:
 # 专项基准测试（bque bench 自动挂起后台编译以提供纯净 CPU 环境）
 [windows]
 bench *ARGS:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Bench -Desc "Cargo Bench Workspace" -Cmd "cargo bench --workspace {% raw %}{{ ARGS }}{% endraw %}"
+    @bque bench -- cargo bench --workspace {% raw %}{{ ARGS }}{% endraw %}
 
 [unix]
 bench *ARGS:

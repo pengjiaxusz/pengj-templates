@@ -14,19 +14,19 @@ default: fmt check
 
 # 全局跨工作树编译排队状态
 queue-status:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Status
+    @bque status
 
 # 应急清理全局编译锁状态
 queue-clean:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Clean
+    @bque clean
 
 # 手动暂停后台编译（让路游戏或交互压测）
 queue-pause:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Pause
+    @bque pause
 
 # 手动恢复后台编译
 queue-resume:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Resume
+    @bque resume
 
 # ---------- Rust 构建与检查 ----------
 
@@ -36,23 +36,23 @@ fmt:
 
 # 编译检查（全 workspace，受 bque 全局排队与优先级管控）
 check:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Check Workspace" -Cmd "cargo check --workspace"
+    @bque run -- cargo check --workspace
 
 # clippy 检查（全 workspace，warnings 视为错误）
 clippy:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Clippy Workspace" -Cmd "cargo clippy --workspace --all-targets -- -D warnings"
+    @bque run -- cargo clippy --workspace --all-targets -- -D warnings
 
 # 运行测试
 test:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Test Workspace" -Cmd "cargo test --workspace"
+    @bque run -- cargo test --workspace
 
 # 专项基准测试（bque bench 自动挂起后台编译以提供纯净 CPU 环境）
 bench *ARGS:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Bench -Desc "Cargo Bench Workspace" -Cmd "cargo bench --workspace {{ARGS}}"
+    @bque bench -- cargo bench --workspace {{ARGS}}
 
 # 构建所有 Rust crate（支持透传参数，如 `just build -r`）
 build FLAGS="":
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Cargo Build Workspace" -Cmd "cargo build {{FLAGS}}"
+    @bque run -- cargo build {{FLAGS}}
 
 # ---------- 前端 ----------
 
@@ -62,7 +62,7 @@ frontend-install:
 
 # 前端构建（tsc + vite，受 bque 排队管控）
 frontend-build:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Frontend Build" -Cmd "pnpm --dir crates/app build"
+    @bque run -- pnpm --dir crates/app build
 
 # 前端 dev server（浏览器调试用，纯前端无 Tauri 环境）
 frontend-dev:
@@ -76,7 +76,7 @@ dev:
 
 # 打包 GUI 安装包
 tauri-build:
-    @pwsh -NoProfile -File tools/bque-runner.ps1 -Desc "Tauri Build" -Cmd "pnpm --dir crates/app tauri build"
+    @bque run -- pnpm --dir crates/app tauri build
 
 # ---------- CLI ----------
 

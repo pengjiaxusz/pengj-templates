@@ -19,13 +19,13 @@ description: >-
 
 | 场景分类 | 是否使用 bque？ | 推荐调用方式 | 选型理由 |
 | :--- | :---: | :--- | :--- |
-| **重型编译构建**（`cargo build`、`cmake`、`ninja`、`pnpm build`、`tsc`、`xtask pack`） | **必须使用** | `just build` 或 `tools/bque-runner.ps1 -Cmd "<命令>"` | 跨工作树串行排队，进程优先级降为 `Idle`，杜绝卡死前台 IDE 与桌面 |
-| **工作区检查与测试**（`cargo check`、`cargo clippy`、`cargo test`、`vitest run`） | **必须使用** | `just check` / `just test` 或 `bque-runner.ps1 -Cmd "<命令>"` | 高负载 CPU 任务，接入排队避免多工作树争抢挤爆 CPU 与磁盘 IO |
-| **性能跑分与基准测试**（`bench`、`perf`、耗时画像探针） | **必须使用（Bench 模式）** | `just bench` 或 `tools/bque-runner.ps1 -Bench -Cmd "<命令>"` | **纯净跑分保护**：秒级挂起后台正在跑的编译，提供干净 CPU 环境，结束后原位恢复 |
-| **递归/嵌套会话**（检测到 `BQUE_ACTIVE_PID` 环境变量） | **禁止使用** | 原生命令直跑（`& <命令>`） | 当前进程树已被外层 bque 纳管，直接执行避免重复排队造成嵌套死锁 |
+| **重型编译构建**（`cargo build`、`cmake`、`ninja`、`pnpm build`、`tsc`、`xtask pack`） | **必须使用** | `just build` 或 `bque run -- <命令>` | 跨工作树串行排队，进程优先级降为 `Idle`，杜绝卡死前台 IDE 与桌面 |
+| **工作区检查与测试**（`cargo check`、`cargo clippy`、`cargo test`、`vitest run`） | **必须使用** | `just check` / `just test` 或 `bque run -- <命令>` | 高负载 CPU 任务，接入排队避免多工作树争抢挤爆 CPU 与磁盘 IO |
+| **性能跑分与基准测试**（`bench`、`perf`、耗时画像探针） | **必须使用（Bench 模式）** | `just bench` 或 `bque bench -- <命令>` | **纯净跑分保护**：秒级挂起后台正在跑的编译，提供干净 CPU 环境，结束后原位恢复 |
+| **递归/嵌套会话**（检测到 `BQUE_ACTIVE_PID` 环境变量） | **禁止使用** | 原生命令直跑（`& <命令>`）或 `bque run`（原生自动穿透） | 当前进程树已被外层 bque 纳管，直接执行避免重复排队造成嵌套死锁 |
 | **轻量格式化与单文件检查**（`cargo fmt`、单文件 `prettier`/`eslint`） | **无需使用** | 原生命令直跑 | 秒级极速完成，几乎不占 CPU，无需额外排队开销 |
 | **Git 工作流操作**（`git status`、`commit`、`push`、`rebase`） | **无需使用** | 原生命令直跑 | I/O 与网络操作，绝对严禁堵在编译队列后面 |
-| **队列自省与运维**（`queue-status`、`queue-clean`） | **无需使用** | `just queue-status` / `just queue-clean` | 控制面与排查诊断工具，必须瞬时直达 |
+| **队列自省与运维**（`queue-status`、`queue-clean`） | **无需使用** | `just queue-status` / `just queue-clean` 或 `bque status` | 控制面与排查诊断工具，必须瞬时直达 |
 
 完整场景判定表与命令映射详见 [references/usage-matrix.md](references/usage-matrix.md)。
 
@@ -37,19 +37,19 @@ AI 助手**绝对严禁**在终端中直接裸跑任何底层构建或编译测�
 
 | 严禁裸跑的原生命令 (FORBIDDEN RAW) | 危害与问题 | 强制替换调用的包装形式 (MANDATORY WRAPPED FORM) |
 | :--- | :--- | :--- |
-| ❌ `ninja -C <dir> <target>` / `ninja ...` | 抢占全部 CPU 逻辑核心导致系统卡死，多工作树冲突 | `just test-build <target>` 或 `pwsh tools/bque-runner.ps1 -Cmd "ninja -C <dir> <target>"` |
-| ❌ `cmake --build <dir> ...` | 争用 CMake/Ninja 编译锁，打死前台交互 | `pwsh tools/locked-cmake-build.ps1 ...` 或 `just build` 或 `pwsh tools/bque-runner.ps1 -Cmd "cmake --build ..."` |
-| ❌ `cargo build` / `cargo test` / `cargo clippy` | 产生 cargo target/ 锁争用，打满 CPU | `just build` / `just test` / `just check` 或 `pwsh tools/bque-runner.ps1 -Cmd "cargo ..."` |
-| ❌ 原生基准测试（如 `ninja -C target/debug DuntingThumbnailPipelineBenchmark` 或 `./bench.exe`） | **致命跑分污染**：未冻结后台构建，CPU 与 L3 缓存严重受扰，测试数据失真 | `just test-bench` 或 `pwsh tools/bque-runner.ps1 -Bench -Cmd "..."`（自动挂起后台编译以提供 0% 干扰环境） |
-| ❌ `ctest ...` / `<TestBinary>.exe` | 未降级的多线程并发测试抢占 CPU 造成前台卡顿 | `just test` 或 `pwsh tools/run-tests.ps1` 或 `pwsh tools/bque-runner.ps1 -Cmd "ctest ..."` |
-| ❌ `pnpm build` / `tsc`（大型前端项目） | Node.js/V8 引擎内存与 CPU 突增卡顿 | `just build` 或 `pwsh tools/bque-runner.ps1 -Cmd "pnpm build"` |
+| ❌ `ninja -C <dir> <target>` / `ninja ...` | 抢占全部 CPU 逻辑核心导致系统卡死，多工作树冲突 | `just test-build <target>` 或 `bque run -- ninja -C <dir> <target>` |
+| ❌ `cmake --build <dir> ...` | 争用 CMake/Ninja 编译锁，打死前台交互 | `just build` 或 `bque run -- cmake --build <dir> ...` |
+| ❌ `cargo build` / `cargo test` / `cargo clippy` | 产生 cargo target/ 锁争用，打满 CPU | `just build` / `just test` / `just check` 或 `bque run -- cargo ...` |
+| ❌ 原生基准测试（如 `ninja -C target/debug DuntingThumbnailPipelineBenchmark` 或 `./bench.exe`） | **致命跑分污染**：未冻结后台构建，CPU 与 L3 缓存严重受扰，测试数据失真 | `just test-bench` 或 `bque bench -- <命令>`（自动挂起后台编译以提供 0% 干扰环境） |
+| ❌ `ctest ...` / `<TestBinary>.exe` | 未降级的多线程并发测试抢占 CPU 造成前台卡顿 | `just test` 或 `bque run -- ctest ...` |
+| ❌ `pnpm build` / `tsc`（大型前端项目） | Node.js/V8 引擎内存与 CPU 突增卡顿 | `just build` 或 `bque run -- pnpm build` |
 
 ---
 
 ## 🚀 3. 三阶梯执行规范（按优先级选用）
 
 ### 阶梯 1：统一优先使用 `just` 命令（首选）
-项目日常命令已由 `justfile` 自动接入 `bque-runner.ps1`，AI 助手应优先运行 `just`：
+项目日常命令已由 `justfile` 原生接入 `bque`，AI 助手应优先运行 `just`：
 ```powershell
 just build           # 全局排队 + Idle 优先级构建
 just check           # 全局排队代码检查
@@ -59,25 +59,26 @@ just queue-status    # 查看当前全局持锁者、排队任务与状态
 just queue-clean     # 应急清理异常残留的编译锁状态
 ```
 
-### 阶梯 2：通用代理脚本委派（当无对应 just 命令或需临时定制时）
-若项目根目录存在 `tools/bque-runner.ps1`，需执行非预设的重型命令时使用：
+### 阶梯 2：原生 CLI 直调（定制或临时任务）
+当无预设的 `just` 命令时，直接调用 `bque`：
 ```powershell
-# 常规排队任务（-Cmd 支持复杂参数与带引号指令）
-pwsh tools/bque-runner.ps1 -Desc "Custom Build" -Cmd "cargo build --release"
+# 常规排队任务（默认 Idle 优先级，原生防重入穿透）
+bque run -- cargo build --release
 
 # 纯净跑分模式（独占排他锁，秒级挂起后台所有编译任务）
-pwsh tools/bque-runner.ps1 -Bench -Desc "Custom Benchmark" -Cmd "pnpm bench"
-```
+bque bench -- pnpm bench
 
-### 阶梯 3：原生 CLI 直调（仅限无 runner 的外部目录或全局运维）
-在没有 `tools/bque-runner.ps1` 的独立外部目录执行临时排队时调用：
-```powershell
-bque run -d "Heavy Task" -p idle -- cargo build --workspace
-bque bench -d "Performance Probe" -- cargo bench
+# 状态查询与锁清理
 bque status
 bque clean
 ```
-在任何已接入的项目仓库内，**必须一律通过 `just` 或 `tools/bque-runner.ps1` 调度**，享受二进制自动探测、PATH 自动注入、防重复进队死锁与 CPU 优先级自动降级保护。
+
+### 阶梯 3：通用代理脚本垫层（向后兼容旧脚本）
+针对存量脚本或老版本自动化兼容：
+```powershell
+pwsh tools/bque-runner.ps1 -Desc "Custom Build" -Cmd "cargo build --release"
+pwsh tools/bque-runner.ps1 -Bench -Cmd "pnpm bench"
+```
 
 ---
 
