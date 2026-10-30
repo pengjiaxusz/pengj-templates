@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.40.0-beta.1...v0.40.1-beta.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **agent:** 为 bque 技能文档添加管道卫生反例豁免注释 ([810c770](https://github.com/pengjiaxusz/pengj-templates/commit/810c7702bb6e2ef0d6b15444cb925a1b0d4bf212))
+
 ## [0.40.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.39.0-beta.1...v0.40.0-beta.1) (2026-10-30)
 
 
