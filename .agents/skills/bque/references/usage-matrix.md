@@ -24,7 +24,7 @@
 在 PowerShell 中对原生控制台程序使用管道截断：
 ```powershell
 # 严禁写法（反例）：千万不要这样写！
-cargo test 2>&1 | Select-Object -First 100
+cargo test 2>&1 | Select-Object -First 100  # pipeline-hygiene: ok 反例演示
 ```
 - PowerShell 为管道创建了仅 4KB 容量的 Windows 匿名管道缓冲区。
 - `Select-Object -First 100` 在读取满足 100 行后协同结束读取，不再消费管道数据。

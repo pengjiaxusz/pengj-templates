@@ -24,7 +24,7 @@
 When running native console processes (e.g. `cmake`, `cargo`, `ninja`, `ctest`) in PowerShell:
 ```powershell
 # DANGEROUS ANTI-PATTERN: DO NOT RUN THIS!
-cargo test 2>&1 | Select-Object -First 100
+cargo test 2>&1 | Select-Object -First 100  # pipeline-hygiene: ok anti-pattern doc
 ```
 - PowerShell creates an anonymous pipe with a fixed 4KB buffer.
 - `Select-Object -First 100` stops reading once it has collected 100 objects and closes its end of the pipeline.
@@ -80,7 +80,7 @@ bque resume
 在 PowerShell 中对原生控制台程序使用管道截断：
 ```powershell
 # 严禁写法（反例）：千万不要这样写！
-cargo test 2>&1 | Select-Object -First 100
+cargo test 2>&1 | Select-Object -First 100  # pipeline-hygiene: ok 反例演示
 ```
 - PowerShell 为管道创建了仅 4KB 容量的 Windows 匿名管道缓冲区。
 - `Select-Object -First 100` 在读取满足 100 行后协同结束读取，不再消费管道数据。

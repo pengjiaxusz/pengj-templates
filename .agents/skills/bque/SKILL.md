@@ -68,7 +68,7 @@ bque clean
 ## 🛡️ 3. 构建安全两铁律（硬性红线）
 
 1. **管道卫生安全（严禁截断原生管道）**：
-   - **反例（严禁）**：`cargo test 2>&1 | Select-Object -First 100` 或 `cmake --build ... | Select-Object -Last 50`。
+   - **反例（严禁）**：`cargo test 2>&1 | Select-Object -First 100` 或 `cmake --build ... | Select-Object -Last 50`（# pipeline-hygiene: ok 反例演示）。
    - **原理解析**：原生 Windows 进程不响应 PowerShell 的协同终止信号，4KB 匿名管道缓冲区写满后触发内核级系统调用阻塞，整条调用链永久死锁（卡死 120 秒超时）。
    - **正确姿势**：必须先重定向落盘，再通过 PowerShell 读取：`cargo test *> out.log; Get-Content out.log -TotalCount 100`。
 2. **多工作树进程精准终止**：
