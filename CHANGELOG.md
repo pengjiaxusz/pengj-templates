@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.41.0-beta.1...v0.42.0-beta.1) (2026-10-30)
+
+
+### Features
+
+* **templates:** 统一 justfile 接入 gate 与 bench 任务并纳管前端构建 ([f508cb1](https://github.com/pengjiaxusz/pengj-templates/commit/f508cb172f38e910bfa8448cca0b4ce0c5da527e))
+
 ## [0.41.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.40.1-beta.1...v0.41.0-beta.1) (2026-10-30)
 
 
