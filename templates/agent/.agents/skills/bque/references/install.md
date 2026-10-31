@@ -1,85 +1,37 @@
 # bque 安装与环境配置指南 / Installation & Setup
-{% if options["skill_lang"] == "en" %}
-## One-Liner Quick Install (Recommended)
 
-Run the following command in PowerShell. It requires **no administrator privileges**, automatically downloads the latest release, installs it to your user directory, updates your `PATH`, and takes effect in the current session immediately:
+## 一键快速安装与更新（推荐）
+
+在 PowerShell 中直接运行以下命令。**无需管理员权限**，自动检测 PATH 中已有的 `bque` 实例并执行热替换原地更新，或安装至用户工具目录并配置 PATH，当前终端即刻生效：
 
 ```powershell
+# 标准一键安装/更新 (PowerShell 7+ / 默认)
 irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex
-```
 
-- **Default installation path**: `$env:LOCALAPPDATA\bque\bin\bque.exe`
-- **Features**:
-  - Automatically configures current user persistent `PATH` (no UAC elevation needed);
-  - Injects into current terminal session directly (no restart required);
-  - Non-Rust users can use it out of the box.
-
-## Manual Binary Installation (Alternative)
-
-1. Navigate to the GitHub Releases page:
-   👉 **https://github.com/pengjiaxusz/bque/releases/latest**
-2. Download `bque-windows-x86_64.zip` (or `bque.exe`).
-3. Extract `bque.exe` to a dedicated user tools directory, preferably `$env:LOCALAPPDATA\bque\bin`:
-   ```powershell
-   $targetDir = "$env:LOCALAPPDATA\bque\bin"
-   New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-   # Move extracted bque.exe into $targetDir
-   ```
-4. Add the directory to your persistent user environment variable `PATH`:
-   ```powershell
-   [Environment]::SetEnvironmentVariable(
-       "Path",
-       [Environment]::GetEnvironmentVariable("Path", "User") + ";$env:LOCALAPPDATA\bque\bin",
-       "User"
-   )
-   ```
-5. Verify installation:
-   ```powershell
-   bque --version
-   ```
-
-## Building & Installing from Source
-
-If you have the standard Rust toolchain installed:
-```powershell
-git clone https://github.com/pengjiaxusz/bque.git
-cd bque
-cargo install --path .
-```
-
-## Health Check & Verification
-
-Run the status introspection command to verify that bque kernel objects and global locks are working properly:
-```powershell
-bque status
-```
-Expected output:
-```
-============================================================
-              bque Global Build Queue & Governor            
-============================================================
-
-[1] Active Lock Holder:
-  (No active lock holder. Build queue is idle)
-
-[2] Queued Waiters (0):
-  (Queue is empty)
-============================================================
-```
-{% else %}
-## 一键快速安装（推荐）
-
-在 PowerShell 中直接运行以下命令。**无需管理员权限**，自动拉取最新 Release 二进制、安装至用户工具目录并配置 PATH，当前终端即刻生效：
-
-```powershell
-irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex
+# 兼容备用命令 (Windows PowerShell 5.1 / 代理环境)
+iex (curl.exe -sL https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | Out-String)
 ```
 
 - **默认安装路径**：`$env:LOCALAPPDATA\bque\bin\bque.exe`
 - **特性优势**：
+  - **安装即更新**：若系统已安装旧版 `bque`（包含通过 `cargo install` 安装在 `.cargo/bin` 的旧实例），脚本会自动探测并一并热更新，杜绝 PATH 优先级遮蔽问题；
   - 自动写入当前用户持久化 `PATH` 环境变量（免手动点系统属性、无需 UAC 提权）；
   - 自动注入当前 PowerShell 会话，无需重启终端；
   - 纯前端、C++ 或无 Rust/Cargo 环境的用户均可开箱即用。
+
+## CLI 自我更新（已安装 bque）
+
+已安装 `bque` 的环境下，可直接通过内置自更新命令一键检测并更新：
+
+```powershell
+# 检测是否有新版本
+bque update --check
+
+# 一键升级到最新发布版本
+bque update
+```
+
+后台在每次运行命令时会静默异步检查最新版本（每 24 小时检查一次，保存在 `$env:LOCALAPPDATA\bque\update_cache.json`），若发现新版本将在命令完成后输出温馨更新提示（不中断任何构建）。
 
 ## 手动二进制安装（离线 / 备用）
 
@@ -133,4 +85,3 @@ bque status
   (Queue is empty)
 ============================================================
 ```
-{% endif %}
