@@ -890,6 +890,24 @@ if (-not $isAllBranchesMode) {
                 }
                 $shortHash = $fullHash.Substring(0, [Math]::Min(7, $fullHash.Length))
 
+                # 补丁上下文漂移容错：若集成分支上已存在同名且内容保全的提交，则直接判定为已合入，不重复纳入待 cherry-pick 队列
+                if (-not [string]::IsNullOrWhiteSpace($cSubj)) {
+                    $landedBySubj = Invoke-Git @("log", $IntegrationBranch, "--fixed-strings", "--grep=$cSubj", "-n", "5", "--format=%H")
+                    if ($landedBySubj.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($landedBySubj.Output))) {
+                        $matched = $false
+                        foreach ($candHash in ($landedBySubj.Output -split "`r?`n")) {
+                            $ch = $candHash.Trim()
+                            if (-not [string]::IsNullOrWhiteSpace($ch) -and (Test-ContentPreserved $fullHash $ch)) {
+                                $matched = $true
+                                break
+                            }
+                        }
+                        if ($matched) {
+                            continue
+                        }
+                    }
+                }
+
                 $patchId = Get-CommitPatchId $fullHash
                 $dedupKey = if (-not [string]::IsNullOrWhiteSpace($patchId)) { $patchId } else { $fullHash }
 
