@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.45.0-beta.1...v0.45.1-beta.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **templates:** 增强 Tree-Diff Guard 补丁上下文容错与冲突分支保全度判定 ([8e94fc0](https://github.com/pengjiaxusz/pengj-templates/commit/8e94fc00eaafb1bb9448368e79f47799a23e0c86))
+
 ## [0.45.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.44.0-beta.1...v0.45.0-beta.1) (2026-10-30)
 
 
