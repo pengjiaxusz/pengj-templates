@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.45.1-beta.1...v0.45.2-beta.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **templates:** 增强分支拓扑与净贡献巡检的补丁落地上下文漂移判定 ([e16eca5](https://github.com/pengjiaxusz/pengj-templates/commit/e16eca55fabf7cf83b64b89507c6e676a6301a07))
+
 ## [0.45.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.45.0-beta.1...v0.45.1-beta.1) (2026-11-02)
 
 
