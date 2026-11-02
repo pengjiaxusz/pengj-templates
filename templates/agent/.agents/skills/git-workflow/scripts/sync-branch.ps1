@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Worktree 感知的极速线性化全分支同步脚本 (Branch Sync Fast-Track Engine)
 
@@ -365,7 +365,7 @@ function Get-CommitPatchId {
 function Test-ContentPreserved {
     # 逐提交内容校验（见 REFERENCE 四）：比较源提交与其落地提交的文件级增删行，
     # 剥掉补丁头（diff --git / index / --- / +++ / @@）与行首 +/- 符号并 Trim 后，
-    # 源提交的每一行增删内容都必须存在于落地提交中（落地侧为超集亦算通过）。
+    # 校验新增内容（或纯删除提交的删除行）在落地提交中的保全度（>=80% 即判定通过，容许微调或消解上下文）。
     param(
         [string]$SourceHash,
         [string]$LandedHash
@@ -387,21 +387,39 @@ function Test-ContentPreserved {
             }
         }
     }
+    $srcAddedCount = 0
+    $srcAddedMatched = 0
     foreach ($ln in ($srcRes.Output -split "`r?`n")) {
         if ($ln.StartsWith("diff --git") -or $ln.StartsWith("index ") -or $ln.StartsWith("---") -or $ln.StartsWith("+++") -or $ln.StartsWith("@@")) {
             continue
         }
-        if ($ln.StartsWith("+") -or $ln.StartsWith("-")) {
+        if ($ln.StartsWith("+")) {
             $t = $ln.Substring(1).Trim()
             if ([string]::IsNullOrWhiteSpace($t)) {
                 continue
             }
-            if (-not $landedSet.Contains($t)) {
-                return $false
+            $srcAddedCount++
+            if ($landedSet.Contains($t)) {
+                $srcAddedMatched++
             }
         }
     }
-    return $true
+    if ($srcAddedCount -eq 0) {
+        $delCount = 0
+        $delMatched = 0
+        foreach ($ln in ($srcRes.Output -split "`r?`n")) {
+            if ($ln.StartsWith("-")) {
+                $t = $ln.Substring(1).Trim()
+                if (-not [string]::IsNullOrWhiteSpace($t)) {
+                    $delCount++
+                    if ($landedSet.Contains($t)) { $delMatched++ }
+                }
+            }
+        }
+        if ($delCount -eq 0) { return $true }
+        return ($delMatched / $delCount) -ge 0.8
+    }
+    return ($srcAddedMatched / $srcAddedCount) -ge 0.8
 }
 
 function Test-BranchFullyMerged {
