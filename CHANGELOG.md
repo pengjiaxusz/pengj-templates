@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.46.0-beta.1...v0.47.0-beta.1) (2026-11-03)
+
+
+### Features
+
+* **mcp:** 附属产物改用托管源码缓存并支持自动浅克隆 ([483f8b2](https://github.com/pengjiaxusz/pengj-templates/commit/483f8b2632d50611c37a182d429053d5fecc9296))
+
 ## [0.46.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.45.2-beta.1...v0.46.0-beta.1) (2026-11-03)
 
 
