@@ -92,6 +92,10 @@ create NAME LAYERS="rust" OUTPUT=".":
 update DIR=".":
     cargo run -q -p pengj-templates-cli -- update --dir {{DIR}}
 
+# MCP 安装与巡检（例：just mcp list   /   just mcp add renderdoc   /   just mcp doctor）
+mcp *ARGS:
+    cargo run -q -p pengj-templates-cli -- mcp {{ARGS}}
+
 # ---------- 综合 ----------
 
 # CI 全量校验：格式化检查 + 编译 + clippy + 测试 + 前端构建

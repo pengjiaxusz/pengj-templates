@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
@@ -143,10 +144,84 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         skills: Option<Vec<String>>,
     },
+    /// 安装与配置 MCP 服务器（机器级，跨项目共用）
+    Mcp {
+        #[command(subcommand)]
+        cmd: McpCommand,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+enum McpCommand {
+    /// 列出配方目录中的服务器及其在本机的状态
+    List {
+        /// 以 JSON 数组输出（供脚本消费）
+        #[arg(long)]
+        json: bool,
+    },
+    /// 安装主体并注册到客户端全局配置
+    Add {
+        /// 服务器名（见 `mcp list`）
+        name: String,
+        /// 目标客户端，逗号分隔；默认全部（workbuddy,opencode,claude-code,agy,trae）
+        #[arg(long, value_delimiter = ',')]
+        clients: Vec<String>,
+        /// 只写配置，跳过主体安装
+        #[arg(long)]
+        skip_install: bool,
+        /// 只打印计划，不落盘
+        #[arg(long)]
+        dry_run: bool,
+        /// 附属产物的源目录（对应仓库副本的根目录）
+        #[arg(long)]
+        source_root: Option<PathBuf>,
+        /// 同时拷贝附属产物（如 RenderDoc UI 扩展）
+        #[arg(long)]
+        with_side: bool,
+        /// 同时改写第三方程序配置以启用（如 RenderDoc AlwaysLoad_Extensions）
+        #[arg(long = "enable-app")]
+        enable_app: bool,
+    },
+    /// 从所有客户端配置中移除
+    Remove {
+        name: String,
+        /// 同时卸载主体（uv tool uninstall）
+        #[arg(long)]
+        purge: bool,
+    },
+    /// 打印某客户端可粘贴的配置片段
+    Print {
+        name: String,
+        /// 客户端 id（默认 workbuddy）
+        #[arg(long)]
+        client: Option<String>,
+    },
+    /// 巡检客户端配置并做真实握手
+    Doctor {
+        /// 只检查指定服务器
+        #[arg(long)]
+        server: Option<String>,
+        /// 单步握手超时（秒）
+        #[arg(long, default_value_t = 8)]
+        timeout: u64,
+        /// 只做静态检查，不起进程
+        #[arg(long = "static-only")]
+        static_only: bool,
+        /// 就地清理死链条目
+        #[arg(long)]
+        fix: bool,
+        /// 以 JSON 输出（供脚本消费）
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    // mcp 子命令作用于机器上的客户端配置，不依赖模板目录，提前分发
+    if let Command::Mcp { cmd } = &cli.command {
+        return cmd_mcp(cmd.clone());
+    }
     let templates = load_templates(&cli.templates)?;
     match cli.command {
         Command::ListLayers { json } => cmd_list_layers(&templates, json),
@@ -254,6 +329,7 @@ fn main() -> anyhow::Result<()> {
             commit_and_push,
             skills.as_deref(),
         ),
+        Command::Mcp { .. } => unreachable!("mcp 子命令已在加载模板前分发"),
     }
 }
 
@@ -583,6 +659,269 @@ fn cmd_adopt(
     }
     for s in &report.manual_steps {
         println!("  [手动步骤] {s}");
+    }
+    Ok(())
+}
+
+// ---------------- mcp 子命令 ----------------
+
+/// 配方目录：优先 `PENGJ_MCP_CATALOG`，否则叠加 `~/.pengj-mcp/catalog`（存在才生效）
+fn load_catalog() -> anyhow::Result<pengj_mcp::Catalog> {
+    let dir = std::env::var_os("PENGJ_MCP_CATALOG")
+        .map(PathBuf::from)
+        .or_else(|| {
+            pengj_mcp::paths::config_dir()
+                .ok()
+                .map(|d| d.join("catalog"))
+        });
+    pengj_mcp::Catalog::load(dir.as_deref()).context("加载 MCP 配方目录失败")
+}
+
+fn cmd_mcp(cmd: McpCommand) -> anyhow::Result<()> {
+    let catalog = load_catalog()?;
+    match cmd {
+        McpCommand::List { json } => cmd_mcp_list(&catalog, json),
+        McpCommand::Add {
+            name,
+            clients,
+            skip_install,
+            dry_run,
+            source_root,
+            with_side,
+            enable_app,
+        } => {
+            let opts = pengj_mcp::AddOptions {
+                clients,
+                skip_install,
+                dry_run,
+                source_root,
+                with_side,
+                enable_app,
+            };
+            cmd_mcp_add(&catalog, &name, &opts)
+        }
+        McpCommand::Remove { name, purge } => cmd_mcp_remove(&catalog, &name, purge),
+        McpCommand::Print { name, client } => cmd_mcp_print(&catalog, &name, client.as_deref()),
+        McpCommand::Doctor {
+            server,
+            timeout,
+            static_only,
+            fix,
+            json,
+        } => cmd_mcp_doctor(server, timeout, static_only, fix, json),
+    }
+}
+
+fn cmd_mcp_list(catalog: &pengj_mcp::Catalog, json: bool) -> anyhow::Result<()> {
+    let list = pengj_mcp::status_list(catalog)?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&list)?);
+        return Ok(());
+    }
+    if list.is_empty() {
+        println!("(配方目录为空)");
+        return Ok(());
+    }
+    for s in list {
+        println!(
+            "{}  {} · {}",
+            s.name,
+            if s.installed {
+                "主体已就绪"
+            } else {
+                "主体未安装"
+            },
+            s.install_kind
+        );
+        println!("  {}", s.summary);
+        println!(
+            "  已注册 {} 个客户端: {}",
+            s.clients.len(),
+            pengj_mcp::join_ids(&s.clients)
+        );
+    }
+    Ok(())
+}
+
+fn cmd_mcp_add(
+    catalog: &pengj_mcp::Catalog,
+    name: &str,
+    opts: &pengj_mcp::AddOptions,
+) -> anyhow::Result<()> {
+    let report = pengj_mcp::add(catalog, name, opts)?;
+    println!("配方: {} — {}", report.name, report.summary);
+    println!("安装: {}", report.install_state);
+    println!("命令: {}", report.command);
+    if !report.skipped_clients.is_empty() {
+        println!("按配方跳过: {}", report.skipped_clients.join(", "));
+    }
+    println!("客户端:");
+    for w in &report.writes {
+        let tag = if report.dry_run {
+            "预演"
+        } else if w.changed {
+            "写入"
+        } else {
+            "未变"
+        };
+        println!("  [{tag}] {:<12} {}", w.label, w.path);
+    }
+    if !report.steps.is_empty() {
+        println!("附属动作:");
+        for s in &report.steps {
+            println!(
+                "  [{}] {} — {}",
+                if s.ok { "完成" } else { "跳过" },
+                s.what,
+                s.detail
+            );
+        }
+    }
+
+    let mut post: Vec<String> = Vec::new();
+    for w in &report.writes {
+        if let Ok(client) = pengj_mcp::find_client(&w.client) {
+            for step in client.post_steps() {
+                post.push(format!("{}: {step}", client.label()));
+            }
+        }
+    }
+    for step in &report.manual_steps {
+        post.push(step.clone());
+    }
+    if !post.is_empty() {
+        println!("待人工动作:");
+        for (i, step) in post.iter().enumerate() {
+            println!("  {}. {step}", i + 1);
+        }
+    }
+    if report.dry_run {
+        println!("（预演模式：未落盘、未安装）");
+    }
+    Ok(())
+}
+
+fn cmd_mcp_remove(catalog: &pengj_mcp::Catalog, name: &str, purge: bool) -> anyhow::Result<()> {
+    let report = pengj_mcp::remove(catalog, name, purge)?;
+    let removed: Vec<_> = report.writes.iter().filter(|w| w.changed).collect();
+    if removed.is_empty() {
+        println!("{name}: 没有在任何客户端配置里找到");
+    } else {
+        for w in removed {
+            println!("  [移除] {:<12} {}", w.label, w.path);
+        }
+    }
+    if report.purged {
+        println!("已卸载主体: {name}");
+    }
+    Ok(())
+}
+
+fn cmd_mcp_print(
+    catalog: &pengj_mcp::Catalog,
+    name: &str,
+    client: Option<&str>,
+) -> anyhow::Result<()> {
+    let client_id = client.unwrap_or("workbuddy");
+    let adapter = pengj_mcp::find_client(client_id)?;
+    let recipe = catalog.require(name)?;
+    let command = pengj_mcp::resolve_command(&recipe.run.command)
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| recipe.run.command.clone());
+    let spec = pengj_mcp::ServerSpec {
+        name: recipe.name.clone(),
+        command: Some(command),
+        args: recipe.run.args.clone(),
+        env: recipe.run.env.clone(),
+        url: recipe.run.url.clone(),
+    };
+    let entry = adapter.render(&spec)?;
+    println!("# 客户端: {}", adapter.label());
+    println!("# 文件: {}", adapter.config_path()?.display());
+    println!("{}", serde_json::to_string_pretty(&entry)?);
+    Ok(())
+}
+
+fn cmd_mcp_doctor(
+    server: Option<String>,
+    timeout: u64,
+    static_only: bool,
+    fix: bool,
+    json: bool,
+) -> anyhow::Result<()> {
+    let opts = pengj_mcp::DoctorOptions {
+        server,
+        timeout: Duration::from_secs(timeout.max(1)),
+        static_only,
+        fix,
+    };
+    let report = pengj_mcp::doctor(&opts)?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+        if report.problems() > 0 {
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
+    if report.checks.is_empty() {
+        println!("(没有找到任何 MCP 配置条目)");
+    } else {
+        println!("== 客户端配置 ==");
+        for c in &report.checks {
+            let name = if c.name == "-" {
+                "(整份配置)"
+            } else {
+                c.name.as_str()
+            };
+            println!(
+                "  [{}] {:<12} {:<14} {}",
+                c.status.label(),
+                c.client,
+                name,
+                c.detail
+            );
+        }
+    }
+    if !report.fixed.is_empty() {
+        println!("已清理死链: {}", report.fixed.join(", "));
+    }
+    if !report.handshakes.is_empty() {
+        println!("== 握手校验 ==");
+        for h in &report.handshakes {
+            if h.ok {
+                let version = h.server_version.clone().unwrap_or_default();
+                println!(
+                    "  [正常] {} — {} {} · {} 个工具 · {}ms",
+                    h.target,
+                    h.server_name.as_deref().unwrap_or("?"),
+                    version,
+                    h.tools,
+                    h.elapsed_ms
+                );
+                if let Some(note) = &h.note {
+                    println!("         注意: {note}");
+                }
+            } else {
+                println!(
+                    "  [失败] {} — {}",
+                    h.target,
+                    h.note.as_deref().unwrap_or("未知错误")
+                );
+            }
+        }
+    }
+
+    let problems = report.problems();
+    println!(
+        "统计: {} 条配置, {} 个握手, {} 个问题",
+        report.checks.len(),
+        report.handshakes.len(),
+        problems
+    );
+    if problems > 0 {
+        std::process::exit(1);
     }
     Ok(())
 }
