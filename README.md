@@ -51,11 +51,12 @@ cargo run -p pengj-templates-cli -- mcp list                      # 配方 + 本
 cargo run -p pengj-templates-cli -- mcp add renderdoc --dry-run    # 预演：只打印计划
 cargo run -p pengj-templates-cli -- mcp add renderdoc              # 装主体并注册到全部客户端
 cargo run -p pengj-templates-cli -- mcp add renderdoc --clients workbuddy,opencode
-cargo run -p pengj-templates-cli -- mcp add renderdoc --with-side --enable-app --source-root <仓库副本>
+cargo run -p pengj-templates-cli -- mcp add renderdoc --with-side --enable-app   # 扩展自动浅克隆到托管缓存
+cargo run -p pengj-templates-cli -- mcp add renderdoc --with-side --source-root <已有仓库副本>
 cargo run -p pengj-templates-cli -- mcp doctor                     # 静态查死链 + 真实 stdio 握手
 cargo run -p pengj-templates-cli -- mcp doctor --fix               # 就地清理死链
 cargo run -p pengj-templates-cli -- mcp print renderdoc --client trae   # 出片段，手工粘贴兜底
-cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注册 / 连主体一起卸
+cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注册 / 连主体与源码缓存一起卸
 ```
 
 已内置的客户端适配（`--clients` 的取值）：
@@ -74,6 +75,7 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
 - **命令写绝对路径**：GUI 客户端 spawn 子进程时 PATH 往往不全，裸命令名会挂；`add` 会先解析成绝对路径再写入。
 - **注册 ≠ 生效**：多数客户端需要重启或点确认，`add` 会把「待人工动作」逐条列出，`doctor` 事后复查。
 - **配方可外置**：内置配方编在二进制里，`~/.pengj-mcp/catalog/*.toml`（或 `PENGJ_MCP_CATALOG`）按同名覆盖，改配方不必重编译。配方字段见 `crates/mcp/catalog/renderdoc.toml`。
+- **磁盘落点只有三处**：主体在 `uv tool` 的安装目录（`uv tool uninstall` 可卸）、源码缓存在 `~/.pengj-mcp/src/<name>`（仅「wheel 不含附属产物」的项目需要，`remove --purge` 一并删除）、状态在 `~/.pengj-mcp/manifest.json`；不写工作目录，也不建临时 venv。
 - **已装状态**：`~/.pengj-mcp/manifest.json` 记录来源与写进了哪些客户端，`remove` / `doctor` 据此判断。
 
 ## CI / Release
