@@ -30,20 +30,36 @@ const APPDATA = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming');
 const 配方 = {
   'renderdoc-mcp': {
     类型: 'uv-git',
-    源: 'git+https://github.com/halby24/RenderDocMCP',
+    // 私有 fork：上游扩展硬依赖 PySide2，而自编译的 RenderDoc 常常 PYSIDE2_ENABLED=0，
+    // 装上游会在扩展导入阶段就失败。fork 里补了无 PySide2 时的线程轮询回退。
+    源: 'git+https://github.com/pengjiaxusz/RenderDocMCP',
     入口: 'renderdoc-mcp',
     // 全局配置里用的名字与 pengj-templates 的 mcp 子命令保持一致，避免同名服务器写两份
     全局名: 'renderdoc',
-    扩展: {
-      从: 'renderdoc_extension',
-      到: join(APPDATA, 'qrenderdoc', 'extensions', 'renderdoc_mcp_bridge'),
-    },
-    启用: {
-      文件: join(APPDATA, 'qrenderdoc', 'UI.config'),
-      键: 'AlwaysLoad_Extensions',
-      值: 'renderdoc_mcp_bridge',
-    },
-    要求: ['qrenderdoc'],
+    // 官方构建与自编译改名版各读自己的 AppData 目录，两边都要落一份
+    扩展: [
+      {
+        从: 'renderdoc_extension',
+        到: join(APPDATA, 'qrenderdoc', 'extensions', 'renderdoc_mcp_bridge'),
+        启用: {
+          文件: join(APPDATA, 'qrenderdoc', 'UI.config'),
+          键: 'AlwaysLoad_Extensions',
+          值: 'renderdoc_mcp_bridge',
+        },
+      },
+      {
+        从: 'renderdoc_extension',
+        到: join(APPDATA, 'qchahurdd', 'extensions', 'renderdoc_mcp_bridge'),
+        // 没装过自编译版的机器不要凭空建目录
+        仅当存在: join(APPDATA, 'qchahurdd'),
+        启用: {
+          文件: join(APPDATA, 'qchahurdd', 'UI.config'),
+          键: 'AlwaysLoad_Extensions',
+          值: 'renderdoc_mcp_bridge',
+        },
+      },
+    ],
+    要求: ['qrenderdoc', 'qchahurdd'],
   },
   'playwright-mcp': {
     类型: 'none',
@@ -144,6 +160,37 @@ function 取配方(名) {
   return 本地配方表()[名] ?? 配方[名];
 }
 
+/** 配方字段允许「单值」或「数组」两种写法，统一取列表 */
+function 取列表(值) {
+  if (!值) return [];
+  return Array.isArray(值) ? 值 : [值];
+}
+
+/**
+ * 展开配方的「扩展」目标。
+ *
+ * 同一个服务器可能同时要装到多个宿主构建下：官方 `qrenderdoc` 与自编译改名版（如
+ * `qchahurdd`）各读自己的 `%APPDATA%\<构建名>` 目录，装错一处就静默不加载。
+ * 因此 `扩展` 允许写成数组，数组项可各自带 `启用`；不带时继承顶层 `启用`。
+ * `仅当存在` 指定一个路径，只有它存在时才处理该目标——避免给没装该构建的机器凭空建目录。
+ */
+function 扩展目标(项) {
+  return 取列表(项?.扩展).map((目标) => ({ ...目标, 启用: 目标.启用 ?? 项.启用 ?? null }));
+}
+
+/** 只在「宿主构建确实存在」的目标上生效 */
+function 适用目标(目标) {
+  return 目标.filter((项) => !项.仅当存在 || existsSync(展开路径(项.仅当存在)));
+}
+
+/** 该目标是否已在宿主的 AlwaysLoad_Extensions 里；文件不存在时返回 null（无从判断） */
+function 读取启用(启用) {
+  if (!启用) return null;
+  const 文件 = 展开路径(启用.文件);
+  if (!existsSync(文件)) return null;
+  return (读JSON(文件)[启用.键] ?? []).includes(启用.值);
+}
+
 /** 配方里的路径支持 `~`、`%VAR%`、`$VAR`，与项目其它配置写法保持一致 */
 function 展开路径(值) {
   if (!值) return 值;
@@ -226,6 +273,21 @@ function uv已装(入口) {
     .includes(入口);
 }
 
+/** 配方里的 git 源统一成裸 URL：去掉 `git+` 前缀与 `#ref` 片段 */
+function 规范化源(源) {
+  return 源 ? 源.replace(/^git\+/, '').split('#')[0] : null;
+}
+
+/** 读 uv 的安装记录，返回当初装进去的 git 源；读不到返回 null（无从判断） */
+function uv已装源(入口) {
+  const 目录 = spawnSync('uv', ['tool', 'dir'], { encoding: 'utf8' }).stdout?.trim();
+  if (!目录) return null;
+  const 记录 = join(目录, 入口, 'uv-receipt.toml');
+  if (!existsSync(记录)) return null;
+  const 命中 = readFileSync(记录, 'utf8').match(/git\s*=\s*"([^"]+)"/);
+  return 命中 ? 规范化源(命中[1]) : null;
+}
+
 /** .cmd/.bat 必须经 cmd.exe 启动，POSIX 直接执行 */
 function 启动参数(命令路径, 参数列表) {
   if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(命令路径)) {
@@ -276,7 +338,9 @@ function 执行同步(声明, 落盘) {
 
 // ---------- 握手：真实 stdio JSON-RPC ----------
 
-function 握手(命令路径, 参数列表, 超时毫秒 = 8000) {
+// 超时给足 20s：刚装完的 uv tool 首次冷启动要建字节码缓存，Windows 上还有杀软扫新 exe，
+// 实测首次可能 8s+，第二次不到 1.5s——按 8s 判会误报「握手超时」。
+function 握手(命令路径, 参数列表, 超时毫秒 = 20000) {
   return new Promise((完成) => {
     const 起点 = Date.now();
     const { 命令: 可执行, 参数: 实参 } = 启动参数(命令路径, 参数列表);
@@ -386,14 +450,13 @@ function 握手(命令路径, 参数列表, 超时毫秒 = 8000) {
 // ---------- doctor ----------
 
 function 检查扩展(名) {
-  const 项 = 取配方(名);
-  if (!项?.扩展) return null;
-  const 缺失 = !existsSync(展开路径(项.扩展.到));
-  const 配置文件 = 项.启用 ? 展开路径(项.启用.文件) : null;
-  const 配置 = 配置文件 && existsSync(配置文件)
-    ? (读JSON(配置文件)[项.启用.键] ?? []).includes(项.启用.值)
-    : null;
-  return { 缺失, 配置 };
+  const 目标 = 适用目标(扩展目标(取配方(名)));
+  if (目标.length === 0) return null;
+  return 目标.map((项) => ({
+    到: 展开路径(项.到),
+    缺失: !existsSync(展开路径(项.到)),
+    配置: 读取启用(项.启用),
+  }));
 }
 
 async function 体检() {
@@ -443,14 +506,16 @@ async function 体检() {
   for (const [名] of 服务列表) {
     const 检查 = 检查扩展(名);
     if (!检查) continue;
-    if (检查.缺失) {
-      console.log(`  [待装] ${名} 的附属产物（扩展）未就位`);
-      问题.push(`${名} 的扩展未安装，先跑 install`);
-    } else if (检查.配置 === false) {
-      console.log(`  [待装] ${名} 的扩展已拷贝，但宿主程序未启用（AlwaysLoad_Extensions）`);
-      问题.push(`${名} 的扩展未被宿主程序加载，跑 install 或手动启用`);
-    } else {
-      console.log(`  [正常] ${名} 的扩展已就位${检查.配置 ? '，宿主程序已启用' : ''}`);
+    for (const 项 of 检查) {
+      if (项.缺失) {
+        console.log(`  [待装] ${名} 的扩展未就位（${项.到}）`);
+        问题.push(`${名} 的扩展未安装（${项.到}），先跑 install`);
+      } else if (项.配置 === false) {
+        console.log(`  [待装] ${名} 的扩展已拷贝，但宿主未启用（AlwaysLoad_Extensions · ${项.到}）`);
+        问题.push(`${名} 的扩展未被宿主程序加载（${项.到}），跑 install 或手动启用`);
+      } else {
+        console.log(`  [正常] ${名} 的扩展已就位（${项.到}）${项.配置 ? '，宿主已启用' : ''}`);
+      }
     }
   }
 
@@ -467,13 +532,23 @@ async function 体检() {
 
 function 确保源码(名, 项) {
   const 缓存 = join(源码缓存, 名.replace(/-mcp$/, ''));
-  if (existsSync(join(缓存, 项.扩展.从))) return 缓存;
+  const 从 = 扩展目标(项)[0]?.从;
 
   const 源 = 项.源?.replace(/^git\+/, '').split('#')[0];
   if (!源) {
     console.log(`[mcp] ${名}: 缺少源码且没有 git 源，跳过扩展`);
     return null;
   }
+
+  if (从 && existsSync(join(缓存, 从))) {
+    // 源改过（例如从上游换成自己的 fork）时不能复用旧克隆，否则装出来的还是旧扩展
+    const 现有 = spawnSync('git', ['-C', 缓存, 'remote', 'get-url', 'origin'], { encoding: 'utf8' });
+    const 现有源 = (现有.stdout ?? '').trim();
+    if (现有源 === 源) return 缓存;
+    console.log(`[mcp] ${名}: 源码缓存指向 ${现有源 || '未知'}，与配方不符，重新克隆`);
+    rmSync(缓存, { recursive: true, force: true });
+  }
+
   console.log(`[mcp] 克隆源码 → ${缓存}`);
   mkdirSync(dirname(缓存), { recursive: true });
   const r = spawnSync('git', ['clone', '--depth', '1', 源, 缓存], { stdio: 'inherit' });
@@ -538,10 +613,18 @@ function 安装(目标名) {
 
     // 1) 主体
     if (项.类型 === 'uv-git') {
-      if (uv已装(项.入口)) {
+      // 源改过（上游 → 自有 fork）时必须重装，否则 tool 里还是旧代码
+      const 期望源 = 规范化源(项.源);
+      const 已装源 = uv已装源(项.入口);
+      const 源不符 = Boolean(期望源 && 已装源 && 已装源 !== 期望源);
+      if (uv已装(项.入口) && !源不符) {
         console.log(`[mcp] ${名}: 主体已存在（uv tool）`);
       } else {
-        console.log(`[mcp] ${名}: 安装主体（uv tool install）...`);
+        if (源不符) {
+          console.log(`[mcp] ${名}: 已装源 ${已装源} 与配方不符，重装主体...`);
+        } else {
+          console.log(`[mcp] ${名}: 安装主体（uv tool install）...`);
+        }
         const r = spawnSync(
           'uv',
           ['tool', 'install', '--force', '--from', 项.源, 项.入口],
@@ -556,36 +639,42 @@ function 安装(目标名) {
     }
 
     // 2) 附属产物
-    if (项.扩展) {
+    const 目标列表 = 适用目标(扩展目标(项));
+    if (目标列表.length > 0) {
       const 缓存 = 确保源码(名, 项);
-      const 源目录 = 缓存 && join(缓存, 项.扩展.从);
-      const 目标 = 展开路径(项.扩展.到);
-      if (源目录 && existsSync(源目录)) {
-        if (existsSync(目标)) rmSync(目标, { recursive: true, force: true });
-        cpSync(源目录, 目标, {
+      for (const 目标 of 目标列表) {
+        const 源目录 = 缓存 && join(缓存, 目标.从);
+        const 目标路径 = 展开路径(目标.到);
+        if (!源目录 || !existsSync(源目录)) continue;
+        if (existsSync(目标路径)) rmSync(目标路径, { recursive: true, force: true });
+        mkdirSync(dirname(目标路径), { recursive: true });
+        cpSync(源目录, 目标路径, {
           recursive: true,
           filter: (从) => !从.includes('__pycache__') && !从.endsWith('.pyc'),
         });
-        console.log(`[mcp] ${名}: 扩展 → ${目标}`);
+        console.log(`[mcp] ${名}: 扩展 → ${目标路径}`);
       }
     }
 
     // 3) 宿主程序启用
-    const 启用文件 = 项.启用 ? 展开路径(项.启用.文件) : null;
-    if (项.启用 && existsSync(启用文件)) {
+    for (const 目标 of 目标列表) {
+      const 启用 = 目标.启用;
+      if (!启用) continue;
+      const 启用文件 = 展开路径(启用.文件);
+      if (!existsSync(启用文件)) continue;
       if (宿主在运行(项.要求)) {
         console.log(`[mcp] ${名}: ${项.要求.join(',')} 正在运行，退出后会覆盖配置，跳过启用`);
+        continue;
+      }
+      const 配置 = 读JSON(启用文件);
+      const 表 = Array.isArray(配置[启用.键]) ? 配置[启用.键] : [];
+      if (!表.includes(启用.值)) {
+        表.push(启用.值);
+        配置[启用.键] = 表;
+        写JSON(启用文件, 配置);
+        console.log(`[mcp] ${名}: 已写入 ${启用.键} += ${启用.值}（${启用文件}）`);
       } else {
-        const 配置 = 读JSON(启用文件);
-        const 表 = Array.isArray(配置[项.启用.键]) ? 配置[项.启用.键] : [];
-        if (!表.includes(项.启用.值)) {
-          表.push(项.启用.值);
-          配置[项.启用.键] = 表;
-          写JSON(启用文件, 配置);
-          console.log(`[mcp] ${名}: 已写入 ${项.启用.键} += ${项.启用.值}`);
-        } else {
-          console.log(`[mcp] ${名}: 宿主程序已启用扩展`);
-        }
+        console.log(`[mcp] ${名}: 宿主程序已启用扩展（${启用文件}）`);
       }
     }
 
@@ -636,4 +725,3 @@ Promise.resolve(分发[命令](指定名))
     console.error(`[mcp] 执行失败: ${错误.message}`);
     process.exit(1);
   });
-

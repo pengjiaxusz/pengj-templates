@@ -50,8 +50,8 @@
     ".agents\\skills\\git-workflow\\scripts\\show-branch-topology.ps1": "46bd18806db1604dab833ddf8da6810a7b6f7d5b76f85aa0d7942b8ca454ce66",
     ".agents\\skills\\git-workflow\\scripts\\sync-branch.ps1": "64d824c6b44f0f3029ac9f1fd78214cc4f07e607b014ab2e175f71edb54c9da7",
     ".agents\\skills\\grill-me\\SKILL.md": "b0efcedde0094c2ef8540027142f2897fc640f734978003d39c72d0cdaad0a44",
-    ".agents\\skills\\mcp-bootstrap\\SKILL.md": "364970ef3a641f6546a560e35442edf4b337109ef086b8bedfcefa757d1c4b56",
-    ".agents\\skills\\mcp-bootstrap\\scripts\\ensure-mcp.mjs": "171b82019730849daa6ed9f0e251d8c5d59b2be5f86f390dc576ddc57f0fd909",
+    ".agents\\skills\\mcp-bootstrap\\SKILL.md": "c8f949e1a1bc5bdbe505cf994b70070d788cf0b5b24f2e814568a977d9a95e1f",
+    ".agents\\skills\\mcp-bootstrap\\scripts\\ensure-mcp.mjs": "fcd380848356c3b37434cddbb0bf0c5270f7cac9209febde57d1a3d8b0674a02",
     ".agents\\skills\\subrepo-sync\\EXAMPLES.md": "cfc92b50bd39127855be86b9eb12308fcb5251cd32045debe50d20bf7b097daf",
     ".agents\\skills\\subrepo-sync\\REFERENCE.md": "06377e09923e924ad8618cb055e05679126111cc4256c9ffb2b24ce1fbdbeec7",
     ".agents\\skills\\subrepo-sync\\SKILL.md": "5d79009705613f1d8e6bf698fb24032eaf248c8e45611cbd684cca6801e38f8f",
@@ -64,6 +64,6 @@
     ".gitignore": "10fc518efad9b43b5cff3dea30046f7f86a78b9aa771837d3768792ee50b0438",
     "AGENTS.md": "b771d3eba5d86f6f4f07b893218b2c51f4127fef65e1563c5569da362b564323",
     "commitlint.base.js": "3067231e1559d023504d2f0a51f06b301b7ea058eac4e92a3b545d5077da471f",
-    "package.json": "5375d379cff42cc56c6ee933ec6820205ad789a4b75dd01d7c101ef92ff8a3e9"
+    "package.json": "f2cde483d30c226df001da83f66528529d0056f9e5b8aea8ec57e585950cc1d0"
   }
 }
