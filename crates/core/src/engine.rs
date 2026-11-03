@@ -241,15 +241,55 @@ const ACCUMULATE_FILES: &[&str] = &[".gitignore", ".gitattributes"];
 /// 未在列表中的技能整目录跳过（选项缺失时包含全部，向后兼容）。
 const SKILLS_ROOT: &str = ".agents/skills";
 
+/// 基线技能：只要选用 agent 层就始终随项目生成，不因用户勾选而缺失。
+///
+/// 这些技能承担的是「项目离开模板仓库后仍能自举」的能力，一旦缺失，
+/// 项目只能回头找外部工具才能完成校验，与技能本身的设计目标相悖。
+/// 显式传空技能列表（`skills: []`）视为完全不要技能，此时不注入基线。
+const BASELINE_SKILLS: &[&str] = &["mcp-bootstrap"];
+
 /// 从选项解析选中的技能集合；`None` 表示未指定（包含全部技能，向后兼容）
 fn selected_skills(options: &BTreeMap<String, serde_json::Value>) -> Option<BTreeSet<String>> {
     let arr = options.get("skills")?.as_array()?;
-    Some(
-        arr.iter()
-            .filter_map(|x| x.as_str())
-            .map(|s| s.to_string())
-            .collect(),
-    )
+    let mut set: BTreeSet<String> = arr
+        .iter()
+        .filter_map(|x| x.as_str())
+        .map(|s| s.to_string())
+        .collect();
+    // 显式空列表 = 明确不要任何技能；其余情况补上基线技能
+    if !set.is_empty() {
+        set.extend(BASELINE_SKILLS.iter().map(|s| s.to_string()));
+    }
+    Some(set)
+}
+
+/// 把基线技能并入已持久化的 `options["skills"]`，保证 AGENTS.md 的技能清单
+/// 与后续更新使用同一份集合。选项缺失（等于全部技能）时无需处理。
+fn ensure_baseline_skills(
+    options: &mut BTreeMap<String, serde_json::Value>,
+    available: &BTreeSet<String>,
+) {
+    let Some(arr) = options.get_mut("skills").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    if arr.is_empty() {
+        return;
+    }
+    let mut set: BTreeSet<String> = arr
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    for name in BASELINE_SKILLS {
+        if available.contains(*name) {
+            set.insert((*name).to_string());
+        }
+    }
+    if set.len() != arr.len() {
+        *arr = set
+            .into_iter()
+            .map(serde_json::Value::String)
+            .collect::<Vec<_>>();
+    }
 }
 
 /// 判断相对路径是否属于 `.agents/skills/<name>/...`，是则返回技能名。
@@ -783,15 +823,17 @@ pub fn generate(
     }
 
     let mut options = options;
-    if ordered.iter().any(|l| l == "agent") && !options.contains_key("skills") {
+    if ordered.iter().any(|l| l == "agent") {
         let all_skills: Vec<String> = templates
             .list_skills()?
             .into_iter()
             .map(|s| s.name)
             .collect();
-        if !all_skills.is_empty() {
+        if !options.contains_key("skills") && !all_skills.is_empty() {
             options.insert("skills".to_string(), serde_json::json!(all_skills));
         }
+        let available: BTreeSet<String> = all_skills.into_iter().collect();
+        ensure_baseline_skills(&mut options, &available);
     }
 
     let ctx = RenderContext::new(project_name, ordered.clone(), options.clone());
@@ -1089,15 +1131,17 @@ pub fn adopt_project(
 
     let ordered = templates.resolve_layers(selected)?;
     let mut options = options;
-    if ordered.iter().any(|l| l == "agent") && !options.contains_key("skills") {
+    if ordered.iter().any(|l| l == "agent") {
         let all_skills: Vec<String> = templates
             .list_skills()?
             .into_iter()
             .map(|s| s.name)
             .collect();
-        if !all_skills.is_empty() {
+        if !options.contains_key("skills") && !all_skills.is_empty() {
             options.insert("skills".to_string(), serde_json::json!(all_skills));
         }
+        let available: BTreeSet<String> = all_skills.into_iter().collect();
+        ensure_baseline_skills(&mut options, &available);
     }
 
     let ctx = RenderContext::new(&project_name, ordered.clone(), options.clone());
@@ -1462,6 +1506,8 @@ pub fn update_project_with_options(
         } else {
             migrate_skills_option(&mut manifest.options, &available_skills);
         }
+        // 新模板加进来的基线技能要在存量项目里补齐，否则更新永远带不上
+        ensure_baseline_skills(&mut manifest.options, &available_skills);
     }
     let ctx = RenderContext::new(
         &manifest.project_name,
@@ -2893,6 +2939,42 @@ mod tests {
         );
         let set = selected_skills(&opts).unwrap();
         assert!(set.contains("commit") && set.contains("caveman") && !set.contains("grill-me"));
+        assert!(
+            set.contains("mcp-bootstrap"),
+            "基线技能应随任意非空技能选择一并生效"
+        );
+    }
+
+    #[test]
+    fn baseline_skill_respects_explicit_empty_selection() {
+        let mut opts = BTreeMap::new();
+        opts.insert("skills".to_string(), serde_json::json!([]));
+        assert_eq!(
+            selected_skills(&opts),
+            Some(BTreeSet::new()),
+            "显式空列表视为完全不要技能，不注入基线"
+        );
+    }
+
+    #[test]
+    fn ensure_baseline_skills_updates_persisted_option() {
+        let available: BTreeSet<String> = ["caveman", "mcp-bootstrap"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let mut opts = BTreeMap::new();
+        opts.insert("skills".to_string(), serde_json::json!(["caveman"]));
+        ensure_baseline_skills(&mut opts, &available);
+        let arr = opts["skills"].as_array().unwrap();
+        let names: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+        assert_eq!(names, vec!["caveman", "mcp-bootstrap"]);
+
+        // 模板里没有该技能时不应凭空写入
+        let empty_available = BTreeSet::new();
+        let mut opts2 = BTreeMap::new();
+        opts2.insert("skills".to_string(), serde_json::json!(["caveman"]));
+        ensure_baseline_skills(&mut opts2, &empty_available);
+        assert_eq!(opts2["skills"].as_array().unwrap().len(), 1);
     }
 
     #[test]
