@@ -28,6 +28,8 @@ Script: `.agents/skills/mcp-bootstrap/scripts/ensure-mcp.mjs` (Node ≥ 20). Run
 
 `doctor --static` skips spawning processes and only checks paths.
 
+A project without `.mcp.json` is treated as "no project-level MCP": all three commands exit 0 with a notice. Create the file only when you actually add a server.
+
 ## Single source of truth
 
 - `.mcp.json` — the declaration; commands are bare names so the file stays portable.
@@ -64,6 +66,8 @@ MCP 服务器通常按客户端分别配置，而不少客户端只读全局配�
 
 `doctor --static` 不起进程，只查配置与路径。
 
+项目没有 `.mcp.json` 时视为「不需要项目级 MCP」：三条命令都正常退出并给出提示；真要加服务器时再创建该文件。
+
 ## 单一事实源
 
 - `.mcp.json` — 声明文件，命令写裸名，保持跨机器可移植。
@@ -86,8 +90,16 @@ MCP 服务器通常按客户端分别配置，而不少客户端只读全局配�
 {% endif %}
 <!-- PENGJ_TEMPLATE_END -->
 
+{% if options["skill_lang"] == "en" %}
+## Project-specific notes (preserved across template updates)
+
+- **MCP servers enabled here**: list the `command` names and what they are for.
+- **Extra recipes**: put them in `scripts/mcp/recipes.local.json`; do not edit the managed script above.
+- **Environment notes**: host program paths, services that must be started first, etc.
+{% else %}
 ## 项目专属区（模板更新不覆盖）
 
 - **本项目启用的 MCP**：（列出 `command` 名与用途）
 - **额外配方**：写到 `scripts/mcp/recipes.local.json`，不要改上面的托管脚本
 - **已知环境差异**：（宿主程序路径、需要先启动的服务等）
+{% endif %}

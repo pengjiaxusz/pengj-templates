@@ -172,25 +172,20 @@ function 渲染(声明, 变体) {
   return `${JSON.stringify(结果, null, 2)}\n`;
 }
 
+/** 本项目是否声明了 MCP；没有声明视为「不需要项目级 MCP」，不是错误 */
+function 有声明() {
+  return existsSync(声明文件);
+}
+
 function 读声明() {
-  if (!existsSync(声明文件)) {
-    console.error(`[mcp] 缺少声明文件: ${声明文件}`);
-    console.error('[mcp] 先创建它（命令写裸名，跨机器可移植）：');
-    console.error(
-      JSON.stringify(
-        {
-          mcpServers: {
-            'renderdoc-mcp': { command: 'renderdoc-mcp', args: [] },
-            deepwiki: { url: 'https://mcp.deepwiki.com/mcp' },
-          },
-        },
-        null,
-        2,
-      ),
-    );
-    process.exit(1);
-  }
+  if (!有声明()) return { mcpServers: {} };
   return 读JSON(声明文件);
+}
+
+function 未声明提示() {
+  console.log(
+    '[mcp] 本项目未声明 .mcp.json，暂无项目级 MCP（如需启用：创建 {"mcpServers": {}} 后按需加条目）',
+  );
 }
 
 /** PATH（含 uv 的 shim 目录）里解析可执行文件；Windows 上 .exe 优先于无扩展名脚本 */
@@ -257,6 +252,10 @@ function 同步计划(声明) {
 }
 
 function 执行同步(声明, 落盘) {
+  if (!有声明()) {
+    未声明提示();
+    return 0;
+  }
   let 变更数 = 0;
   const 计划 = 同步计划(声明);
   for (const 项 of 计划) {
@@ -398,6 +397,10 @@ function 检查扩展(名) {
 }
 
 async function 体检() {
+  if (!有声明()) {
+    未声明提示();
+    return 0;
+  }
   const 声明 = 读声明();
   const 服务列表 = Object.entries(声明.mcpServers ?? {});
   const 问题 = [];
@@ -508,6 +511,10 @@ function 写全局(名, 命令路径) {
 }
 
 function 安装(目标名) {
+  if (!有声明()) {
+    未声明提示();
+    return 0;
+  }
   const 声明 = 读声明();
   const 服务列表 = Object.entries(声明.mcpServers ?? {}).filter(
     ([名]) => !目标名 || 名 === 目标名,
@@ -629,3 +636,4 @@ Promise.resolve(分发[命令](指定名))
     console.error(`[mcp] 执行失败: ${错误.message}`);
     process.exit(1);
   });
+
