@@ -22,6 +22,7 @@
       "caveman",
       "git-workflow",
       "grill-me",
+      "mcp-bootstrap",
       "subrepo-sync",
       "template-sync",
       "write-a-skill"
@@ -35,7 +36,7 @@
     ".agents\\skills\\arch-align\\references\\GENERATE-DOC.md": "7cbd5aca4240f88d8ccce5b7a8278778de791aa7152c3c912c243ec2808511df",
     ".agents\\skills\\arch-align\\references\\GENERATE-INDEX.md": "8631df67a99bc9eb96096b4edc28d050e1d63151ef6f05be545ba37fb73396bb",
     ".agents\\skills\\bque\\SKILL.md": "b81eb617efaa5745082fb1c7aff65d9e88dbb8fa66bbee7a7439600bdbc05fed",
-    ".agents\\skills\\bque\\references\\install.md": "bda147fb0f1767c8b87a232a62358bc1a1c066f11da77c482e11393406468ef1",
+    ".agents\\skills\\bque\\references\\install.md": "c75913625007bf9dee8cb9beb912cbb8313ac75dad445452425c6ae71d4067b3",
     ".agents\\skills\\bque\\references\\usage-matrix.md": "cefde6f462eafd00e256bb1632f61766dc417a17436ecd9e42e15d0893f57cbd",
     ".agents\\skills\\caveman\\SKILL.md": "56a31b9be677ca0afcc24e2273846931841534990657251e1d47815adf661914",
     ".agents\\skills\\git-workflow\\SKILL.md": "03930f86554bfc752831d0f8a8aaa6beb42e8984f8930a042e26b116c4c91362",
@@ -44,11 +45,13 @@
     ".agents\\skills\\git-workflow\\references\\non-interactive.md": "8c8d716ccbf8248faf1d47555aea057826847c41d30d07489af9ff37c865affb",
     ".agents\\skills\\git-workflow\\references\\rebase-conflict.md": "b66f40999c58af261551b7cf81ecc9dbba315396b3a157b38da9fdc6d7ffd352",
     ".agents\\skills\\git-workflow\\scripts\\align-branches.ps1": "8e5ca44e27429559c1f53166a4c1999b4277bca9292a4d393e6672f3f32cc8a9",
-    ".agents\\skills\\git-workflow\\scripts\\continue-sync.ps1": "e7655dc035323ee66f9a04b632bd24eab68be62b05a76c845c69b211ed8313b3",
+    ".agents\\skills\\git-workflow\\scripts\\continue-sync.ps1": "0088b79ec90fb701e726d0e6614a200a21ffcf3f354aa6bebebddb84f15fa28b",
     ".agents\\skills\\git-workflow\\scripts\\manage-sync-backups.ps1": "3a52a163ee8667c114e7b3459c6138dc11875fa50333473c709be7d1a1c019ed",
-    ".agents\\skills\\git-workflow\\scripts\\show-branch-topology.ps1": "a84b2df370c5fb8d6843e1648ed86a0eba0273e51a5dfc7c7d14be9874e2609e",
-    ".agents\\skills\\git-workflow\\scripts\\sync-branch.ps1": "b6775cad5b8844ff21f293c12f3304b7f64cb94e9c49a4e32711bf41c316071f",
+    ".agents\\skills\\git-workflow\\scripts\\show-branch-topology.ps1": "46bd18806db1604dab833ddf8da6810a7b6f7d5b76f85aa0d7942b8ca454ce66",
+    ".agents\\skills\\git-workflow\\scripts\\sync-branch.ps1": "64d824c6b44f0f3029ac9f1fd78214cc4f07e607b014ab2e175f71edb54c9da7",
     ".agents\\skills\\grill-me\\SKILL.md": "b0efcedde0094c2ef8540027142f2897fc640f734978003d39c72d0cdaad0a44",
+    ".agents\\skills\\mcp-bootstrap\\SKILL.md": "364970ef3a641f6546a560e35442edf4b337109ef086b8bedfcefa757d1c4b56",
+    ".agents\\skills\\mcp-bootstrap\\scripts\\ensure-mcp.mjs": "171b82019730849daa6ed9f0e251d8c5d59b2be5f86f390dc576ddc57f0fd909",
     ".agents\\skills\\subrepo-sync\\EXAMPLES.md": "cfc92b50bd39127855be86b9eb12308fcb5251cd32045debe50d20bf7b097daf",
     ".agents\\skills\\subrepo-sync\\REFERENCE.md": "06377e09923e924ad8618cb055e05679126111cc4256c9ffb2b24ce1fbdbeec7",
     ".agents\\skills\\subrepo-sync\\SKILL.md": "5d79009705613f1d8e6bf698fb24032eaf248c8e45611cbd684cca6801e38f8f",
@@ -59,8 +62,8 @@
     ".cargo\\config.toml": "1b06aced2448d86dc3dffeba01ffac746b65059315367c4d54e5801e5af7b98d",
     ".gitattributes": "b5099197608cab315182fadad3cdf0e06ad5ab9b21f3decf8ace9e328cb9a121",
     ".gitignore": "10fc518efad9b43b5cff3dea30046f7f86a78b9aa771837d3768792ee50b0438",
-    "AGENTS.md": "f9e7f6c15d3eccd78c340a7aed877283fe7cfc28acd180f237aff78c5651f19f",
+    "AGENTS.md": "b771d3eba5d86f6f4f07b893218b2c51f4127fef65e1563c5569da362b564323",
     "commitlint.base.js": "3067231e1559d023504d2f0a51f06b301b7ea058eac4e92a3b545d5077da471f",
-    "package.json": "042c1ac2e734a815e18967c80839acb340d0d29283e019b260966f1574ba7b0e"
+    "package.json": "5375d379cff42cc56c6ee933ec6820205ad789a4b75dd01d7c101ef92ff8a3e9"
   }
 }

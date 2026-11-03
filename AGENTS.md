@@ -117,6 +117,7 @@
 - `caveman` —— 见 `.agents/skills/caveman/SKILL.md`
 - `git-workflow` —— 见 `.agents/skills/git-workflow/SKILL.md`
 - `grill-me` —— 见 `.agents/skills/grill-me/SKILL.md`
+- `mcp-bootstrap` —— 见 `.agents/skills/mcp-bootstrap/SKILL.md`
 - `subrepo-sync` —— 见 `.agents/skills/subrepo-sync/SKILL.md`
 - `template-sync` —— 见 `.agents/skills/template-sync/SKILL.md`
 - `write-a-skill` —— 见 `.agents/skills/write-a-skill/SKILL.md`
