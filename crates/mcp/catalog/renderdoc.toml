@@ -1,0 +1,34 @@
+# RenderDoc MCP 配方：把 RenderDoc 捕获的图形数据喂给 AI
+#
+# 安装形态属「只发源码 + 附属产物」：服务端没有发布到 PyPI，必须从 git 源装；
+# 另外还要把 UI 扩展拷进 RenderDoc 的扩展目录，服务端才有数据可读。
+
+name = "renderdoc"
+summary = "读取 RenderDoc 捕获：draw call / shader / 纹理 / 管线状态"
+manual_steps = [
+  "RenderDoc 需 1.20+，并在其中打开一个 .rdc 捕获；否则服务能连上但工具拿不到数据",
+  "扩展装好后需重启 RenderDoc，才会加载 renderdoc_mcp_bridge",
+]
+
+[install]
+kind = "uv-git"
+package = "git+https://github.com/halby24/RenderDocMCP"
+entry = "renderdoc-mcp"
+
+[run]
+command = "renderdoc-mcp"
+
+[requires]
+apps = ["qrenderdoc"]
+
+[[side]]
+what = "RenderDoc UI 扩展"
+from = "renderdoc_extension"
+to = "$APPDATA/qrenderdoc/extensions/renderdoc_mcp_bridge"
+hint = "clone https://github.com/halby24/RenderDocMCP 后用 --source-root 指向仓库根目录，或手动拷贝该目录"
+
+[[enable]]
+what = "RenderDoc 启动时自动加载扩展"
+file = "$APPDATA/qrenderdoc/UI.config"
+key = "AlwaysLoad_Extensions"
+value = "renderdoc_mcp_bridge"

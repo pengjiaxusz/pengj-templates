@@ -1,0 +1,13 @@
+[package]
+name = "pengj-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "MCP 服务器自动安装与配置：配方目录、客户端适配、握手校验"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+thiserror.workspace = true

@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 pengj-core = { path = "../core" }
+pengj-mcp = { path = "../mcp" }
 clap.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
