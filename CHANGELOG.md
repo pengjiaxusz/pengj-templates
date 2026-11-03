@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.49.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.48.0-beta.1...v0.49.0-beta.1) (2026-11-03)
+
+
+### Features
+
+* **core:** 基线技能随 agent 层始终生成 ([ad0600c](https://github.com/pengjiaxusz/pengj-templates/commit/ad0600c0928b93604d8cfaaf3f1b0c10b0484e04))
+* **templates:** mcp-bootstrap 兼容无 MCP 声明项目并双语化专属区 ([6447caf](https://github.com/pengjiaxusz/pengj-templates/commit/6447caf024ddc22b93c5d5ff9a98585e892a30f7))
+
 ## [0.48.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.47.0-beta.1...v0.48.0-beta.1) (2026-11-03)
 
 
