@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.49.0-beta.1...v0.50.0-beta.1) (2026-11-03)
+
+
+### Features
+
+* **agent:** mcp-bootstrap 支持多宿主构建与换源重装 ([18c2f61](https://github.com/pengjiaxusz/pengj-templates/commit/18c2f61326a363758b0b30e88f9e3d39adbb3d79))
+
 ## [0.49.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.48.0-beta.1...v0.49.0-beta.1) (2026-11-03)
 
 
