@@ -11,6 +11,7 @@
 
 - **引擎**（Rust）：`crates/core` — 层发现、依赖排序、合并渲染、生成/更新、`.pengj-templates.json` manifest
 - **CLI**（Rust/clap）：`crates/cli`，命令 `pengj-templates-cli`
+- **MCP 安装**（Rust）：`crates/mcp` — 配方目录（catalog）、五家客户端适配、stdio 握手巡检；命令面挂在 `crates/cli` 的 `mcp` 子命令。它作用于**机器上的客户端配置**（`~/.workbuddy/mcp.json`、`~/.claude.json` 等），与项目模板无关，因此不依赖 `--templates`
 - **GUI**（Tauri 2 + React + Vite + TypeScript + Tailwind v4 + shadcn/ui）：`crates/app`（`src-tauri/` 为 Rust 壳，`src/` 为前端）
 - **模板**：`templates/<layer>/`，运行时读取（改模板无需重编译，直接 re-run 生效）
 
@@ -24,7 +25,7 @@
 
 > EN: Conventional commits, Chinese subject. Type/scope whitelisted (see commitlint.config.js). Pre-response commit gate: whenever files are modified and verified in a turn, commit & push must be the final tool-calling step before outputting the final reply to user. Split unrelated changes; push immediately after commit; hooks enforce format.
 
-## Rust 规范 / Rust (crates/core, crates/cli, src-tauri)
+## Rust 规范 / Rust (crates/core, crates/cli, crates/mcp, src-tauri)
 
 - 格式化：`cargo fmt`；静态检查：`cargo clippy --workspace --all-targets -- -D warnings`（warnings 视为错误）。
 - 编译检查：`cargo check --workspace`；测试：`cargo test --workspace`。

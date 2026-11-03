@@ -20,6 +20,7 @@
 ## 技术栈
 
 - **引擎**：Rust（`crates/core`）— 分层合并、渲染、diff 与更新逻辑，模板编译期嵌入二进制
+- **MCP 安装**：Rust（`crates/mcp`）— 配方目录 + 客户端适配 + 真实握手巡检，机器级（跨项目）配置
 - **GUI**：Tauri 2 + React + Vite + TypeScript + Tailwind v4 + shadcn/ui（`crates/app`）
 - **CLI**：clap（`crates/cli`，命令 `pengj-templates-cli`），与 GUI 共用同一套引擎
 
@@ -41,8 +42,41 @@ cargo run -p pengj-templates-cli -- update --dir ./my-app                # 同�
 
 **技能扩展**：每个技能 = 托管框架 + 项目专属区。`SKILL.md` 的 `PENGJ_TEMPLATE_START/END` 块内是模板框架（`update` 时原位替换），块外归项目所有、永不覆盖——提交前检查的定义、领域判定表、红线全部写在块外；可执行门禁用什么形式（任意语言脚本 / task runner / 纯清单）由项目自定并在块外声明，框架不预设实现。存量全自定义技能纳管时自动接管：模板整页（含 description）直接覆盖，原正文下移到「纳管过渡区」，双流程由用户合并去重。
 
-## CI / Release
+### MCP 安装与巡检（`mcp` 子命令）
 
+模板管的是「仓库里的文件」，MCP 管的是「机器上各客户端的配置」——同一个 MCP 服务器通常要在多个编辑器和 CLI 里各注册一次，而很多客户端只支持全局配置。`mcp` 子命令就是这一层的入口：一份配方，写到所有客户端。
+
+```bash
+cargo run -p pengj-templates-cli -- mcp list                      # 配方 + 本机安装状态
+cargo run -p pengj-templates-cli -- mcp add renderdoc --dry-run    # 预演：只打印计划
+cargo run -p pengj-templates-cli -- mcp add renderdoc              # 装主体并注册到全部客户端
+cargo run -p pengj-templates-cli -- mcp add renderdoc --clients workbuddy,opencode
+cargo run -p pengj-templates-cli -- mcp add renderdoc --with-side --enable-app --source-root <仓库副本>
+cargo run -p pengj-templates-cli -- mcp doctor                     # 静态查死链 + 真实 stdio 握手
+cargo run -p pengj-templates-cli -- mcp doctor --fix               # 就地清理死链
+cargo run -p pengj-templates-cli -- mcp print renderdoc --client trae   # 出片段，手工粘贴兜底
+cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注册 / 连主体一起卸
+```
+
+已内置的客户端适配（`--clients` 的取值）：
+
+| id | 配置位置 | 结构差异 |
+|----|----------|----------|
+| `workbuddy` | `~/.workbuddy/mcp.json` | `mcpServers`，写完需在 GUI 点一次「信任」 |
+| `opencode` | `~/.config/opencode/opencode.json` | `mcp.servers`，`command` 为**数组** |
+| `claude-code` | `~/.claude.json` | 顶层 `mcpServers`（文件含大量无关状态，原样保留） |
+| `agy` | `~/.gemini/config/mcp_config.json` | `mcpServers`，远程用 `serverUrl`（不支持 `url`） |
+| `trae` | `%APPDATA%\Trae CN\User\mcp.json` | `mcpServers`，`command` **不能含空格** |
+
+要点：
+
+- **写前备份、保留未知键、幂等**：只改目标条目，其余字段与键序不动；首次改写前留 `.pengj-mcp.bak`；重复执行不产生改动。
+- **命令写绝对路径**：GUI 客户端 spawn 子进程时 PATH 往往不全，裸命令名会挂；`add` 会先解析成绝对路径再写入。
+- **注册 ≠ 生效**：多数客户端需要重启或点确认，`add` 会把「待人工动作」逐条列出，`doctor` 事后复查。
+- **配方可外置**：内置配方编在二进制里，`~/.pengj-mcp/catalog/*.toml`（或 `PENGJ_MCP_CATALOG`）按同名覆盖，改配方不必重编译。配方字段见 `crates/mcp/catalog/renderdoc.toml`。
+- **已装状态**：`~/.pengj-mcp/manifest.json` 记录来源与写进了哪些客户端，`remove` / `doctor` 据此判断。
+
+## CI / Release
 - **CI**（`.github/workflows/ci.yml`）：
   - 按变更自动分流：改动 Rust/模板/构建配置 → 跑 `cargo fmt --check`、`clippy -D warnings`、build、test；改动前端（`crates/app/src` 等）→ 跑类型检查 + 前端构建（tsc + vite）。
   - **纯文档改动自动跳过**（根目录 `*.md`、`docs/**`、`.agents/**`），不占 CI 额度；同一分支/PR 连续推送会自动取消上一次未完成的运行。
@@ -86,6 +120,7 @@ just dev
 crates/
 ├── core/         # 引擎：层发现、依赖排序、合并渲染、生成/更新、manifest
 ├── cli/          # CLI（pengj-templates-cli）
+├── mcp/          # MCP 安装与巡检：配方目录、客户端适配、握手校验
 └── app/          # Tauri GUI（src-tauri + React 前端）
 templates/        # 层模板（common/ rust/ frontend/ ...），编译期嵌入
 ```
