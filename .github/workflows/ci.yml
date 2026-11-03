@@ -40,6 +40,7 @@ jobs:
             rust:
               - 'crates/core/**'
               - 'crates/cli/**'
+              - 'crates/mcp/**'
               - 'crates/app/src-tauri/**'
               - 'templates/**'
               - 'Cargo.toml'

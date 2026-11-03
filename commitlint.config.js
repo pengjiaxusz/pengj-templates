@@ -10,6 +10,7 @@ const pengjUserConfig = {
         'app', // Tauri GUI（crates/app）
         'cli', // CLI（crates/cli）
         'core', // Rust core 共享库（crates/core）
+        'mcp', // MCP 安装与配置（crates/mcp）
         'ci', // GitHub Actions 工作流与发布自动化（.github/workflows）
         'templates', // 模板层内容（templates/ 下各层）
         'main', // release-please 自动生成的 release 提交，保持历史兼容
