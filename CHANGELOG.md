@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.47.0-beta.1...v0.48.0-beta.1) (2026-11-03)
+
+
+### Features
+
+* **templates:** 新增 mcp-bootstrap 技能（项目内 MCP 安装与握手校验） ([069bb58](https://github.com/pengjiaxusz/pengj-templates/commit/069bb58e5a1ec0584502227f20754a9be8e50bd2))
+
 ## [0.47.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.46.0-beta.1...v0.47.0-beta.1) (2026-11-03)
 
 
