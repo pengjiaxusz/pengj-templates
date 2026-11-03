@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.46.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.45.2-beta.1...v0.46.0-beta.1) (2026-11-03)
+
+
+### Features
+
+* **cli:** 新增 mcp 子命令串联注册与巡检 ([8bfbb1e](https://github.com/pengjiaxusz/pengj-templates/commit/8bfbb1ee35dfcd3df2409c0c65acaa2082c1b8f1))
+* **mcp:** 新增 MCP 安装与巡检 crate（配方目录 / 五客户端适配 / 握手校验） ([b54b7e2](https://github.com/pengjiaxusz/pengj-templates/commit/b54b7e22f6c4b286dbb90286cb0b913b131b6620))
+
 ## [0.45.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.45.1-beta.1...v0.45.2-beta.1) (2026-11-02)
 
 
