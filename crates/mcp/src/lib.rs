@@ -24,6 +24,6 @@ pub use doctor::{doctor, CheckStatus, DoctorOptions, DoctorReport, HandshakeChec
 pub use error::{McpError, Result};
 pub use manifest::{InstalledServer, McpManifest};
 pub use registry::{
-    add, join_ids, remove, resolve_command, status_list, AddOptions, AddReport, ClientWrite,
-    RemoveReport, ServerStatus, StepResult,
+    add, join_ids, remove, resolve_command, source_cache_dir, status_list, AddOptions, AddReport,
+    ClientWrite, RemoveReport, ServerStatus, StepResult,
 };

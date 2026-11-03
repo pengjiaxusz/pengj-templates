@@ -62,6 +62,8 @@ pub struct RemoveReport {
     pub name: String,
     pub writes: Vec<ClientWrite>,
     pub purged: bool,
+    /// 是否连带删掉了托管源码缓存
+    pub cache_removed: bool,
 }
 
 /// 一条配方在本机的状态（供 `mcp list`）
@@ -120,7 +122,7 @@ pub fn add(catalog: &Catalog, name: &str, opts: &AddOptions) -> Result<AddReport
     let mut steps: Vec<StepResult> = Vec::new();
     if opts.with_side {
         for side in &recipe.side {
-            steps.push(apply_side(side, opts)?);
+            steps.push(apply_side(&recipe, side, opts)?);
         }
     }
     if opts.enable_app {
@@ -174,6 +176,7 @@ pub fn remove(catalog: &Catalog, name: &str, purge: bool) -> Result<RemoveReport
     }
 
     let mut purged = false;
+    let mut cache_removed = false;
     if purge {
         if let Some(recipe) = catalog.get(name) {
             if recipe.install.kind == InstallKind::UvGit {
@@ -183,6 +186,13 @@ pub fn remove(catalog: &Catalog, name: &str, purge: bool) -> Result<RemoveReport
                         .status()?;
                     purged = status.success();
                 }
+            }
+        }
+        // 托管源码缓存一并清掉，避免留下只读不用的仓库副本
+        if let Ok(dir) = source_cache_dir(name) {
+            if dir.is_dir() {
+                std::fs::remove_dir_all(&dir)?;
+                cache_removed = true;
             }
         }
     }
@@ -195,6 +205,7 @@ pub fn remove(catalog: &Catalog, name: &str, purge: bool) -> Result<RemoveReport
         name: name.to_string(),
         writes,
         purged,
+        cache_removed,
     })
 }
 
@@ -373,16 +384,76 @@ fn install_uv_git(package: &str, entry: &str) -> Result<()> {
     Ok(())
 }
 
+/// 托管源码缓存目录：`~/.pengj-mcp/src/<name>`
+///
+/// 只发源码的项目（wheel 里不含扩展等附属产物）需要一份仓库副本，
+/// 这份副本统一由工具托管，`remove --purge` 会一并删除。
+pub fn source_cache_dir(name: &str) -> Result<PathBuf> {
+    Ok(paths::config_dir()?.join("src").join(name))
+}
+
+/// `git+https://host/repo` → `https://host/repo`
+fn git_url(package: &str) -> Option<String> {
+    package
+        .strip_prefix("git+")
+        .map(|rest| rest.split('#').next().unwrap_or(rest).to_string())
+}
+
+fn clone_shallow(url: &str, dest: &Path) -> Result<()> {
+    if dest.exists() {
+        std::fs::remove_dir_all(dest)?;
+    }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let status = Command::new("git")
+        .args(["clone", "--depth", "1", url])
+        .arg(dest)
+        .status()?;
+    if !status.success() {
+        return Err(McpError::CommandFailed {
+            command: format!("git clone --depth 1 {url}"),
+            message: format!("退出码 {:?}", status.code()),
+        });
+    }
+    Ok(())
+}
+
 /// 拷贝附属产物（C 类：主程序之外还要落进别的程序目录）
-fn apply_side(side: &SideSpec, opts: &AddOptions) -> Result<StepResult> {
+fn apply_side(recipe: &ServerRecipe, side: &SideSpec, opts: &AddOptions) -> Result<StepResult> {
     let hint = side.hint.clone().unwrap_or_default();
-    let Some(root) = &opts.source_root else {
+
+    // 源码来源：显式 --source-root > 托管缓存 > 按配方的 git 源自动浅克隆
+    let source: Option<PathBuf> = match &opts.source_root {
+        Some(root) => Some(root.clone()),
+        None => {
+            let cache = source_cache_dir(&recipe.name)?;
+            if cache.join(&side.from).is_dir() {
+                Some(cache)
+            } else if let Some(url) = recipe.install.package.as_deref().and_then(git_url) {
+                if opts.dry_run {
+                    return Ok(StepResult {
+                        what: side.what.clone(),
+                        ok: true,
+                        detail: format!("预演：将浅克隆 {url} 到 {} 再拷贝", cache.display()),
+                    });
+                }
+                clone_shallow(&url, &cache)?;
+                Some(cache)
+            } else {
+                None
+            }
+        }
+    };
+
+    let Some(root) = source else {
         return Ok(StepResult {
             what: side.what.clone(),
             ok: false,
-            detail: format!("未提供 --source-root，跳过拷贝。{hint}"),
+            detail: format!("缺少源码（托管缓存与 --source-root 都没有）。{hint}"),
         });
     };
+
     let from = root.join(&side.from);
     let to = paths::expand(&side.to);
     if !from.is_dir() {
@@ -406,7 +477,7 @@ fn apply_side(side: &SideSpec, opts: &AddOptions) -> Result<StepResult> {
     Ok(StepResult {
         what: side.what.clone(),
         ok: true,
-        detail: format!("已拷贝到 {}", to.display()),
+        detail: format!("已拷贝到 {}（源码: {}）", to.display(), root.display()),
     })
 }
 
@@ -569,5 +640,29 @@ mod tests {
     fn 路径形式直接判存在() {
         let exe = std::env::current_exe().unwrap();
         assert!(resolve_command(&exe.display().to_string()).is_some());
+    }
+
+    #[test]
+    fn git源去掉前缀与片段() {
+        assert_eq!(
+            git_url("git+https://github.com/halby24/RenderDocMCP").as_deref(),
+            Some("https://github.com/halby24/RenderDocMCP")
+        );
+        assert_eq!(
+            git_url("git+https://github.com/a/b#main").as_deref(),
+            Some("https://github.com/a/b")
+        );
+        assert_eq!(
+            git_url("renderdoc-mcp"),
+            None,
+            "非 git 源不应被当成克隆地址"
+        );
+    }
+
+    #[test]
+    fn 源码缓存落在配置目录下() {
+        let dir = source_cache_dir("renderdoc").unwrap();
+        assert!(dir.ends_with("renderdoc"));
+        assert!(dir.to_string_lossy().contains(".pengj-mcp"));
     }
 }

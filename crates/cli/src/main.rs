@@ -814,6 +814,9 @@ fn cmd_mcp_remove(catalog: &pengj_mcp::Catalog, name: &str, purge: bool) -> anyh
     if report.purged {
         println!("已卸载主体: {name}");
     }
+    if report.cache_removed {
+        println!("已清理源码缓存: ~/.pengj-mcp/src/{name}");
+    }
     Ok(())
 }
 
