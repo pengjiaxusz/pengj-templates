@@ -2342,7 +2342,7 @@ dependencies = [
 
 [[package]]
 name = "pengj-mcp"
-version = "0.45.1-beta.1"
+version = "0.45.2-beta.1"
 dependencies = [
  "serde",
  "serde_json",
