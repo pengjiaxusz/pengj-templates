@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.0-beta.1...v0.50.1-beta.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **agent:** 修复纯删除提交在内容保全校验中误判 diff 头部导致校验失败 ([69c4663](https://github.com/pengjiaxusz/pengj-templates/commit/69c4663b3ff943393d306672339d7d4eff633002))
+
 ## [0.50.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.49.0-beta.1...v0.50.0-beta.1) (2026-11-03)
 
 
