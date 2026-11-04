@@ -184,6 +184,9 @@ function Test-ContentPreserved {
         $delCount = 0
         $delMatched = 0
         foreach ($ln in ($srcRes.Output -split "`r?`n")) {
+            if ($ln.StartsWith("diff --git") -or $ln.StartsWith("index ") -or $ln.StartsWith("---") -or $ln.StartsWith("+++") -or $ln.StartsWith("@@")) {
+                continue
+            }
             if ($ln.StartsWith("-")) {
                 $t = $ln.Substring(1).Trim()
                 if (-not [string]::IsNullOrWhiteSpace($t)) {
