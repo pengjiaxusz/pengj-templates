@@ -42,9 +42,11 @@ A project without `.mcp.json` is treated as "no project-level MCP": all three co
 2. Needs a real install or a side artifact? Add a recipe — either the built-in table in the script, or `scripts/mcp/recipes.local.json` (same shape, project-owned, survives template updates). Pure `npx` / `uvx` servers need no recipe.
 3. `sync --write` → `install` → `doctor`.
 
-Recipe fields: `类型` (`uv-git` installs via `uv tool install`; `none` means already on PATH), `源` (`git+https://…`), `入口` (executable name), `扩展` (`从` / `到`), `启用` (`文件` / `键` / `值`), `要求` (host processes that must be closed). Paths accept `~`, `%VAR%`, `$VAR`.
+Recipe fields: `type` (`uv-git` installs via `uv tool install`; `none` means already on PATH), `source` (`git+https://…`), `entry` (executable name), `globalName` (name used in global configs), `extension` (`from` / `to`), `enable` (`file` / `key` / `value`), `requires` (host processes that must be closed), `hint` (printed by `type: none`). Paths accept `~`, `%VAR%`, `$VAR`.
 
-Changing `源` is destructive in a useful way: a source cache pointing at a different URL is re-cloned, and a uv tool whose receipt says `git=…` no longer matches the recipe is reinstalled with `--force`. Switching from upstream to your own fork needs no manual cache cleanup.
+The script is written in English on purpose — identifiers, field names, comments and log lines. It is shared infrastructure executed by agents, CI and other tools, so it stays out of the bilingual doc split: Chinese explanation belongs in this `SKILL.md`, never inside the script.
+
+Changing `source` is destructive in a useful way: a source cache pointing at a different URL is re-cloned, and a uv tool whose receipt says `git=…` no longer matches the recipe is reinstalled with `--force`. Switching from upstream to your own fork needs no manual cache cleanup.
 
 Do not judge a cold start by seconds: right after install the first handshake has to write bytecode caches and get past antivirus scanning — measured 8s+ the first time and 1.2s the next, so the timeout defaults to 20s.
 
@@ -84,9 +86,11 @@ MCP 服务器通常按客户端分别配置，而不少客户端只读全局配�
 2. 需要落盘安装或附属产物时补配方 —— 脚本内置表，或项目自己的 `scripts/mcp/recipes.local.json`（结构相同、归项目所有、模板更新不覆盖）；纯 `npx` / `uvx` 型不需要配方。
 3. `sync --write` → `install` → `doctor`。
 
-配方字段：`类型`（`uv-git` 走 `uv tool install`；`none` 表示已在 PATH）、`源`（`git+https://…`）、`入口`（可执行名）、`扩展`（`从` / `到`）、`启用`（`文件` / `键` / `值`）、`要求`（必须关闭的宿主进程）。路径支持 `~`、`%VAR%`、`$VAR`。
+配方字段：`type`（`uv-git` 走 `uv tool install`；`none` 表示已在 PATH）、`source`（`git+https://…`）、`entry`（可执行名）、`globalName`（写全局配置时用的名字）、`extension`（`from` / `to`）、`enable`（`file` / `key` / `value`）、`requires`（必须关闭的宿主进程）、`hint`（`type: none` 时打印的提示）。路径支持 `~`、`%VAR%`、`$VAR`。
 
-改 `源` 是**破坏性**的：源码缓存若指向别的 URL 会被重新克隆，uv tool 的安装记录 `git=…` 与配方不符时会 `--force` 重装——从上游换成自有 fork 时不必手工清缓存。
+脚本一律用英文写：标识符、字段名、注释、日志都是英文。它是被 agent、CI 与其他工具执行的共享基础设施，不参与文档的双语分支——中文说明写在本 `SKILL.md` 里，不写进脚本。
+
+改 `source` 是**破坏性**的：源码缓存若指向别的 URL 会被重新克隆，uv tool 的安装记录 `git=…` 与配方不符时会 `--force` 重装——从上游换成自有 fork 时不必手工清缓存。
 
 冷启动别按秒级判死：刚装完的 uv tool 首次握手要建字节码缓存、还要过杀软扫描，实测首次 8s+、第二次 1.2s，所以默认超时是 20s。
 

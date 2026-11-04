@@ -70,9 +70,10 @@
 - **agent 层全部内容必须中英双语**：`templates/agent/AGENTS.md` 与每个技能 `SKILL.md`。
 - 双语写法：`{% if options["skill_lang"] == "en" %}` … `{% else %}` … `{% endif %}` 分支（zh 为默认）；frontmatter 的 `description` 也要双语分支（供 UI 勾选列表展示）。
 - 新增技能必须照抄现有技能（如 `commit`）的双语模板结构；新增语言时同步扩展 `skill_lang` 校验（CLI / GUI / core）。
-- 三个中文概念互相独立：**中文编程**（代码标识符，`chinese_programming`）、**技能用中文写**（文档语言，`skill_lang`）、**提交信息是中文**（提交信息语言，`commit_zh`）。
+- **只有文档双语，代码不双语**：`.agents/skills/*/scripts/` 下的脚本一律英文——标识符、结构化字段名（如 `type` / `source` / `entry`）、注释、日志输出都用英文，不随 `skill_lang` 变化。脚本是被 agent、CI 与其他工具执行的共享基础设施，中文标识符在编码、diff、shell 传参与工具链交接上都容易出问题；中文含义写在 `SKILL.md`，不写进脚本。存量中文脚本在改造时一并英文化（参考 `mcp-bootstrap/scripts/ensure-mcp.mjs`）。
+- 四条语言轴互相独立：**中文编程**（目标项目代码的标识符，`chinese_programming`）、**技能文档语言**（`skill_lang`）、**提交信息语言**（`commit_zh`）、**技能脚本语言**（恒为英文，无选项）。
 
-> EN: ALL agent-layer content (AGENTS.md template + every skill) must be bilingual zh/en via `{% if options["skill_lang"] == "en" %}` branches. Frontmatter descriptions too (shown in the GUI skill picker). Copy the commit skill's structure for new skills.
+> EN: ALL agent-layer content (AGENTS.md template + every skill) must be bilingual zh/en via `{% if options["skill_lang"] == "en" %}` branches. Frontmatter descriptions too (shown in the GUI skill picker). Copy the commit skill's structure for new skills. Docs are bilingual, code is not: scripts under `.agents/skills/*/scripts/` are always English (identifiers, structured field names, comments, log lines) regardless of `skill_lang` — they are shared infrastructure run by agents, CI and other tools, so Chinese identifiers hurt encoding, diffing and shell hand-off. Put the Chinese meaning in `SKILL.md`. Four independent language axes: `chinese_programming` (identifiers in the target project), `skill_lang` (docs), `commit_zh` (commit messages), and skill scripts (always English, no option).
 
 ## 验证 / Verification
 
@@ -127,6 +128,7 @@
 - 技能文件 = 托管框架 + 项目专属区：`SKILL.md` 中 `PENGJ_TEMPLATE_START/END` 托管块内是模板框架（更新时原位替换）；**块外内容归项目所有**，模板更新永不触碰。
 - 文档型定制（领域检查清单、判定表、红线）直接写在托管块外的项目专属区，保证单次读取即可获得全部约定，不要另建外部文件。
 - 可执行门禁的形式与位置由项目自定（任意语言脚本、task runner 或纯清单），并在项目专属区写明调用方式；框架不预设实现。
+- **`.agents/skills/*/scripts/` 下的脚本一律用英文写**：标识符、结构化字段名、注释、日志输出都用英文，不随 `skill_lang` 变化。脚本是被 agent、CI 与其他工具执行的共享基础设施，中文含义写进 `SKILL.md`，不要写进脚本。
 - 存量的全自定义技能（无托管块）在纳管/更新时自动接管：以模板整页为准（frontmatter 含 description 一并覆盖），原正文下移为「纳管过渡区」（暂时双流程），由用户把领域差异合并进项目专属区后删除过渡区。
 
 ## Rust 编码规范
