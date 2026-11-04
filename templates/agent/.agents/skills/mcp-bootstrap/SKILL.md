@@ -42,9 +42,7 @@ A project without `.mcp.json` is treated as "no project-level MCP": all three co
 2. Needs a real install or a side artifact? Add a recipe — either the built-in table in the script, or `scripts/mcp/recipes.local.json` (same shape, project-owned, survives template updates). Pure `npx` / `uvx` servers need no recipe.
 3. `sync --write` → `install` → `doctor`.
 
-Recipe fields: `类型` (`uv-git` installs via `uv tool install`; `none` means already on PATH), `源` (`git+https://…`), `入口` (executable name), `扩展` (`从` / `到`, optionally `仅当存在` and its own `启用`), `启用` (`文件` / `键` / `值`), `要求` (host processes that must be closed). Paths accept `~`, `%VAR%`, `$VAR`.
-
-`扩展` also accepts an array, for servers that must land in **several host builds**: stock `qrenderdoc` and a renamed custom build (e.g. `qchahurdd`) each read their own `%APPDATA%\<build name>` directory, and installing into the wrong one fails silently. An item with `仅当存在: <path>` is processed only when that build has actually been run; an item without `启用` inherits the top-level one.
+Recipe fields: `类型` (`uv-git` installs via `uv tool install`; `none` means already on PATH), `源` (`git+https://…`), `入口` (executable name), `扩展` (`从` / `到`), `启用` (`文件` / `键` / `值`), `要求` (host processes that must be closed). Paths accept `~`, `%VAR%`, `$VAR`.
 
 Changing `源` is destructive in a useful way: a source cache pointing at a different URL is re-cloned, and a uv tool whose receipt says `git=…` no longer matches the recipe is reinstalled with `--force`. Switching from upstream to your own fork needs no manual cache cleanup.
 
@@ -86,9 +84,7 @@ MCP 服务器通常按客户端分别配置，而不少客户端只读全局配�
 2. 需要落盘安装或附属产物时补配方 —— 脚本内置表，或项目自己的 `scripts/mcp/recipes.local.json`（结构相同、归项目所有、模板更新不覆盖）；纯 `npx` / `uvx` 型不需要配方。
 3. `sync --write` → `install` → `doctor`。
 
-配方字段：`类型`（`uv-git` 走 `uv tool install`；`none` 表示已在 PATH）、`源`（`git+https://…`）、`入口`（可执行名）、`扩展`（`从` / `到`，可带 `仅当存在` 与自带 `启用`）、`启用`（`文件` / `键` / `值`）、`要求`（必须关闭的宿主进程）。路径支持 `~`、`%VAR%`、`$VAR`。
-
-`扩展` 可以写成数组，用于同一个服务器要装进**多个宿主构建**的场景：官方 `qrenderdoc` 与自编译改名版（如 `qchahurdd`）各读自己的 `%APPDATA%\<构建名>` 目录，装错一处就静默不加载。数组项带 `仅当存在: <路径>` 时只有该构建确实装过才处理，避免给没装的机器凭空建目录；不带 `启用` 时继承顶层。
+配方字段：`类型`（`uv-git` 走 `uv tool install`；`none` 表示已在 PATH）、`源`（`git+https://…`）、`入口`（可执行名）、`扩展`（`从` / `到`）、`启用`（`文件` / `键` / `值`）、`要求`（必须关闭的宿主进程）。路径支持 `~`、`%VAR%`、`$VAR`。
 
 改 `源` 是**破坏性**的：源码缓存若指向别的 URL 会被重新克隆，uv tool 的安装记录 `git=…` 与配方不符时会 `--force` 重装——从上游换成自有 fork 时不必手工清缓存。
 

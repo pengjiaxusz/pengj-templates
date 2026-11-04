@@ -36,30 +36,16 @@ const 配方 = {
     入口: 'renderdoc-mcp',
     // 全局配置里用的名字与 pengj-templates 的 mcp 子命令保持一致，避免同名服务器写两份
     全局名: 'renderdoc',
-    // 官方构建与自编译改名版各读自己的 AppData 目录，两边都要落一份
-    扩展: [
-      {
-        从: 'renderdoc_extension',
-        到: join(APPDATA, 'qrenderdoc', 'extensions', 'renderdoc_mcp_bridge'),
-        启用: {
-          文件: join(APPDATA, 'qrenderdoc', 'UI.config'),
-          键: 'AlwaysLoad_Extensions',
-          值: 'renderdoc_mcp_bridge',
-        },
-      },
-      {
-        从: 'renderdoc_extension',
-        到: join(APPDATA, 'qchahurdd', 'extensions', 'renderdoc_mcp_bridge'),
-        // 没装过自编译版的机器不要凭空建目录
-        仅当存在: join(APPDATA, 'qchahurdd'),
-        启用: {
-          文件: join(APPDATA, 'qchahurdd', 'UI.config'),
-          键: 'AlwaysLoad_Extensions',
-          值: 'renderdoc_mcp_bridge',
-        },
-      },
-    ],
-    要求: ['qrenderdoc', 'qchahurdd'],
+    扩展: {
+      从: 'renderdoc_extension',
+      到: join(APPDATA, 'qrenderdoc', 'extensions', 'renderdoc_mcp_bridge'),
+    },
+    启用: {
+      文件: join(APPDATA, 'qrenderdoc', 'UI.config'),
+      键: 'AlwaysLoad_Extensions',
+      值: 'renderdoc_mcp_bridge',
+    },
+    要求: ['qrenderdoc'],
   },
   'playwright-mcp': {
     类型: 'none',
@@ -158,37 +144,6 @@ function 本地配方表() {
 
 function 取配方(名) {
   return 本地配方表()[名] ?? 配方[名];
-}
-
-/** 配方字段允许「单值」或「数组」两种写法，统一取列表 */
-function 取列表(值) {
-  if (!值) return [];
-  return Array.isArray(值) ? 值 : [值];
-}
-
-/**
- * 展开配方的「扩展」目标。
- *
- * 同一个服务器可能同时要装到多个宿主构建下：官方 `qrenderdoc` 与自编译改名版（如
- * `qchahurdd`）各读自己的 `%APPDATA%\<构建名>` 目录，装错一处就静默不加载。
- * 因此 `扩展` 允许写成数组，数组项可各自带 `启用`；不带时继承顶层 `启用`。
- * `仅当存在` 指定一个路径，只有它存在时才处理该目标——避免给没装该构建的机器凭空建目录。
- */
-function 扩展目标(项) {
-  return 取列表(项?.扩展).map((目标) => ({ ...目标, 启用: 目标.启用 ?? 项.启用 ?? null }));
-}
-
-/** 只在「宿主构建确实存在」的目标上生效 */
-function 适用目标(目标) {
-  return 目标.filter((项) => !项.仅当存在 || existsSync(展开路径(项.仅当存在)));
-}
-
-/** 该目标是否已在宿主的 AlwaysLoad_Extensions 里；文件不存在时返回 null（无从判断） */
-function 读取启用(启用) {
-  if (!启用) return null;
-  const 文件 = 展开路径(启用.文件);
-  if (!existsSync(文件)) return null;
-  return (读JSON(文件)[启用.键] ?? []).includes(启用.值);
 }
 
 /** 配方里的路径支持 `~`、`%VAR%`、`$VAR`，与项目其它配置写法保持一致 */
@@ -450,13 +405,14 @@ function 握手(命令路径, 参数列表, 超时毫秒 = 20000) {
 // ---------- doctor ----------
 
 function 检查扩展(名) {
-  const 目标 = 适用目标(扩展目标(取配方(名)));
-  if (目标.length === 0) return null;
-  return 目标.map((项) => ({
-    到: 展开路径(项.到),
-    缺失: !existsSync(展开路径(项.到)),
-    配置: 读取启用(项.启用),
-  }));
+  const 项 = 取配方(名);
+  if (!项?.扩展) return null;
+  const 缺失 = !existsSync(展开路径(项.扩展.到));
+  const 配置文件 = 项.启用 ? 展开路径(项.启用.文件) : null;
+  const 配置 = 配置文件 && existsSync(配置文件)
+    ? (读JSON(配置文件)[项.启用.键] ?? []).includes(项.启用.值)
+    : null;
+  return { 缺失, 配置 };
 }
 
 async function 体检() {
@@ -506,16 +462,14 @@ async function 体检() {
   for (const [名] of 服务列表) {
     const 检查 = 检查扩展(名);
     if (!检查) continue;
-    for (const 项 of 检查) {
-      if (项.缺失) {
-        console.log(`  [待装] ${名} 的扩展未就位（${项.到}）`);
-        问题.push(`${名} 的扩展未安装（${项.到}），先跑 install`);
-      } else if (项.配置 === false) {
-        console.log(`  [待装] ${名} 的扩展已拷贝，但宿主未启用（AlwaysLoad_Extensions · ${项.到}）`);
-        问题.push(`${名} 的扩展未被宿主程序加载（${项.到}），跑 install 或手动启用`);
-      } else {
-        console.log(`  [正常] ${名} 的扩展已就位（${项.到}）${项.配置 ? '，宿主已启用' : ''}`);
-      }
+    if (检查.缺失) {
+      console.log(`  [待装] ${名} 的附属产物（扩展）未就位`);
+      问题.push(`${名} 的扩展未安装，先跑 install`);
+    } else if (检查.配置 === false) {
+      console.log(`  [待装] ${名} 的扩展已拷贝，但宿主程序未启用（AlwaysLoad_Extensions）`);
+      问题.push(`${名} 的扩展未被宿主程序加载，跑 install 或手动启用`);
+    } else {
+      console.log(`  [正常] ${名} 的扩展已就位${检查.配置 ? '，宿主程序已启用' : ''}`);
     }
   }
 
@@ -532,7 +486,7 @@ async function 体检() {
 
 function 确保源码(名, 项) {
   const 缓存 = join(源码缓存, 名.replace(/-mcp$/, ''));
-  const 从 = 扩展目标(项)[0]?.从;
+  const 从 = 项.扩展?.从;
 
   const 源 = 项.源?.replace(/^git\+/, '').split('#')[0];
   if (!源) {
@@ -639,42 +593,37 @@ function 安装(目标名) {
     }
 
     // 2) 附属产物
-    const 目标列表 = 适用目标(扩展目标(项));
-    if (目标列表.length > 0) {
+    if (项.扩展) {
       const 缓存 = 确保源码(名, 项);
-      for (const 目标 of 目标列表) {
-        const 源目录 = 缓存 && join(缓存, 目标.从);
-        const 目标路径 = 展开路径(目标.到);
-        if (!源目录 || !existsSync(源目录)) continue;
-        if (existsSync(目标路径)) rmSync(目标路径, { recursive: true, force: true });
-        mkdirSync(dirname(目标路径), { recursive: true });
-        cpSync(源目录, 目标路径, {
+      const 源目录 = 缓存 && join(缓存, 项.扩展.从);
+      const 目标 = 展开路径(项.扩展.到);
+      if (源目录 && existsSync(源目录)) {
+        if (existsSync(目标)) rmSync(目标, { recursive: true, force: true });
+        mkdirSync(dirname(目标), { recursive: true });
+        cpSync(源目录, 目标, {
           recursive: true,
           filter: (从) => !从.includes('__pycache__') && !从.endsWith('.pyc'),
         });
-        console.log(`[mcp] ${名}: 扩展 → ${目标路径}`);
+        console.log(`[mcp] ${名}: 扩展 → ${目标}`);
       }
     }
 
     // 3) 宿主程序启用
-    for (const 目标 of 目标列表) {
-      const 启用 = 目标.启用;
-      if (!启用) continue;
-      const 启用文件 = 展开路径(启用.文件);
-      if (!existsSync(启用文件)) continue;
+    const 启用文件 = 项.启用 ? 展开路径(项.启用.文件) : null;
+    if (项.启用 && existsSync(启用文件)) {
       if (宿主在运行(项.要求)) {
         console.log(`[mcp] ${名}: ${项.要求.join(',')} 正在运行，退出后会覆盖配置，跳过启用`);
-        continue;
-      }
-      const 配置 = 读JSON(启用文件);
-      const 表 = Array.isArray(配置[启用.键]) ? 配置[启用.键] : [];
-      if (!表.includes(启用.值)) {
-        表.push(启用.值);
-        配置[启用.键] = 表;
-        写JSON(启用文件, 配置);
-        console.log(`[mcp] ${名}: 已写入 ${启用.键} += ${启用.值}（${启用文件}）`);
       } else {
-        console.log(`[mcp] ${名}: 宿主程序已启用扩展（${启用文件}）`);
+        const 配置 = 读JSON(启用文件);
+        const 表 = Array.isArray(配置[项.启用.键]) ? 配置[项.启用.键] : [];
+        if (!表.includes(项.启用.值)) {
+          表.push(项.启用.值);
+          配置[项.启用.键] = 表;
+          写JSON(启用文件, 配置);
+          console.log(`[mcp] ${名}: 已写入 ${项.启用.键} += ${项.启用.值}`);
+        } else {
+          console.log(`[mcp] ${名}: 宿主程序已启用扩展`);
+        }
       }
     }
 
