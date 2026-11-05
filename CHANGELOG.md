@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.1-beta.1...v0.50.2-beta.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **agent:** 补充 continue-sync 遍历有快照源分支时的补丁上下文漂移容错 ([8d95cf2](https://github.com/pengjiaxusz/pengj-templates/commit/8d95cf2a592a2d5366b6c72c5e42e21bd64a00ae))
+
 ## [0.50.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.0-beta.1...v0.50.1-beta.1) (2026-11-04)
 
 
