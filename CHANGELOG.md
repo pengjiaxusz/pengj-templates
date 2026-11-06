@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.2-beta.1...v0.50.3-beta.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **agent:** 修复分支枚举消歧短名导致的递归嵌套分支与 remote 同名污染 ([e202037](https://github.com/pengjiaxusz/pengj-templates/commit/e20203706de4af84ce0ff22714918ad3c52da7a4))
+
 ## [0.50.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.1-beta.1...v0.50.2-beta.1) (2026-11-05)
 
 
