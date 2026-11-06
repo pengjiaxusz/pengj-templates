@@ -465,6 +465,23 @@ if ($Continue) {
                                 }
                             }
                         }
+                        if (Test-ContentPreserved $resHash $integBranch) {
+                            continue
+                        }
+                        $descendants = Invoke-Git @("rev-list", "$resHash..$bRef", "--reverse")
+                        if ($descendants.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($descendants.Output))) {
+                            $descMerged = $false
+                            foreach ($descHash in ($descendants.Output -split "`r?`n")) {
+                                $dh = $descHash.Trim()
+                                if (-not [string]::IsNullOrWhiteSpace($dh) -and (Test-ContentPreserved $dh $integBranch)) {
+                                    $descMerged = $true
+                                    break
+                                }
+                            }
+                            if ($descMerged) {
+                                continue
+                            }
+                        }
                         $guardFailures.Add("源分支 '$sb' 仍有未合入净提交: $resHash $cSubj")
                     }
                 }
