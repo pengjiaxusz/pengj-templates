@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     分支同步冲突恢复与继续执行工具 (Continue Sync)
 
@@ -241,7 +241,8 @@ function Test-ContentPreserved {
             if ($landedSet.Contains($t)) {
                 $srcAddedMatched++
             } elseif (-not [string]::IsNullOrWhiteSpace($currentFile)) {
-                $checkPre = Invoke-Git @("grep", "-F", "-q", "-e", $t, $LandedHash, "--", $currentFile)
+                $needle = if ($t.Length -gt 512) { $t.Substring(0, 512) } else { $t }
+                $checkPre = Invoke-Git @("grep", "-F", "-q", "-e", $needle, $LandedHash, "--", $currentFile)
                 if ($checkPre.ExitCode -eq 0) {
                     $srcAddedMatched++
                 }
@@ -267,7 +268,8 @@ function Test-ContentPreserved {
                     if ($landedSet.Contains($t)) {
                         $delMatched++
                     } elseif (-not [string]::IsNullOrWhiteSpace($currentFile)) {
-                        $checkPre = Invoke-Git @("grep", "-F", "-q", "-e", $t, $LandedHash, "--", $currentFile)
+                        $needle = if ($t.Length -gt 512) { $t.Substring(0, 512) } else { $t }
+                        $checkPre = Invoke-Git @("grep", "-F", "-q", "-e", $needle, $LandedHash, "--", $currentFile)
                         if ($checkPre.ExitCode -ne 0) {
                             $delMatched++
                         }
