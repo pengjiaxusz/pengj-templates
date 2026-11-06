@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.8-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.7-beta.1...v0.50.8-beta.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **agent:** 避免长行超长导致 Windows 命令行溢出报错 ([ca11976](https://github.com/pengjiaxusz/pengj-templates/commit/ca119768349c1bf1bdc1a43cda32c13a6006c17e))
+
 ## [0.50.7-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.6-beta.1...v0.50.7-beta.1) (2026-11-06)
 
 
