@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.7-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.6-beta.1...v0.50.7-beta.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **agent:** 补充 continue-sync 缺失的 Get-RemoteNames 与 Test-ValidBranchName 函数 ([64900b1](https://github.com/pengjiaxusz/pengj-templates/commit/64900b14d19d2600830ac278f583024a05b30f52))
+
 ## [0.50.6-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.5-beta.1...v0.50.6-beta.1) (2026-11-06)
 
 
