@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.4-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.3-beta.1...v0.50.4-beta.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **agent:** 增强 Test-ContentPreserved 校验支持早前提交已包含改动的容错 ([ecc813d](https://github.com/pengjiaxusz/pengj-templates/commit/ecc813d416c32542fd75f83bde34bd6ddd4ad916))
+
 ## [0.50.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.2-beta.1...v0.50.3-beta.1) (2026-11-06)
 
 
