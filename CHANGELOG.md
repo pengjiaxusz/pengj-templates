@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.5-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.4-beta.1...v0.50.5-beta.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **agent:** 增强 Tree-Diff Guard 审计支持集成分支全局保全与后继提交吸收容错 ([65b40de](https://github.com/pengjiaxusz/pengj-templates/commit/65b40de3bff095010b190d4acb8e1388f7e6c9dc))
+
 ## [0.50.4-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.3-beta.1...v0.50.4-beta.1) (2026-11-06)
 
 
