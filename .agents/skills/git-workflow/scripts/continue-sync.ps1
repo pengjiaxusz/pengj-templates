@@ -110,6 +110,64 @@ function Invoke-Git {
     }
 }
 
+
+function Get-RemoteNames {
+    $res = Invoke-Git @("remote")
+    $names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    if ($res.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($res.Output))) {
+        foreach ($line in ($res.Output -split "`r?`n")) {
+            $t = $line.Trim()
+            if (-not [string]::IsNullOrWhiteSpace($t)) { $names.Add($t) | Out-Null }
+        }
+    }
+    if ($names.Count -eq 0) { $names.Add("origin") | Out-Null }
+    return $names
+}
+
+function Test-ValidBranchName {
+    param(
+        [string]$BranchName,
+        [System.Collections.Generic.HashSet[string]]$RemoteNames = $null
+    )
+    if ([string]::IsNullOrWhiteSpace($BranchName)) { return $false }
+    $b = $BranchName.Trim()
+
+    if ($RemoteNames -and $RemoteNames.Contains($b)) { return $false }
+
+    if ($b.StartsWith("heads/", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $b.StartsWith("refs/", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $b.StartsWith("remotes/", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
+
+    if ($b.StartsWith("sync-backup/", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $b.StartsWith("cleanup-backup/", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
+
+    if ($b -match "(?i)(?:^|/)(?:refs|heads|remotes)(?:/|$)") {
+        return $false
+    }
+
+    if ($RemoteNames) {
+        foreach ($r in $RemoteNames) {
+            if ($b.StartsWith("$r/", [System.StringComparison]::OrdinalIgnoreCase)) {
+                return $false
+            }
+        }
+    }
+
+    if ($b -eq "HEAD" -or $b.StartsWith("HEAD/", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
+
+    $checkRes = Invoke-Git @("check-ref-format", "--branch", $b)
+    if ($checkRes.ExitCode -ne 0) {
+        return $false
+    }
+
+    return $true
+}
 function Get-WorktreeMap {
     $wtList = Invoke-Git @("worktree", "list", "--porcelain")
     $map = @{}
