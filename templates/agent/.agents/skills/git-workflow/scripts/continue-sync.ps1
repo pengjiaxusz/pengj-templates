@@ -483,7 +483,8 @@ if ($Continue) {
 
     if ($hasRemote -and (-not $skipPush)) {
         Write-Host ">> 安全推送所有对齐分支 (--force-with-lease)..." -ForegroundColor Cyan
-        $pushBranches = $allSourceBranches | Where-Object { $_ -ne $integBranch }
+        $remoteNames = Get-RemoteNames
+        $pushBranches = $allSourceBranches | Where-Object { $_ -ne $integBranch -and (Test-ValidBranchName $_ $remoteNames) }
         if ($pushBranches.Count -gt 0) {
             $pArgs = @("push", "--force-with-lease", "origin") + $pushBranches
             $pRes = Invoke-Git $pArgs
