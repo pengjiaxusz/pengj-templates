@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.6-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.5-beta.1...v0.50.6-beta.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **agent:** 补充 continue-sync 双分支 Tree-Diff Guard 上下文漂移与后继容错 ([98f926e](https://github.com/pengjiaxusz/pengj-templates/commit/98f926e7342f7a01b9e48c8bf0fdb9cc632089ba))
+
 ## [0.50.5-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.4-beta.1...v0.50.5-beta.1) (2026-11-06)
 
 
