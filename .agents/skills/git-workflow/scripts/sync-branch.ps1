@@ -617,6 +617,23 @@ function Test-BranchFullyMerged {
                         }
                     }
                 }
+                if (Test-ContentPreserved $resHash $TargetBranch) {
+                    continue
+                }
+                $descendants = Invoke-Git @("rev-list", "$resHash..$SourceSnapshotRef", "--reverse")
+                if ($descendants.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($descendants.Output))) {
+                    $descMerged = $false
+                    foreach ($descHash in ($descendants.Output -split "`r?`n")) {
+                        $dh = $descHash.Trim()
+                        if (-not [string]::IsNullOrWhiteSpace($dh) -and (Test-ContentPreserved $dh $TargetBranch)) {
+                            $descMerged = $true
+                            break
+                        }
+                    }
+                    if ($descMerged) {
+                        continue
+                    }
+                }
                 $missingCommits.Add($pcl.Trim())
             }
         }

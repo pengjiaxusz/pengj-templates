@@ -388,22 +388,39 @@ if ($Continue) {
                             # 补丁上下文漂移容错：若因并行分支合入顺序导致 patch-id 变化，
                             # 但落地提交的增删行已完整保留（Test-ContentPreserved），则判定已合入。
                             if (-not [string]::IsNullOrWhiteSpace($cSubj)) {
-                                $landedBySubj = Invoke-Git @("log", $integBranch, "--fixed-strings", "--grep=$cSubj", "-n", "5", "--format=%H")
-                                if ($landedBySubj.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($landedBySubj.Output))) {
-                                    $matched = $false
-                                    foreach ($candHash in ($landedBySubj.Output -split "`r?`n")) {
-                                        $ch = $candHash.Trim()
-                                        if (-not [string]::IsNullOrWhiteSpace($ch) -and (Test-ContentPreserved $resHash $ch)) {
-                                            $matched = $true
-                                            break
-                                        }
-                                    }
-                                    if ($matched) {
-                                        continue
+                            $landedBySubj = Invoke-Git @("log", $integBranch, "--fixed-strings", "--grep=$cSubj", "-n", "5", "--format=%H")
+                            if ($landedBySubj.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($landedBySubj.Output))) {
+                                $matched = $false
+                                foreach ($candHash in ($landedBySubj.Output -split "`r?`n")) {
+                                    $ch = $candHash.Trim()
+                                    if (-not [string]::IsNullOrWhiteSpace($ch) -and (Test-ContentPreserved $resHash $ch)) {
+                                        $matched = $true
+                                        break
                                     }
                                 }
+                                if ($matched) {
+                                    continue
+                                }
                             }
-                            $guardFailures.Add("源分支 '$sb' 仍有未合入净提交: $resHash $cSubj")
+                        }
+                        if (Test-ContentPreserved $resHash $integBranch) {
+                            continue
+                        }
+                        $descendants = Invoke-Git @("rev-list", "$resHash..$bRef", "--reverse")
+                        if ($descendants.ExitCode -eq 0 -and (-not [string]::IsNullOrWhiteSpace($descendants.Output))) {
+                            $descMerged = $false
+                            foreach ($descHash in ($descendants.Output -split "`r?`n")) {
+                                $dh = $descHash.Trim()
+                                if (-not [string]::IsNullOrWhiteSpace($dh) -and (Test-ContentPreserved $dh $integBranch)) {
+                                    $descMerged = $true
+                                    break
+                                }
+                            }
+                            if ($descMerged) {
+                                continue
+                            }
+                        }
+                        $guardFailures.Add("源分支 '$sb' 仍有未合入净提交: $resHash $cSubj")
                         }
                     }
                 }
