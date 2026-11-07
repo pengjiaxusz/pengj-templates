@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.9-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.8-beta.1...v0.50.9-beta.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **agent:** 严禁分叉分支部分重置并为同步恢复增加跳过选项 ([19d4bc1](https://github.com/pengjiaxusz/pengj-templates/commit/19d4bc1eeecdbb6463f3f4e3568ab573791b1a11))
+
 ## [0.50.8-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.7-beta.1...v0.50.8-beta.1) (2026-11-06)
 
 
