@@ -1168,7 +1168,8 @@ if (-not $isAllBranchesMode) {
         }
         Write-Host "------------------------------------------------------------------"
         if ($divergedBranches.Count -gt 0) {
-            Write-Host "分叉隔离分支: $($divergedBranches.Count) 个 ($(($divergedBranches | ForEach-Object { "'$_'" }) -join ', '))，执行 -Apply 时将跳过并隔离（见 REFERENCE 三）" -ForegroundColor Red
+            Write-Host "分叉隔离分支: $($divergedBranches.Count) 个 ($(($divergedBranches | ForEach-Object { "'$_'" }) -join ', '))，存在本地与远端分叉冲突（见 REFERENCE 三）" -ForegroundColor Red
+            Write-Host "⚠️ 警告：检测到分叉分支！执行 -Apply 时将硬性拦截中断，绝不允许在存在分叉分支时部分合入或重置！" -ForegroundColor Red
             Write-Host "------------------------------------------------------------------"
         }
         Write-Host "一键执行所有分支同步、对齐与推送:" -ForegroundColor Yellow
@@ -1179,6 +1180,13 @@ if (-not $isAllBranchesMode) {
     }
 
     # 执行阶段 (Apply)
+    if ($divergedBranches.Count -gt 0) {
+        Write-Host "❌ 严重拦截：检测到以下分支处于分叉隔离状态（Diverged）：$($divergedBranches -join ', ')！" -ForegroundColor Red
+        Write-Host "   分叉分支本地与远端存在互斥提交，若继续执行会导致局部提交遗漏或被误重置。" -ForegroundColor Yellow
+        Write-Host "   请先按照上述指引人工处置分叉分支，或手动将分叉分支对齐后再运行 -Apply！" -ForegroundColor Yellow
+        throw "执行中断：存在分叉分支 $($divergedBranches -join ', ')，已硬性拦截以防代码遗漏！"
+    }
+
     $timestamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
     $backupIntegRef = "refs/sync-backup/$IntegrationBranch/$timestamp-$integCommit"
     Invoke-Git @("update-ref", $backupIntegRef, $fullIntegCommit) | Out-Null

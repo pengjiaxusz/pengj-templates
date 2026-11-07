@@ -17,6 +17,9 @@
 .PARAMETER Continue
     解决冲突后继续执行剩余同步流程。
 
+.PARAMETER Skip
+    跳过当前中断的提交（例如当当前提交的改动已被等价合入或冲突解决后变为空提交时），并继续执行剩余队列。
+
 .PARAMETER Abort
     中止同步，恢复集成分支到合入前快照，清理同步状态。
 
@@ -33,6 +36,7 @@
 [CmdletBinding()]
 param(
     [switch]$Continue,
+    [switch]$Skip,
     [switch]$Abort,
     [switch]$Status,
     [switch]$NoPush,
@@ -318,7 +322,7 @@ $allSourceBranches = @($state.AllSourceBranches)
 $declaredVerifyCmd = $state.DeclaredVerifyCmd
 $skipPush = [bool]$state.NoPush -or $NoPush
 
-if ($Status -or (-not $Continue -and -not $Abort)) {
+if ($Status -or (-not $Continue -and -not $Skip -and -not $Abort)) {
     Write-Host ""
     Write-Host "================== 分支同步中断状态 ==================" -ForegroundColor Cyan
     Write-Host "集成分支:       $integBranch"
@@ -336,8 +340,9 @@ if ($Status -or (-not $Continue -and -not $Abort)) {
     }
     Write-Host "------------------------------------------------------"
     Write-Host "操作指引:" -ForegroundColor Cyan
-    Write-Host "  继续同步: pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Continue" -ForegroundColor White
-    Write-Host "  中止回滚: pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Abort" -ForegroundColor White
+    Write-Host "  解决冲突后继续: pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Continue" -ForegroundColor White
+    Write-Host "  跳过当前提交:   pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Skip" -ForegroundColor White
+    Write-Host "  中止安全回滚:   pwsh .agents/skills/git-workflow/scripts/continue-sync.ps1 -Abort" -ForegroundColor White
     Write-Host "======================================================" -ForegroundColor Cyan
     Write-Host ""
     return
@@ -355,33 +360,50 @@ if ($Abort) {
     return
 }
 
-if ($Continue) {
-    # 检查冲突文件
-    $unmerged = Invoke-Git @("diff", "--name-only", "--diff-filter=U")
-    if (-not [string]::IsNullOrWhiteSpace($unmerged.Output)) {
-        throw "仍有冲突文件未解决！请先在以下文件中解决冲突并执行 git add 后再继续：`n$($unmerged.Output)"
-    }
-
-    Write-Host ">> 1. 检查并继续当前 cherry-pick 提交..." -ForegroundColor Cyan
+if ($Continue -or $Skip) {
     $editorCmd = if ([System.Environment]::OSVersion.Platform -like "*Win*" -or $IsWindows) { "cmd.exe /c exit 0" } else { "true" }
     $gitDirRes = Invoke-Git @("rev-parse", "--git-dir")
     $gitDir = if ($gitDirRes.ExitCode -eq 0) { $gitDirRes.Output } else { ".git" }
     try { $gitDir = (Resolve-Path $gitDir).Path } catch {}
     $inCherryPick = (Test-Path (Join-Path $gitDir "CHERRY_PICK_HEAD"))
 
-    if ($inCherryPick) {
-        $contRes = Invoke-Git @("-c", "core.editor=$editorCmd", "cherry-pick", "--continue", "--no-edit")
-        if ($contRes.ExitCode -ne 0) {
-            throw "git cherry-pick --continue 执行失败: $($contRes.Error)"
+    if ($Skip) {
+        Write-Host ">> 正在跳过当前提交 [$($currentIndex + 1)/$($orderedCommits.Count)]: $($orderedCommits[$currentIndex].Hash) - $($orderedCommits[$currentIndex].Subject)..." -ForegroundColor Yellow
+        if ($inCherryPick) {
+            $skipRes = Invoke-Git @("cherry-pick", "--skip")
+            if ($skipRes.ExitCode -ne 0) {
+                # 若 cherry-pick --skip 报错但工作区干净且 CHERRY_PICK_HEAD 消失，仍可继续
+                $inCherryPick = (Test-Path (Join-Path $gitDir "CHERRY_PICK_HEAD"))
+                if ($inCherryPick) {
+                    throw "git cherry-pick --skip 执行失败: $($skipRes.Error)"
+                }
+            }
         }
-        Write-Host "✅ 当前提交合入成功！" -ForegroundColor Green
+        $state.CurrentCommitIndex = $currentIndex
+        [System.IO.File]::WriteAllText($stateFilePath, (ConvertTo-Json $state -Depth 10), [System.Text.Encoding]::UTF8)
+        Write-Host "⏭️ 已成功跳过提交 $($orderedCommits[$currentIndex].Hash)。" -ForegroundColor Yellow
     } else {
-        $lastLog = (Invoke-Git @("log", "-1", "--format=%s")).Output
-        $targetSubj = $orderedCommits[$currentIndex].Subject
-        if ($lastLog -match [regex]::Escape($targetSubj)) {
-            Write-Host "ℹ️ 检测到当前提交已在外部完成合入 ($targetSubj)，自动推进至后续队列。" -ForegroundColor Green
+        # 检查冲突文件
+        $unmerged = Invoke-Git @("diff", "--name-only", "--diff-filter=U")
+        if (-not [string]::IsNullOrWhiteSpace($unmerged.Output)) {
+            throw "仍有冲突文件未解决！请先在以下文件中解决冲突并执行 git add 后再继续：`n$($unmerged.Output)"
+        }
+
+        Write-Host ">> 1. 检查并继续当前 cherry-pick 提交..." -ForegroundColor Cyan
+        if ($inCherryPick) {
+            $contRes = Invoke-Git @("-c", "core.editor=$editorCmd", "cherry-pick", "--continue", "--no-edit")
+            if ($contRes.ExitCode -ne 0) {
+                throw "git cherry-pick --continue 执行失败: $($contRes.Error)"
+            }
+            Write-Host "✅ 当前提交合入成功！" -ForegroundColor Green
         } else {
-            Write-Host "ℹ️ 当前无进行中的 cherry-pick 操作，继续后续队列检查。" -ForegroundColor Yellow
+            $lastLog = (Invoke-Git @("log", "-1", "--format=%s")).Output
+            $targetSubj = $orderedCommits[$currentIndex].Subject
+            if ($lastLog -match [regex]::Escape($targetSubj)) {
+                Write-Host "ℹ️ 检测到当前提交已在外部完成合入 ($targetSubj)，自动推进至后续队列。" -ForegroundColor Green
+            } else {
+                Write-Host "ℹ️ 当前无进行中的 cherry-pick 操作，继续后续队列检查。" -ForegroundColor Yellow
+            }
         }
     }
 
