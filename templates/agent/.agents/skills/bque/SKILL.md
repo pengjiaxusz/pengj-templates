@@ -182,7 +182,14 @@ bque clean
 {% endif %}
 <!-- PENGJ_TEMPLATE_END -->
 
+{% if options["skill_lang"] == "en" %}
+<!-- The following is the project-specific area: template updates only replace the managed block above; this area is owned by the project and fully preserved. -->
+## Project-Specific Queue Policies & Custom Configuration
+
+> Register project-specific heavy task tags (e.g. Heavy tests, offline rendering), custom timeout thresholds, or setup scripts here.
+{% else %}
 <!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
 ## 项目专属排队策略与定制配置
 
 > 可在此登记本项目特殊的耗时任务标签（如 Heavy 测试、特殊离线渲染等）、专属超时阈值或前置环境准备脚本。
+{% endif %}

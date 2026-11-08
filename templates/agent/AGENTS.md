@@ -138,6 +138,10 @@
 {%- endif %}
 <!-- PENGJ_TEMPLATE_END -->
 
+{% if options["skill_lang"] == "en" %}
+<!-- Project-specific rules can be written below (outside anchors); user content is fully preserved on template update -->
+{% else %}
 <!-- 项目专属规范可写在下方（锚点之外），模板更新时将完整保留用户内容 -->
+{% endif %}
 
 

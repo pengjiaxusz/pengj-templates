@@ -2,9 +2,9 @@
 name: subrepo-sync
 description: >-
 {% if options["skill_lang"] == "en" %}
-  Universal sub-repository / submodule synchronization, commit impact analysis, and adaptation workflow. Extract unapplied commits between baseline and target, cluster changes by semantic Conventional Commits and domain subsystems (motion, tokens, styles, components, breaking changes), safe checkout/update, guide host refactoring and replacement of handwritten wheels, and enforce host verification gates. Use when updating Git submodules, CMake FetchContent dependencies, embedded sub-repos, or syncing downstream repos with subrepo changes. Triggers: subrepo-sync, submodule-sync, subrepo, submodule, update-subrepo, upgrade-subrepo, sync-submodule, 升级子仓库, 同步子仓库, 子模块升级, 子仓库升级.
+  Universal sub-repository / submodule synchronization, commit impact analysis, and adaptation workflow. Extract unapplied commits between baseline and target, cluster changes by semantic Conventional Commits and domain subsystems (motion, tokens, styles, components, breaking changes), safe checkout/update, guide host refactoring and replacement of handwritten wheels, and enforce host verification gates. Use when updating Git submodules, CMake FetchContent dependencies, embedded sub-repos, or syncing downstream repos with subrepo changes. Triggers: subrepo-sync, submodule-sync, subrepo, submodule, update-subrepo, upgrade-subrepo, sync-submodule.
 {% else %}
-  通用的子仓库与子模块依赖同步、变动语义聚类分析与宿主适配技能。自动化比对子仓库未应用提交（自旧指针到目标最新提交）、按约定式提交及领域子系统（破坏性变动、动效、高亮、样式、设计令牌、规范组件等）聚类分析影响面、执行安全更新签出、指导宿主代码重构替换与门禁核验。当需要升级 Git Submodule、CMake FetchContent 或独立子仓库依赖、同步子模块最新提交、排查子仓库变动影响面或适配新特性时使用。 Triggers: subrepo-sync, submodule-sync, subrepo, submodule, update-subrepo, upgrade-subrepo, sync-submodule, 升级子仓库, 同步子仓库, 子模块升级, 子仓库升级.
+  通用的子仓库与子模块依赖同步、变动语义聚类分析与宿主适配技能。自动化比对子仓库未应用提交（自旧指针到目标最新提交）、按约定式提交及领域子系统（破坏性变动、动效、高亮、样式、设计令牌、规范组件等）聚类分析影响面、执行安全更新签出、指导宿主代码重构替换与门禁核验。当需要升级 Git Submodule、CMake FetchContent 或独立子仓库依赖、同步子模块最新提交、排查子仓库变动影响面或适配新特性时使用。 Triggers: subrepo-sync, submodule-sync, subrepo, submodule, update-subrepo, upgrade-subrepo, sync-submodule.
 {% endif %}
 ---
 
@@ -164,6 +164,32 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 {% endif %}
 <!-- PENGJ_TEMPLATE_END -->
 
+{% if options["skill_lang"] == "en" %}
+<!-- The following is the project-specific area: template updates only replace the managed block above; this area is owned by the project and fully preserved. -->
+## Project-Specific Subrepo Configuration & Gate Contracts
+
+> Declare project-specific subrepo paths, domain clustering keywords, host verification gates, and architectural invariants here.
+
+### 1. Managed Subrepo Registry
+| Subrepo Name | Relative Path | Dependency Mode (Submodule / FetchContent / Local) | Upstream Tracking Branch |
+| :--- | :--- | :--- | :--- |
+| `example-subrepo` | `submodules/example-subrepo` | Git Submodule | `origin/main` |
+
+### 2. Host Invariants & Architectural Boundaries
+- **Single Source of Truth**: Never edit or fork inside dependency cache directories directly; all shared components and contracts must originate from upstream.
+- **Component Bootstrap Law**: Once upstream provides official standard components, timely refactor and delete host handwritten duplicates.
+
+### 3. Project Verification Gates
+```powershell
+# Lint & build check
+# cargo check --workspace
+# pnpm build
+
+# Automated test & hygiene gates
+# cargo test --workspace
+# pwsh tools/hygiene.ps1
+```
+{% else %}
 <!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
 ## 项目专属子仓库配置与门禁契约
 
@@ -188,3 +214,4 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 # cargo test --workspace
 # pwsh tools/hygiene.ps1
 ```
+{% endif %}

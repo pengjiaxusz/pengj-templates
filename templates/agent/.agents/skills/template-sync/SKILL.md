@@ -3,7 +3,7 @@ name: template-sync
 description: >-
 {% if options["skill_lang"] == "en" %}
   Template synchronization, adoption, and audit workflow for pengj-templates. Automatically diagnoses tech stack, paradigms, and commit habits to recommend tailored profiles when adopting projects (adopt); audits template drifts, script tampering, and managed block violations (audit); updates managed projects from upstream templates (update); resolves review notices (needs_review / conflicted / transition zones).
-  Triggers: template-sync, sync-template, update-template, apply-template, adopt-project, template-audit, template-diff, 模板同步, 更新模板, 应用模板, 纳管项目, 同步模板, 模板巡检, 模板漂移.
+  Triggers: template-sync, sync-template, update-template, apply-template, adopt-project, template-audit, template-diff.
 {% else %}
   基于 pengj-templates 的分层模板同步、项目纳管与模板漂移巡检技能。针对存量或新项目纳管（adopt），自动诊断技术栈、编程范式与提交习惯并提供推荐方案咨询用户；巡检查验下游受管脚本篡改与托管块漂移（audit）；同步上游模板最新改动到已有项目（update）；裁决更新差异与接管过渡区（needs_review / conflicted / 纳管过渡区）或验证下游项目对齐。
   Triggers: template-sync, 模板同步, 更新模板, 应用模板, 纳管项目, 同步模板, 模板巡检, 模板漂移, 检查模板改动, update-template, apply-template, adopt-project, 模板更新, template-audit, template-diff.
@@ -85,7 +85,7 @@ Inspect the target project workspace across the following dimensions:
   - Editor settings: Recommend `vscode` to inject file nesting patterns (`explorer.fileNesting`); existing `.vscode` configs merge automatically.
   - `common` and `agent` are foundational and core layers for all projects (always required).
 - **Programming Paradigm Detection (`--chinese` Chinese Programming)**:
-  - Check for Chinese directory names (e.g. `源码/`, `配置/`) or prevalent Chinese identifiers (classes, methods, variables).
+  - Check for non-ASCII or Chinese directory names or prevalent non-English/Chinese identifiers (classes, methods, variables).
   - If detected, **strongly recommend `--chinese`** to inject Chinese programming guidelines and bilingual naming anchors.
 - **Commit Conventions & Language Detection (`--commit-zh` / `--commit-and-push`)**:
   - Run `git log -n 5 --oneline` to inspect commit styles.
@@ -306,7 +306,14 @@ cargo run -p pengj-templates-cli -- audit --dir <目标项目目录> --diff
 {% endif %}
 <!-- PENGJ_TEMPLATE_END -->
 
+{% if options["skill_lang"] == "en" %}
+<!-- The following is the project-specific area: template updates only replace the managed block above; this area is owned by the project and fully preserved. -->
+## Project-Specific Sync Configuration & Shortcuts
+
+> Register project-specific upstream template repositories, default layer combinations, pre/post-sync scripts, etc. here.
+{% else %}
 <!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
 ## 项目专属同步配置与快捷方式
 
 > 可在此登记本项目常用的上游模板地址、默认层组合、前后置同步脚本等信息。
+{% endif %}

@@ -1,6 +1,6 @@
-# bque 命令判定矩阵与安全指南 / Usage Matrix & Safety Guide
-
 {% if options["skill_lang"] == "en" %}
+# bque Command Decision Matrix & Safety Guide
+
 ## 1. Command Mapping Matrix
 
 | Original Native Command | Recommended Execution (with bque) | Underlying bque Mode | Priority Class |
@@ -59,6 +59,8 @@ just queue-resume   # or: bque resume
 ```
 
 {% else %}
+# bque 命令判定矩阵与安全指南
+
 ## 1. 原生命令到 bque 调度的映射对照表
 
 | 原始原生命令 | 推荐执行方式（接入 bque） | 底层 bque 模式 | 进程优先级类别 |

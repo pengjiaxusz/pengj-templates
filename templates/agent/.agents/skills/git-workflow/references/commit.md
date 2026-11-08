@@ -57,8 +57,8 @@ Format: `type(scope): subject`
   - Types: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
   - Scope: from the project's `commitlint.config.js` scope-enum whitelist when present.
 {% else %}
-- **Subject in English** (imperative, short, no trailing period; strictly forbidden to contain Chinese characters).
-  - ❌ Forbidden: `feat(cli): 新增参数支持`
+- **Subject in English** (imperative, short, no trailing period; strictly forbidden to contain non-English/CJK characters).
+  - ❌ Forbidden: `feat(cli): add new flags.` (trailing period or non-English characters)
   - ✅ Correct: `feat(cli): add new flags`
 - **Type/Scope in English**:
   - Types: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`

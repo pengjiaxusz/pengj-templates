@@ -754,6 +754,18 @@ fn merge_managed_block(project_dir: &Path, rel: &Path, rendered: &[u8]) -> Manag
     } else {
         crate::block::BlockPlacement::Append
     };
+    if is_skill_doc(rel) {
+        let (disk_fm, disk_body) = split_frontmatter(&disk_text);
+        let (rend_fm, rend_body) = split_frontmatter(&rendered_text);
+        if !rend_fm.is_empty() && !disk_fm.is_empty() {
+            let mut merged_body = merge_managed_block_texts(disk_body, rend_body, placement);
+            let mut combined = String::with_capacity(rend_fm.len() + merged_body.bytes.len());
+            combined.push_str(rend_fm);
+            combined.push_str(&String::from_utf8_lossy(&merged_body.bytes));
+            merged_body.bytes = combined.into_bytes();
+            return merged_body;
+        }
+    }
     merge_managed_block_texts(&disk_text, &rendered_text, placement)
 }
 
@@ -3562,6 +3574,29 @@ mod tests {
             merged_hash,
             "# PENGJ_TEMPLATE_START\nnew cfg\n# PENGJ_TEMPLATE_END\ncustom = 1\n"
         );
+    }
+
+    #[test]
+    fn merge_managed_block_updates_skill_frontmatter_and_managed_block() {
+        let tmp = std::env::temp_dir().join(format!("pengj-merge-skill-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let skill_dir = tmp.join(".agents").join("skills").join("my-skill");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        let disk = "---\nname: my-skill\ndescription: old description\n---\n\n<!-- PENGJ_TEMPLATE_START -->\nold managed body\n<!-- PENGJ_TEMPLATE_END -->\n\n## Custom Section\n- custom user note\n";
+        std::fs::write(skill_dir.join("SKILL.md"), disk).unwrap();
+
+        let tmpl = b"---\nname: my-skill\ndescription: new bilingual description\n---\n\n<!-- PENGJ_TEMPLATE_START -->\nnew managed body\n<!-- PENGJ_TEMPLATE_END -->\n";
+        let rel = Path::new(".agents/skills/my-skill/SKILL.md");
+        let result = merge_managed_block(&tmp, rel, tmpl);
+        assert_eq!(result.kind, ManagedTextMergeKind::Replaced);
+        let merged = String::from_utf8(result.bytes).unwrap();
+        assert!(merged.contains("description: new bilingual description"));
+        assert!(!merged.contains("description: old description"));
+        assert!(merged.contains("new managed body"));
+        assert!(!merged.contains("old managed body"));
+        assert!(merged.contains("## Custom Section\n- custom user note"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

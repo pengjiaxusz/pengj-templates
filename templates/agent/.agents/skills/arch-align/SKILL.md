@@ -37,7 +37,7 @@ Before starting feature design, refactoring, or diagnosing complex cross-module 
 2. **If relevant architecture doc is found**:
    - Accurately read 1-2 corresponding docs.
 3. **If no authoritative architecture doc is indexed for this domain**:
-   - Check if the project has relevant design drafts or research notes (e.g. `docs/design/` or `docs/设计/`).
+   - Check if the project has relevant design drafts or research notes (e.g. `docs/design/` or research drafts).
    - Ask the user: "Authoritative architecture documentation is missing for this domain. Would you like me to generate a standard architecture doc from existing code implementation and drafts?"
    - If user agrees, read reference guide `references/GENERATE-DOC.md` to generate the new document, and **register it into the `docs/architecture/README.md` index table**.
 
