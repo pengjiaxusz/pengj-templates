@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.9-beta.1...v0.51.0-beta.1) (2026-11-08)
+
+
+### Features
+
+* **templates:** 全面英文化 agent 技能模板与脚本并支持更新 frontmatter 元数据 ([a5229f0](https://github.com/pengjiaxusz/pengj-templates/commit/a5229f03bd4ce37405be05f9dd5def1f7e28c7d6))
+
 ## [0.50.9-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.8-beta.1...v0.50.9-beta.1) (2026-11-07)
 
 
