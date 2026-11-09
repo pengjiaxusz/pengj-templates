@@ -5,6 +5,9 @@ pub enum CoreError {
     #[error("未知的层: {0}")]
     UnknownLayer(String),
 
+    #[error("增量加层时需要至少指定一个层")]
+    EmptyLayerSelection,
+
     #[error("层存在循环依赖: {0:?}")]
     CircularDependency(Vec<String>),
 

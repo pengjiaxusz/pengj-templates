@@ -292,6 +292,37 @@ fn ensure_baseline_skills(
     }
 }
 
+/// 排队层与排队技能联动：启用 `bque` 层时把 `bque` 技能并入已持久化的选项。
+///
+/// 层负责产出 `just/bque.just` 配方与 AGENTS.md 红线，技能负责告诉 Agent 何时必须排队，
+/// 两者缺一即为「半接入」。显式空技能列表视为用户明确不要技能，此处不注入。
+/// 返回是否真的补入了技能，供报告展示。
+fn ensure_queue_skill(
+    options: &mut BTreeMap<String, serde_json::Value>,
+    ordered: &[String],
+    available: &BTreeSet<String>,
+) -> bool {
+    if !ordered.iter().any(|l| l == "bque") || !available.contains("bque") {
+        return false;
+    }
+    let Some(arr) = options.get_mut("skills").and_then(|v| v.as_array_mut()) else {
+        return false;
+    };
+    if arr.is_empty() || arr.iter().any(|v| v.as_str() == Some("bque")) {
+        return false;
+    }
+    let mut set: BTreeSet<String> = arr
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    set.insert("bque".to_string());
+    *arr = set
+        .into_iter()
+        .map(serde_json::Value::String)
+        .collect::<Vec<_>>();
+    true
+}
+
 /// 判断相对路径是否属于 `.agents/skills/<name>/...`，是则返回技能名。
 /// 跨平台按路径组件判断（Windows 相对路径分隔符为 `\`）。
 fn skill_name_of(rel: &Path) -> Option<String> {
@@ -846,6 +877,7 @@ pub fn generate(
         }
         let available: BTreeSet<String> = all_skills.into_iter().collect();
         ensure_baseline_skills(&mut options, &available);
+        ensure_queue_skill(&mut options, &ordered, &available);
     }
 
     let ctx = RenderContext::new(project_name, ordered.clone(), options.clone());
@@ -1154,6 +1186,7 @@ pub fn adopt_project(
         }
         let available: BTreeSet<String> = all_skills.into_iter().collect();
         ensure_baseline_skills(&mut options, &available);
+        ensure_queue_skill(&mut options, &ordered, &available);
     }
 
     let ctx = RenderContext::new(&project_name, ordered.clone(), options.clone());
@@ -1520,6 +1553,8 @@ pub fn update_project_with_options(
         }
         // 新模板加进来的基线技能要在存量项目里补齐，否则更新永远带不上
         ensure_baseline_skills(&mut manifest.options, &available_skills);
+        // 排队层已启用但技能未勾选的存量项目，更新时自动补齐，避免半接入
+        ensure_queue_skill(&mut manifest.options, &ordered, &available_skills);
     }
     let ctx = RenderContext::new(
         &manifest.project_name,
@@ -1867,6 +1902,77 @@ pub fn update_project_with_options(
     })
 }
 
+// ---------- 增量加层 ----------
+
+/// 增量加层报告：除常规 `update` 结果外，列出本次新增的层与联动补入的技能。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AddLayersReport {
+    pub project_name: String,
+    pub layers: Vec<String>,
+    pub added_layers: Vec<String>,
+    pub added_skills: Vec<String>,
+    pub update: UpdateReport,
+}
+
+/// 给已纳管项目增量加层：合并层清单、补齐联动技能、写回 manifest 后按新层重渲染。
+///
+/// 相较 `adopt --force` 的全量重纳管，这里只追加层并重跑 `update`，
+/// 项目专属区、既有的合规定制与哈希基线都按 update 的常规规则保留。
+pub fn add_layers_to_project(
+    templates: &Templates,
+    project_dir: &Path,
+    new_layers: &[String],
+    options: &UpdateOptions,
+) -> Result<AddLayersReport> {
+    let requested: Vec<String> = new_layers
+        .iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if requested.is_empty() {
+        return Err(CoreError::EmptyLayerSelection);
+    }
+
+    let mut manifest = ProjectManifest::load(project_dir)?;
+    let mut merged = manifest.layers.clone();
+    for layer in &requested {
+        if !merged.iter().any(|l| l == layer) {
+            merged.push(layer.clone());
+        }
+    }
+    // 校验未知层与循环依赖，并让依赖层自动进入清单
+    let ordered = templates.resolve_layers(&merged)?;
+
+    let mut added_skills = Vec::new();
+    if ordered.iter().any(|l| l == "agent") {
+        let available: BTreeSet<String> = templates
+            .list_skills()?
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        if ensure_queue_skill(&mut manifest.options, &ordered, &available) {
+            added_skills.push("bque".to_string());
+        }
+    }
+
+    let added_layers: Vec<String> = ordered
+        .iter()
+        .filter(|l| !manifest.layers.iter().any(|old| old == *l))
+        .cloned()
+        .collect();
+    manifest.layers = ordered;
+    manifest.save(project_dir)?;
+
+    let update = update_project_with_options(templates, project_dir, options)?;
+    Ok(AddLayersReport {
+        project_name: update.project_name.clone(),
+        layers: update.layers.clone(),
+        added_layers,
+        added_skills,
+        update,
+    })
+}
+
 // ---------- 审计巡检 ----------
 
 /// 项目受管文件与托管块的巡检审计状态
@@ -1903,6 +2009,8 @@ pub struct AuditReport {
     pub items: Vec<AuditItem>,
     /// 是否存在违规篡改（ViolatedManagedBlock 或 LocallyModifiedFile）
     pub has_violations: bool,
+    /// 非阻断的配置漂移提示（层与技能半接入、justfile 未迁移等），不计入违规
+    pub warnings: Vec<String>,
 }
 
 fn generate_unified_diff(old_name: &str, old_text: &str, new_name: &str, new_text: &str) -> String {
@@ -2198,11 +2306,34 @@ pub fn audit_project(
         }
     }
 
+    // 配置层巡检（非阻断提示）：层与技能半接入、justfile 未迁移到托管块格式
+    let mut warnings = Vec::new();
+    if ordered.iter().any(|l| l == "bque") {
+        if let Some(serde_json::Value::Array(skills)) = manifest.options.get("skills") {
+            let has_bque = skills.iter().any(|v| v.as_str() == Some("bque"));
+            if !skills.is_empty() && !has_bque {
+                warnings.push(
+                    "已启用 bque 层但未勾选 bque 技能（半接入）：运行 update 或 add-layer 自动补齐"
+                        .to_string(),
+                );
+            }
+        }
+    }
+    if let Ok(text) = std::fs::read_to_string(project_dir.join("justfile")) {
+        if crate::block::extract_managed_block(&text).is_none() {
+            warnings.push(
+                "justfile 缺少 PENGJ_TEMPLATE 托管块：模板更新无法同步框架区，请先迁移为「托管块 + 项目专属区」格式"
+                    .to_string(),
+            );
+        }
+    }
+
     Ok(AuditReport {
         project_name: manifest.project_name,
         layers: ordered,
         items,
         has_violations,
+        warnings,
     })
 }
 
@@ -5183,5 +5314,138 @@ mod tests {
             list,
             vec!["caveman".to_string(), "git-workflow".to_string()]
         );
+    }
+
+    #[test]
+    fn ensure_queue_skill_links_bque_layer_to_skill() {
+        let available: BTreeSet<String> =
+            ["bque", "caveman"].iter().map(|s| s.to_string()).collect();
+        let mut opts = BTreeMap::new();
+        opts.insert("skills".to_string(), serde_json::json!(["caveman"]));
+        let with_bque = vec!["common".to_string(), "bque".to_string()];
+        assert!(ensure_queue_skill(&mut opts, &with_bque, &available));
+        let names: Vec<&str> = opts["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert_eq!(names, vec!["bque", "caveman"]);
+
+        // 未启用 bque 层不注入；显式空列表不注入；已存在时幂等
+        let mut opts2 = BTreeMap::new();
+        opts2.insert("skills".to_string(), serde_json::json!(["caveman"]));
+        assert!(!ensure_queue_skill(
+            &mut opts2,
+            &["common".to_string()],
+            &available
+        ));
+        let mut opts3 = BTreeMap::new();
+        opts3.insert("skills".to_string(), serde_json::json!([]));
+        assert!(!ensure_queue_skill(&mut opts3, &with_bque, &available));
+        assert!(!ensure_queue_skill(&mut opts, &with_bque, &available));
+    }
+
+    #[test]
+    fn add_layers_to_project_adds_dependencies_queue_skill_and_files() {
+        let tmp = std::env::temp_dir().join(format!("pengj-add-layer-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let tpl = tmp.join("templates");
+
+        let common = tpl.join("common");
+        std::fs::create_dir_all(&common).unwrap();
+        std::fs::write(
+            common.join("layer.toml"),
+            "name = \"Common\"\ndescription = \"C\"\ndepends = []\n",
+        )
+        .unwrap();
+
+        let just = tpl.join("just");
+        std::fs::create_dir_all(&just).unwrap();
+        std::fs::write(
+            just.join("layer.toml"),
+            "name = \"Just\"\ndescription = \"J\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            just.join("justfile"),
+            "# PENGJ_TEMPLATE_START\n{% if \"bque\" in layers %}\nimport 'just/bque.just'\n{% endif %}\ndefault:\n    @just --list\n# PENGJ_TEMPLATE_END\n",
+        )
+        .unwrap();
+
+        let bque = tpl.join("bque");
+        std::fs::create_dir_all(bque.join("just")).unwrap();
+        std::fs::write(
+            bque.join("layer.toml"),
+            "name = \"bque\"\ndescription = \"Q\"\ndepends = [\"common\", \"just\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            bque.join("just/bque.just"),
+            "queue-status:\n    @bque status\n",
+        )
+        .unwrap();
+
+        let agent = tpl.join("agent");
+        for skill in ["bque", "caveman"] {
+            let dir = agent.join(".agents/skills").join(skill);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(
+                dir.join("SKILL.md"),
+                format!("---\nname: {skill}\ndescription: d\n---\n\n# {skill}\n"),
+            )
+            .unwrap();
+        }
+        std::fs::write(
+            agent.join("layer.toml"),
+            "name = \"Agent\"\ndescription = \"A\"\ndepends = [\"common\"]\n",
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let mut options = BTreeMap::new();
+        options.insert("skills".to_string(), serde_json::json!(["caveman"]));
+        generate(
+            &templates,
+            "demo",
+            &["just".to_string(), "agent".to_string()],
+            options,
+            &tmp,
+        )
+        .unwrap();
+        let proj = tmp.join("demo");
+        let justfile = proj.join("justfile");
+        let mut text = std::fs::read_to_string(&justfile).unwrap();
+        text.push_str("\n# project-owned marker\n");
+        std::fs::write(&justfile, &text).unwrap();
+        assert!(!text.contains("import 'just/bque.just'"));
+
+        let report = add_layers_to_project(
+            &templates,
+            &proj,
+            &["bque".to_string()],
+            &UpdateOptions::default(),
+        )
+        .unwrap();
+        assert!(report.layers.iter().any(|l| l == "bque"));
+        assert!(report.layers.iter().any(|l| l == "just"));
+        assert_eq!(report.added_skills, vec!["bque".to_string()]);
+
+        let manifest = ProjectManifest::load(&proj).unwrap();
+        let skills = manifest.options["skills"].as_array().unwrap();
+        assert!(skills.iter().any(|v| v.as_str() == Some("bque")));
+        assert!(proj.join("just/bque.just").is_file());
+
+        let after = std::fs::read_to_string(&justfile).unwrap();
+        assert!(after.contains("import 'just/bque.just'"));
+        assert!(
+            after.contains("# project-owned marker"),
+            "项目专属区必须原样保留"
+        );
+
+        assert!(matches!(
+            add_layers_to_project(&templates, &proj, &[], &UpdateOptions::default()),
+            Err(CoreError::EmptyLayerSelection)
+        ));
     }
 }
