@@ -90,6 +90,18 @@ enum Command {
         #[arg(long)]
         sync_skills: bool,
     },
+    /// 给已纳管项目增量加层（合并层清单后按新层重渲染，不做全量重纳管）
+    AddLayer {
+        /// 项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 要追加的层，逗号分隔，如 just,bque
+        #[arg(short, long, value_delimiter = ',')]
+        layers: Vec<String>,
+        /// 纯受管技能资产与脚本直接对齐覆盖（即使无托管块也不判定为冲突）
+        #[arg(long)]
+        sync_skills: bool,
+    },
     /// 巡检项目的模板对齐状态（只读诊断受管文件与托管块漂移）
     Audit {
         /// 目标项目目录（默认当前目录）
@@ -273,6 +285,11 @@ fn main() -> anyhow::Result<()> {
             }
             Ok(())
         }
+        Command::AddLayer {
+            dir,
+            layers,
+            sync_skills,
+        } => cmd_add_layer(&templates, &dir, &layers, sync_skills),
         Command::Audit {
             dir,
             dirs,
@@ -484,6 +501,52 @@ fn cmd_update(
     Ok(())
 }
 
+fn cmd_add_layer(
+    templates: &pengj_core::Templates,
+    dir: &Path,
+    layers: &[String],
+    sync_skills: bool,
+) -> anyhow::Result<()> {
+    if layers.is_empty() {
+        anyhow::bail!("必须指定至少一个层，如 --layers just,bque");
+    }
+    let opts = pengj_core::UpdateOptions { sync_skills };
+    let report = pengj_core::add_layers_to_project(templates, dir, layers, &opts)
+        .with_context(|| format!("增量加层 {} 失败", dir.display()))?;
+
+    println!(
+        "项目: {}（层: {}）",
+        report.project_name,
+        report.layers.join(" -> ")
+    );
+    if !report.added_layers.is_empty() {
+        println!("新增层: {}", report.added_layers.join(", "));
+    }
+    if !report.added_skills.is_empty() {
+        println!("联动补齐技能: {}", report.added_skills.join(", "));
+    }
+    let u = &report.update;
+    println!(
+        "更新 {} 个文件，新增 {} 个，未变 {} 个",
+        u.updated.len(),
+        u.created.len(),
+        u.unchanged
+    );
+    for f in &u.updated {
+        println!("  [更新] {f}");
+    }
+    for f in &u.created {
+        println!("  [新增] {f}");
+    }
+    for c in &u.conflicted {
+        println!("  [冲突] {} — {}", c.path, c.reason);
+    }
+    for f in &u.needs_review {
+        println!("  [待复核] {f}");
+    }
+    Ok(())
+}
+
 fn cmd_audit(
     templates: &pengj_core::Templates,
     dir: &Path,
@@ -552,6 +615,12 @@ fn cmd_audit(
         upstream_newer_count,
         violations.len()
     );
+    if !report.warnings.is_empty() {
+        println!("------------------------------------------------------------");
+        for w in &report.warnings {
+            println!("  [配置提示] {w}");
+        }
+    }
 
     if show_diff && !violations.is_empty() {
         println!("\n================== 详细漂移差异 (Diff) ==================");
