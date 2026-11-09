@@ -3,7 +3,7 @@ name: bque
 description: >-
 
   通用跨工作树全局编译排队、后台 CPU 降级防卡顿与纯净基准测试保护技能。规范 Agent 何时必须走排队调度、何时直跑，提供纯净跑分独占执行（秒级挂起后台构建）、构建管道安全铁律（防 Windows 4KB 管道永久死锁）、全局状态自省与死锁自愈。当需要执行重型构建、编译、检查、单测、性能跑分（bench）、性能画像分析，或遇到 CPU 占满卡顿、命令挂死、编译锁争用时使用。
-  Triggers: bque, build-queue, 排队构建, 全局排队, 编译排队, 跑分保护, 纯净跑分, 冻结后台构建, 挂起构建, cpu降级, idle优先级, queue-status, queue-clean, 编译锁, 管道死锁, 管道卫生.
+  Triggers: bque, build-queue, 排队构建, 全局排队, 编译排队, 跑分保护, 纯净跑分, 冻结后台构建, 挂起构建, cpu降级, idle优先级, queue-status, queue-clean, 编译锁, 管道死锁, 管道卫生, ninja, ctest, cmake, cargo, 编译, 构建, 跑测试, 运行测试, 单测, 性能跑分, bench, ninja -C, cmake --build, cargo build, cargo test.
 
 ---
 
@@ -55,9 +55,17 @@ just build           # 全局排队 + Idle 优先级构建
 just check           # 全局排队代码检查
 just test            # 全局排队单测运行
 just bench           # 纯净基准测试（自动冻结后台其他编译）
+just q-run cargo build --release   # 临时重命令，`--` 不要加
+just q-bench pnpm bench           # 临时跑分命令，纯净独占模式
 just queue-status    # 查看当前全局持锁者、排队任务与状态
 just queue-clean     # 应急清理异常残留的编译锁状态
+just queue-doctor    # 自检本机 bque 安装、PATH 回退与锁状态
 ```
+
+无现成配方时优先用 `just q-run <cmd>`，原生 CLI 才是最后手段。`justfile` 框架区位于
+`# PENGJ_TEMPLATE_START/END` 托管块内，项目自有配方写在块外、模板更新不会覆盖。
+bque 是 Windows 全局锁：Unix 与 CI 环境下同一批 `just` 配方的 `[unix]` 分支会直跑透传，
+属预期行为，严禁在那里强行套用原生 bque。
 
 ### 阶梯 2：原生 CLI 直调（定制或临时任务）
 当无预设的 `just` 命令时，直接调用 `bque`：
@@ -89,7 +97,8 @@ bque clean
 
 ## 🔧 5. 环境检测与安装指引
 
-若系统提示找不到 `bque` 命令，请引导或查阅安装指引：
+先运行 `just queue-doctor`：它会探测 `PATH`、回退到 `$env:LOCALAPPDATA\bque\bin`，
+缺失时直接打印一键安装命令。完整安装指引：
 👉 详见 [references/install.md](references/install.md)。
 
 
@@ -98,4 +107,16 @@ bque clean
 <!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
 ## 项目专属排队策略与定制配置
 
-> 可在此登记本项目特殊的耗时任务标签（如 Heavy 测试、特殊离线渲染等）、专属超时阈值或前置环境准备脚本。
+### 项目重任务登记
+
+| 任务 | 入口 | 排队方式 |
+| :--- | :--- | :--- |
+| Rust 编译检查 / clippy / 单测 / 基准 | `just check` / `just clippy` / `just test` / `just bench` | `bque run` / `bque bench` |
+| 前端构建（tsc + vite） | `just frontend-build` | `bque run -- pnpm --dir crates/app build` |
+| Tauri 安装包 | `just tauri-build` | `bque run -- pnpm --dir crates/app tauri build` |
+| 全量 CI | `just ci` | 五步依次取锁（`fmt check clippy test frontend-build`） |
+
+- `just create` / `just update` / `just mcp` / `just layers` 是轻量 CLI 命令，属旁路直跑，不排队。
+- 模板层改动后跑 `cargo run -q -p pengj-templates-cli -- create ... --output target/e2e` 端到端验证；`audit` 巡检半接入与 justfile 托管块。
+- 项目自有配方保留在 `justfile` 块外项目专属区，manifest 设 `just_recipes = "none"`。
+- bque 是 Windows 全局锁；Unix / CI 下 `[unix]` 分支直跑透传属预期行为。

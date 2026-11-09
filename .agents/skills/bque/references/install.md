@@ -1,3 +1,4 @@
+
 # bque 安装与环境配置指南 / Installation & Setup
 
 ## 一键快速安装与更新（推荐）
@@ -68,7 +69,12 @@ cargo install --path .
 
 ## 健康度与连通性验证
 
-执行自省命令验证 bque 内核对象与锁状态是否正常：
+优先使用项目配方：它会探测 `PATH`、回退到默认安装目录，缺失时直接打印一键安装命令：
+```powershell
+just queue-doctor
+```
+
+也可直接自省内核对象与锁状态：
 ```powershell
 bque status
 ```

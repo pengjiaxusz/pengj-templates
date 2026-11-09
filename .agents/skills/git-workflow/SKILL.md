@@ -1,8 +1,10 @@
 ---
 name: git-workflow
 description: >-
+
   通用 Git 操作与工作流自动化技能：包含约定式提交、Worktree 感知的极速线性分支同步、非交互变基与代码级冲突自主裁决。核心公用规则严格杜绝外部编辑器弹窗与挂起（GIT_EDITOR=true、--no-edit、严禁让用户手动编辑）。通过渐进式展开路由到提交、分支同步与变基子功能。
   Triggers: git, git-workflow, commit, branch-sync, rebase, cherry-pick, merge, push, pull, 提交, 变基, 衍合, 同步分支, 分支同步, 合并分支, 合入主分支, worktree 同步.
+
 ---
 
 <!-- PENGJ_TEMPLATE_START -->

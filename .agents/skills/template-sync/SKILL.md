@@ -1,8 +1,10 @@
 ---
 name: template-sync
 description: >-
+
   基于 pengj-templates 的分层模板同步、项目纳管与模板漂移巡检技能。针对存量或新项目纳管（adopt），自动诊断技术栈、编程范式与提交习惯并提供推荐方案咨询用户；巡检查验下游受管脚本篡改与托管块漂移（audit）；同步上游模板最新改动到已有项目（update）；裁决更新差异与接管过渡区（needs_review / conflicted / 纳管过渡区）或验证下游项目对齐。
   Triggers: template-sync, 模板同步, 更新模板, 应用模板, 纳管项目, 同步模板, 模板巡检, 模板漂移, 检查模板改动, update-template, apply-template, adopt-project, 模板更新, template-audit, template-diff.
+
 ---
 
 <!-- PENGJ_TEMPLATE_START -->

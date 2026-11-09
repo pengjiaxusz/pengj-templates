@@ -1,32 +1,33 @@
+# PENGJ_TEMPLATE_START
+[unix]
+set shell := ["sh", "-uc"]
+[windows]
+set shell := ["pwsh", "-NoProfile", "-Command"]
+
+
+import 'just/bque.just'
+
+
+
+
+
+# 列出所有可用任务
+default:
+    @just --list
+# PENGJ_TEMPLATE_END
+
+# ---------------------------------------------------------------------------
+# 项目专属区：模板更新只替换上方托管块，本区域归项目所有、完整保留。
+# 重型任务统一走 `just q-run <cmd>`，性能跑分走 `just q-bench <cmd>`。
+# ---------------------------------------------------------------------------
+
 # justfile for pengj-templates
 # 设置默认 shell 为 pwsh 7（本机默认）
-set shell := ["pwsh", "-c"]
 
 # 克隆后一键初始化：安装 pnpm 依赖（自动装 lefthook git 钩子）并验证编译
 setup:
     pnpm install
     cargo check --workspace
-
-# 默认执行任务：格式化 + 全量编译检查
-default: fmt check
-
-# ---------- bque 全局编译排队自省 ----------
-
-# 全局跨工作树编译排队状态
-queue-status:
-    @bque status
-
-# 应急清理全局编译锁状态
-queue-clean:
-    @bque clean
-
-# 手动暂停后台编译（让路游戏或交互压测）
-queue-pause:
-    @bque pause
-
-# 手动恢复后台编译
-queue-resume:
-    @bque resume
 
 # ---------- Rust 构建与检查 ----------
 

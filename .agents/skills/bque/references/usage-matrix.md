@@ -1,5 +1,5 @@
-# bque 命令判定矩阵与安全指南 / Usage Matrix & Safety Guide
 
+# bque 命令判定矩阵与安全指南
 
 ## 1. 原生命令到 bque 调度的映射对照表
 
@@ -17,6 +17,12 @@
 | `pnpm bench` | `just bench` | `bque bench` | `High`（自动秒级挂起后台编译） |
 | `cargo fmt` | `cargo fmt`（直接运行） | **旁路直跑** | 前台默认优先级 |
 | `git status` / `git commit` | 直接运行 | **旁路直跑** | 前台默认优先级 |
+| 任意临时重命令 | `just q-run <cmd>` | `bque run` | `Idle` |
+| 任意临时跑分命令 | `just q-bench <cmd>` | `bque bench` | `High`（自动秒级挂起后台编译） |
+
+`q-run` / `q-bench` 是没有专属 `just` 配方时的通用包装入口。调用时**不要**在配方名后加 `--`
+（正确写法 `just q-run cargo build --release`），否则它会成为被包装命令的一部分。
+bque 是 Windows 全局锁：Unix 与 CI 环境下这两个包装器直接透传命令。
 
 ---
 
@@ -48,6 +54,9 @@ Remove-Item test_out.log -ErrorAction SilentlyContinue
 
 当由于断电、强制杀进程或异常崩溃导致编译锁残留时：
 ```powershell
+# 0. 自检安装与 PATH 回退
+just queue-doctor
+
 # 1. 检查当前持锁者与排队队列
 just queue-status   # 或 bque status
 
