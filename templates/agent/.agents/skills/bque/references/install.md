@@ -69,7 +69,13 @@ cargo install --path .
 
 ## Health & Connectivity Verification
 
-Execute introspection command to verify bque kernel objects and lock status:
+Prefer the project recipe — it probes `PATH`, falls back to the default install directory and
+prints the one-click install command when bque is missing:
+```powershell
+just queue-doctor
+```
+
+To inspect kernel objects and lock status directly:
 ```powershell
 bque status
 ```
@@ -157,7 +163,12 @@ cargo install --path .
 
 ## 健康度与连通性验证
 
-执行自省命令验证 bque 内核对象与锁状态是否正常：
+优先使用项目配方：它会探测 `PATH`、回退到默认安装目录，缺失时直接打印一键安装命令：
+```powershell
+just queue-doctor
+```
+
+也可直接自省内核对象与锁状态：
 ```powershell
 bque status
 ```

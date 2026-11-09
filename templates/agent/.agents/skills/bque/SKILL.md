@@ -58,9 +58,17 @@ just build           # Compile under bque queue & Idle priority
 just check           # Check code under bque supervision
 just test            # Run test suite safely
 just bench           # Clean-room benchmark (freezes background builds)
+just q-run cargo build --release   # Ad-hoc heavy command, no `--` separator
+just q-bench pnpm bench           # Ad-hoc benchmark in clean-room mode
 just queue-status    # Inspect current lock holder and waiters
 just queue-clean     # Clean abnormal or abandoned locks
+just queue-doctor    # Verify bque installation, PATH fallback and lock state
 ```
+
+When no matching recipe exists, prefer `just q-run <cmd>` over the native CLI. The `justfile` framework
+lives in a managed block (`# PENGJ_TEMPLATE_START/END`); project-owned recipes stay outside it and survive
+template updates. On Unix and in CI the `[unix]` variants of these recipes pass through without bque —
+that is expected, since bque is a Windows-only global lock; never force a raw `bque` call there.
 
 ### Tier 2: Direct Native `bque` CLI (Custom / Ad-hoc Commands)
 When no matching `just` recipe exists, directly invoke `bque`:
@@ -92,7 +100,8 @@ bque clean
 
 ## 🔧 5. Environment & Installation
 
-If `bque` is missing from system `PATH`, inspect and follow the installation guide:
+Run `just queue-doctor` first: it probes `PATH`, falls back to `$env:LOCALAPPDATA\bque\bin`
+and prints the one-click install command when bque is missing. For the full setup guide:
 👉 See [references/install.md](references/install.md).
 
 {% else %}
@@ -142,9 +151,17 @@ just build           # 全局排队 + Idle 优先级构建
 just check           # 全局排队代码检查
 just test            # 全局排队单测运行
 just bench           # 纯净基准测试（自动冻结后台其他编译）
+just q-run cargo build --release   # 临时重命令，`--` 不要加
+just q-bench pnpm bench           # 临时跑分命令，纯净独占模式
 just queue-status    # 查看当前全局持锁者、排队任务与状态
 just queue-clean     # 应急清理异常残留的编译锁状态
+just queue-doctor    # 自检本机 bque 安装、PATH 回退与锁状态
 ```
+
+无现成配方时优先用 `just q-run <cmd>`，原生 CLI 才是最后手段。`justfile` 框架区位于
+`# PENGJ_TEMPLATE_START/END` 托管块内，项目自有配方写在块外、模板更新不会覆盖。
+bque 是 Windows 全局锁：Unix 与 CI 环境下同一批 `just` 配方的 `[unix]` 分支会直跑透传，
+属预期行为，严禁在那里强行套用原生 bque。
 
 ### 阶梯 2：原生 CLI 直调（定制或临时任务）
 当无预设的 `just` 命令时，直接调用 `bque`：
@@ -176,7 +193,8 @@ bque clean
 
 ## 🔧 5. 环境检测与安装指引
 
-若系统提示找不到 `bque` 命令，请引导或查阅安装指引：
+先运行 `just queue-doctor`：它会探测 `PATH`、回退到 `$env:LOCALAPPDATA\bque\bin`，
+缺失时直接打印一键安装命令。完整安装指引：
 👉 详见 [references/install.md](references/install.md)。
 
 {% endif %}

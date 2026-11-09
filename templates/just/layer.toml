@@ -1,0 +1,3 @@
+name = "Just"
+description = "跨平台 justfile 主入口：托管块框架区按所选层装配排队与语言配方，块外项目专属区归用户所有"
+depends = ["common"]
