@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.52.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.51.0-beta.1...v0.52.0-beta.1) (2026-11-09)
+
+
+### Features
+
+* **cli:** 新增 add-layer 命令与配置提示输出 ([aa9b369](https://github.com/pengjiaxusz/pengj-templates/commit/aa9b369d979f55bf7475f7c4f84eeccb987a9426))
+* **core:** 新增增量加层与排队技能联动 ([4e3b8ea](https://github.com/pengjiaxusz/pengj-templates/commit/4e3b8ea09a22eb437e9ffae0680e3b29efecc25c))
+* **templates:** 新增 just 层并重构排队与语言配方装配 ([6b2704e](https://github.com/pengjiaxusz/pengj-templates/commit/6b2704ea33e8998ea7d0f382d2e430043e2e34b5))
+
 ## [0.51.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.50.9-beta.1...v0.51.0-beta.1) (2026-11-08)
 
 
