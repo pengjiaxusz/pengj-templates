@@ -21,6 +21,7 @@
 | [`受管块与TOML结构化合并.md`](./受管块与TOML结构化合并.md) | 三风格受管块 `Html/Hash/Slash` 的提取/原位替换/追加语义与 TOML 受管合并（`.cargo/config.toml` 表级并集、键级去重、同键异值冲突跳过） | `crates/core/src/block.rs`, `crates/core/src/toml_merge.rs`, `templates/rust/.cargo/config.toml` | 【权威规范】 |
 | [`Manifest与同步更新.md`](./Manifest与同步更新.md) | `.pengj-templates.json` 持久化（层/选项/文件 sha256 基线）驱动的 `generate` 空目录生成、`adopt` 存量纳管与 `update` 冲突判定（未改→覆盖，已改无块→冲突跳过，有块→合并） | `crates/core/src/manifest.rs`, `crates/core/src/engine.rs::generate/adopt_project/update_project` | 【权威规范】 |
 | [`技能体系与双语渲染.md`](./技能体系与双语渲染.md) | `options["skills"]` 过滤与 `skill_name_of` 路由、`SKILL.md` frontmatter 解析、`list_skills` 双语渲染与 legacy 全自定义技能 `take_over_legacy_skill` 接管（过渡区双流程） | `crates/core/src/engine.rs::selected_skills/skill_name_of/is_skill_doc/take_over_legacy_skill`, `templates/agent/.agents/skills/*/SKILL.md` | 【设计实现】 |
+| [`排队层与增量加层.md`](./排队层与增量加层.md) | `just` 层唯一根 `justfile` + 托管块框架区/项目区契约、`bque`/`rust` 层 `just/*.just` 条件 import、Windows 平台边界、层-技能联动与 `add-layer` 存量迁移路径 | `crates/core/src/engine.rs::ensure_queue_skill/add_layers_to_project/audit_project`, `templates/just/justfile`, `templates/bque/just/bque.just` | 【权威规范】 |
 | [`集成配置与工作区同步.md`](./集成配置与工作区同步.md) | `package.json` 并集（依赖版本模板为准、脚本用户优先）、lefthook/commitlint `base` 自动接线与去重、`.vscode/settings.json` 与 `*.code-workspace` fileNesting 增量合并 | `crates/core/src/engine.rs::merge_json/sync_workspace_file/sync_settings_file`, `templates/lefthook/commitlint.base.js`, `templates/vscode/.vscode/settings.json` | 【设计实现】 |
 
 ## 3. 关联设计草稿与探索（非权威，仅作参考）

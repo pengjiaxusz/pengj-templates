@@ -52,8 +52,11 @@
 - **选项**：生成时用户选项（edition、skills、skill_lang 等）固化进 `.pengj-templates.json` manifest；`update` 按同一批选项重渲染。
 - **技能过滤**：`options["skills"]`（字符串数组）决定生成哪些技能文件；缺失时包含全部（向后兼容），过滤逻辑在 `crates/core/src/engine.rs`（`skill_name_of` / `selected_skills`）。
 - 层内「种子文件、后续归用户」的文件在 `layer.toml` 的 `update_ignore` 声明，`update` 时跳过。
+- **just / bque 装配**：根 `justfile` 只由 `just` 层产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（按 `layers` / `options["just_recipes"]` 条件 `import`），块外项目专属区归用户所有；`bque` / `rust` / `rust-workspace` 层产出 `just/*.just` 模块并依赖 `just`。`justfile` **不得**列入 `update_ignore`，否则框架区无法随模板演进。
+- **层-技能联动**：勾 `bque` 层时自动把 `bque` 技能并入 `options["skills"]`（`generate` / `adopt` / `update` / `add-layer` 四处一致），避免「有配方没文档」的半接入；`audit` 对半接入与缺少 justfile 托管块给出非阻断配置提示。
+- **增量加层**：`add-layer --dir <项目> --layers <层>` 只合并层清单并重跑 `update`，禁止用 `adopt --force` 全量重纳管；已有自定义编排的项目设 `options["just_recipes"] = "none"` 保留自己的 recipe。
 
-> EN: a layer = directory + layer.toml, auto-discovered. Merge by dependency order, later overrides earlier; .gitignore accumulates; package.json unions. minijinja placeholders; options persisted in manifest and reused by update.
+> EN: a layer = directory + layer.toml, auto-discovered. Merge by dependency order, later overrides earlier; .gitignore accumulates; package.json unions. minijinja placeholders; options persisted in manifest and reused by update. The root justfile is owned by the `just` layer via a managed block; queue/language layers emit `just/*.just` modules and depend on it. Selecting the bque layer auto-selects the bque skill; `add-layer` appends layers without full re-adoption.
 
 ## 技能规范 / Skills
 
@@ -105,7 +108,7 @@
   - **规划模式（`/plan` / `/boost`）特别约束**：即使在规划模式下生成或更新了 `walkthrough.md`，写完文档亦绝不等于任务完结；**严禁仅写完 walkthrough 就直接交差，必须紧随其后执行 commit 与 push，未提交推送前严禁结束对话汇报**。
   - **无需提交的豁免情况**：仅当本轮对话为纯问答/无任何文件变动，或构建/测试失败正在排查取证阶段且需向用户提问时，方可不提交。
 - **任务收尾要求**：任何开发或维护任务结束、向用户做最终交差前，工作区必须保持干净，所有改动必须已提交并推送到远端（commit & push）。
-- **构建与测试排队红线（严禁裸跑原生构建命令）**：严禁直接在命令行运行 `ninja`、`cmake --build`、`cargo build/test/clippy`、`cl.exe`、`ctest`、`pnpm build` 等底层构建/编译器工具！所有编译、检查、单测与性能跑分必须统一走 `just`（如 `just build`、`just check`、`just test`、`just bench`）或原生 bque 命令行（如 bque run -- <cmd>、bque bench -- <cmd>）进行全局跨工作树排队调度与 `Idle` 降级，性能跑分必须走 bench 模式自动挂起后台编译以提供 0% 干扰的纯净环境（详见 `.agents/skills/bque/SKILL.md`）。
+- **构建与测试排队红线（严禁裸跑原生构建命令）**：严禁直接在命令行运行 `ninja`、`cmake --build`、`cargo build/test/clippy`、`cl.exe`、`ctest`、`pnpm build` 等底层构建/编译器工具！所有编译、检查、单测与性能跑分必须统一走 `just`（如 `just build`、`just check`、`just test`、`just bench`，临时命令用 `just q-run <cmd>` / `just q-bench <cmd>`）或原生 bque 命令行（如 bque run -- <cmd>、bque bench -- <cmd>）进行全局跨工作树排队调度与 `Idle` 降级，性能跑分必须走 bench 模式自动挂起后台编译以提供 0% 干扰的纯净环境。bque 是 Windows 全局锁：Unix 与 CI 环境下同一批 `just` 配方会直跑透传，属预期行为，严禁在那里强行套 bque；用 `just queue-doctor` 检查本机安装（详见 `.agents/skills/bque/SKILL.md`）。
 - **模板受管区域防篡改禁令（硬性红线）**：`.agents/skills/*/scripts/` 脚本文件及所有带 `PENGJ_TEMPLATE_START/END` 的托管块区间归 `pengj-templates` 统一托管。严禁在下游仓库直接修改托管脚本文件或私自篡改托管块内代码！若遇到下游环境不适配或需要定制：
   1. 优先查阅对应技能的 `SKILL.md`，在托管块外「项目专属区」以声明式配置解决（如 `集成分支登记`、`忽略未追踪路径正则` 或项目门禁）；
   2. 若模板缺乏相应扩展能力，应向上游 `pengj-templates` 反馈或进行通用化改造，严禁在下游私自保留本地 hack；

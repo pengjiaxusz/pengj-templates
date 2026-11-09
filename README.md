@@ -9,10 +9,13 @@
 | 层 | 内容 | 适用 |
 | --- | --- | --- |
 | `common` | 所有仓库共用：`.gitignore` | 所有仓库 |
+| `just` | 唯一的根 `justfile` 主入口：托管块框架区 + 块外项目专属区，按层 import 语言/排队配方 | 需要统一任务入口的仓库 |
+| `bque` | Windows 全局编译排队：`just/bque.just`（`queue-*` / `queue-doctor` / `q-run` / `q-bench`） | 需要跨工作树排队与纯净跑分 |
 | `lefthook` | Git hooks（lefthook）+ commitlint 约定式提交校验 | 需要 Git 钩子的仓库 |
 | `agent` | AI 编码助手规范（`AGENTS.md`），按所选层/选项生成 rust、中文编程等约定 | 希望 agent 遵循规范 |
 | `vscode` | VS Code 工作区配置：推荐扩展、中文编程下 rust 检查走 clippy | 使用 VS Code 开发 |
-| `rust` | Rust 仓库专属：`Cargo.toml`、clippy/rustfmt、sccache、justfile | Rust 项目 |
+| `rust` | Rust 仓库专属：`Cargo.toml`、clippy/rustfmt、sccache、`just/rust.just` | Rust 项目 |
+| `rust-workspace` | Rust 多 crate 工作区：工作区 `Cargo.toml`、sccache/lld、`just/rust-workspace.just` | Rust workspace |
 | ... | 按需扩展（新增目录 + `layer.toml` 即可） | ... |
 
 模板文件支持 minijinja 占位符（`{{ project_name }}`、`{{ project_slug }}`、`{{ year }}`）。
@@ -34,7 +37,11 @@ cargo run -p pengj-templates-cli -- create my-app --layers rust          # 生�
 cargo run -p pengj-templates-cli -- create my-app --layers rust --edition 2024 --channel nightly --no-lld
 cargo run -p pengj-templates-cli -- create my-app --layers agent --skills commit,caveman   # 只生成选中的技能
 cargo run -p pengj-templates-cli -- update --dir ./my-app                # 同步模板更新
+cargo run -p pengj-templates-cli -- add-layer --dir ./my-app --layers just,bque  # 存量项目增量加层
+cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # 巡检半接入与托管块漂移
 ```
+
+**just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`bque` / `rust` / `rust-workspace` 层分别产出 `just/bque.just`、`just/rust.just`、`just/rust-workspace.just`，三层都依赖 `just`；`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾 `bque` 层会自动补齐 `bque` 技能，避免半接入；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。
 
 `create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2024）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--sccache` 开启编译缓存（默认关）、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates.json`，`update` 同步时按各项目当年的选项重新渲染。
 
