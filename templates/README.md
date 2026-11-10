@@ -27,5 +27,9 @@
 ## 语言轴 / Language axes
 
 - `skill_lang`（`zh` / `en`）决定**所有层**面向人的文案：注释、报错提示、脚本日志、`.gitignore` 拼接段标题以及 agent 层文档。模板统一用 `{% if options["skill_lang"] == "en" %}…{% else %}…{% endif %}` **行内分支**（不引入额外空行），中文分支渲染结果必须与改动前逐字节一致，避免存量中文项目漂移。
-- `commit_zh` 独立控制 `commitlint.base.js` 的 `subject-language` 规则值（`zh` / `en`）与提交规范技能文档。
+- `commit_zh` 独立控制提交校验脚本的选版（`zh` / `en`）与提交规范技能文档。
+- **代码类产物按语言拆文件，而不是在脚本里写双语分支**：同一份逻辑各写一版完整文件，
+  命名 `<stem>.<lang>.<ext>`（跟随 `skill_lang`）或 `<stem>.commit.<lang>.<ext>`（跟随 `commit_zh`，
+  用于提交校验脚本）。生成时只写命中那份，产物路径去掉语言标记，另一版不会落到项目里，
+  因此英文项目的脚本里不会残留中文校验逻辑，反之亦然。例：`lefthook/commitlint.base.commit.en.js`。
 - 全英文项目用 `--skill-lang en --no-commit-zh`；生成后所有文本文件零汉字（`crates/core` 有端到端单测保障）。`.agents/skills/*/scripts/` 与 npm `prepare` 脚本恒为英文，不受语言轴影响。
