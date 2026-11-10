@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.52.1-beta.1...v0.53.0-beta.1) (2026-11-10)
+
+
+### Features
+
+* **core:** 新增语言变体文件按语言轴二选一 ([d133f70](https://github.com/pengjiaxusz/pengj-templates/commit/d133f70a0997cf8ba542b74b0fc71ad7ccaa9a6c))
+
 ## [0.52.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.52.0-beta.1...v0.52.1-beta.1) (2026-11-10)
 
 
