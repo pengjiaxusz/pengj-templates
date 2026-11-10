@@ -5448,4 +5448,86 @@ mod tests {
             Err(CoreError::EmptyLayerSelection)
         ));
     }
+
+    /// 汉字（CJK 统一表意文字）检测，用于「英文项目零中文文案」回归校验。
+    fn contains_cjk(text: &str) -> bool {
+        text.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
+    }
+
+    fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                collect_files(&path, out);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+
+    /// `skill_lang` 是全部模板层「面向人的文案」语言轴：`en` 时生成的所有文本文件
+    /// （just/commitlint/Cargo/技能/AGENTS 等）都不得出现汉字；`zh` 时保持既有中文文案。
+    /// `commit_zh` 独立控制 commitlint 的 `subject-language` 规则值。
+    #[test]
+    fn skill_lang_drives_every_generated_file_language() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+        let tmp = std::env::temp_dir().join(format!("pengj-lang-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let layers: Vec<String> = [
+            "common",
+            "agent",
+            "just",
+            "bque",
+            "vscode",
+            "lefthook",
+            "rust-workspace",
+        ]
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+
+        for (name, lang, commit_zh) in [("lang_zh", "zh", true), ("lang_en", "en", false)] {
+            let mut options = BTreeMap::new();
+            options.insert("skill_lang".to_string(), serde_json::json!(lang));
+            options.insert("commit_zh".to_string(), serde_json::json!(commit_zh));
+            generate(&templates, name, &layers, options, &tmp).unwrap();
+        }
+
+        let zh_lint =
+            std::fs::read_to_string(tmp.join("lang_zh").join("commitlint.base.js")).unwrap();
+        assert!(zh_lint.contains("'subject-language': [2, 'always', 'zh']"));
+        assert!(zh_lint.contains("提交标题必须使用中文撰写"));
+        let zh_just = std::fs::read_to_string(tmp.join("lang_zh").join("just/bque.just")).unwrap();
+        assert!(contains_cjk(&zh_just), "zh 项目应保留中文注释");
+
+        let en_lint =
+            std::fs::read_to_string(tmp.join("lang_en").join("commitlint.base.js")).unwrap();
+        assert!(en_lint.contains("'subject-language': [2, 'always', 'en']"));
+        assert!(!contains_cjk(&en_lint), "英文项目 commitlint 不得含汉字");
+
+        let mut files = Vec::new();
+        collect_files(&tmp.join("lang_en"), &mut files);
+        assert!(files.len() > 20, "生成文件数异常: {}", files.len());
+        for path in files {
+            // 二进制资产（若有）read_to_string 会失败，直接跳过
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            assert!(
+                !contains_cjk(&text),
+                "英文项目文件 {} 出现汉字",
+                path.display()
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }
