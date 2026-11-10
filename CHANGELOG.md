@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.52.0-beta.1...v0.52.1-beta.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **templates:** 按语言轴双语渲染 just 与 lefthook 模板 ([34dd084](https://github.com/pengjiaxusz/pengj-templates/commit/34dd08449045770f014d0cd8acc82142e1286b86))
+
 ## [0.52.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.51.0-beta.1...v0.52.0-beta.1) (2026-11-09)
 
 
