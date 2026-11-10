@@ -205,6 +205,39 @@ fn read_recursive(base: &Path, dir: &Path, out: &mut Vec<(PathBuf, Vec<u8>)>) ->
     Ok(())
 }
 
+/// 解析「语言变体文件」，`lang` 标记决定生成时取哪一份、输出时去掉标记。
+///
+/// 两种写法（都按语言各写一版完整文件，产物只保留命中那份，不含另一语言的分支）：
+/// - `<stem>.<lang>.<ext>`：跟随文档语言轴 `skill_lang`（如 `foo.zh.js` / `foo.en.js`）
+/// - `<stem>.commit.<lang>.<ext>`：跟随提交语言轴 `commit_zh`
+///   （提交校验类脚本用它，避免「中文文档 + 英文提交」时选错校验实现）
+///
+/// 返回 `None` 表示该文件属于另一种语言，应整体跳过；非变体文件原样返回。
+fn resolve_language_variant(rel: &Path, doc_lang: &str, commit_lang: &str) -> Option<PathBuf> {
+    let Some(file_name) = rel.file_name().and_then(|s| s.to_str()) else {
+        return Some(rel.to_path_buf());
+    };
+    // 先切扩展名，再切末尾的语言标记
+    let Some((stem, ext)) = file_name.rsplit_once('.') else {
+        return Some(rel.to_path_buf());
+    };
+    let Some((head, lang_tag)) = stem.rsplit_once('.') else {
+        return Some(rel.to_path_buf());
+    };
+    if lang_tag != "zh" && lang_tag != "en" {
+        return Some(rel.to_path_buf());
+    }
+    // 末段带 `.commit` 则走提交语言轴，否则走文档语言轴
+    let (base, wanted) = match head.rsplit_once('.') {
+        Some((base, "commit")) => (base, commit_lang),
+        _ => (head, doc_lang),
+    };
+    if lang_tag != wanted {
+        return None;
+    }
+    Some(rel.with_file_name(format!("{base}.{ext}")))
+}
+
 /// 定位模板根目录：env `PENGJ_TEMPLATES` > 当前目录 `templates/` > 可执行文件旁 `templates/`
 ///
 /// 当前目录优先：开发时在仓库根运行即用最新模板；可执行文件旁用于安装打包后的随附模板。
@@ -510,6 +543,18 @@ impl Templates {
         };
         // 技能过滤：未选中的技能整目录跳过（选项缺失时包含全部）
         let skills = selected_skills(options);
+        // 两条语言轴：文档文案取 skill_lang（缺失按 zh），提交校验取 commit_zh
+        let doc_lang = options
+            .get("skill_lang")
+            .and_then(|v| v.as_str())
+            .unwrap_or("zh")
+            .to_string();
+        let commit_lang = if options.get("commit_zh").and_then(|v| v.as_bool()) == Some(false) {
+            "en"
+        } else {
+            "zh"
+        }
+        .to_string();
         for layer_id in ordered {
             let base = self.root.join(layer_id);
             if !base.is_dir() {
@@ -521,6 +566,10 @@ impl Templates {
                 if rel == Path::new(LAYER_META_FILE) {
                     continue;
                 }
+                // 语言变体：与当前语言轴不符的整份跳过，命中则改回无标记路径
+                let Some(rel) = resolve_language_variant(&rel, &doc_lang, &commit_lang) else {
+                    continue;
+                };
                 if let Some(name) = skill_name_of(&rel) {
                     if let Some(allowed) = &skills {
                         if !allowed.contains(&name) {
@@ -5503,15 +5552,28 @@ mod tests {
 
         let zh_lint =
             std::fs::read_to_string(tmp.join("lang_zh").join("commitlint.base.js")).unwrap();
-        assert!(zh_lint.contains("'subject-language': [2, 'always', 'zh']"));
         assert!(zh_lint.contains("提交标题必须使用中文撰写"));
+        // 语言变体：中文项目里不得残留英文校验分支（死代码）
+        assert!(
+            !zh_lint.contains("Commit subject must be in English"),
+            "zh 项目的 commitlint 不应包含英文校验分支"
+        );
         let zh_just = std::fs::read_to_string(tmp.join("lang_zh").join("just/bque.just")).unwrap();
         assert!(contains_cjk(&zh_just), "zh 项目应保留中文注释");
 
         let en_lint =
             std::fs::read_to_string(tmp.join("lang_en").join("commitlint.base.js")).unwrap();
-        assert!(en_lint.contains("'subject-language': [2, 'always', 'en']"));
+        assert!(en_lint.contains("Commit subject must be in English"));
         assert!(!contains_cjk(&en_lint), "英文项目 commitlint 不得含汉字");
+        // 语言变体：英文项目里不得残留中文校验分支（死代码），也不得落下变体文件本身
+        assert!(
+            !en_lint.contains("提交标题必须使用中文撰写"),
+            "en 项目的 commitlint 不应包含中文校验分支"
+        );
+        assert!(
+            !tmp.join("lang_en").join("commitlint.base.en.js").exists(),
+            "语言变体文件名不应出现在产物里"
+        );
 
         let mut files = Vec::new();
         collect_files(&tmp.join("lang_en"), &mut files);
@@ -5528,6 +5590,104 @@ mod tests {
             );
         }
 
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 语言变体文件：`<stem>.<lang>.<ext>` 按 `skill_lang` 二选一，产物去掉语言标记，
+    /// 且非命中语言的那份不会落到项目里。
+    #[test]
+    fn language_variant_files_pick_matching_language() {
+        let tpl = std::env::temp_dir().join(format!("pengj-langvar-tpl-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("pengj-langvar-out-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tpl);
+        let _ = std::fs::remove_dir_all(&tmp);
+        let layer = tpl.join("demo");
+        std::fs::create_dir_all(layer.join("sub")).unwrap();
+        std::fs::write(
+            layer.join(LAYER_META_FILE),
+            "name = \"Demo\"\ndescription = \"demo layer\"\n",
+        )
+        .unwrap();
+        std::fs::write(layer.join("config.zh.js"), "// 中文版本\n").unwrap();
+        std::fs::write(layer.join("config.en.js"), "// english version\n").unwrap();
+        std::fs::write(layer.join("sub/plain.zh.txt"), "中文纯文本\n").unwrap();
+        std::fs::write(layer.join("sub/plain.en.txt"), "english plain text\n").unwrap();
+        std::fs::write(layer.join("shared.txt"), "shared file\n").unwrap();
+        // 提交语言轴变体：跟随 commit_zh，而非 skill_lang
+        std::fs::write(layer.join("msg.commit.zh.js"), "// 中文提交校验\n").unwrap();
+        std::fs::write(layer.join("msg.commit.en.js"), "// english commit check\n").unwrap();
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let templates = Templates::new(&tpl);
+        let layers = vec!["demo".to_string()];
+        // (项目名, skill_lang, commit_zh, 文档轴期望, 提交轴期望)
+        for (proj, lang, commit_zh, js, txt, msg) in [
+            (
+                "proj_zh",
+                "zh",
+                true,
+                "// 中文版本\n",
+                "中文纯文本\n",
+                "// 中文提交校验\n",
+            ),
+            (
+                "proj_en",
+                "en",
+                false,
+                "// english version\n",
+                "english plain text\n",
+                "// english commit check\n",
+            ),
+            // 混合：中文文档 + 英文提交，两条语言轴互不影响
+            (
+                "proj_mixed",
+                "zh",
+                false,
+                "// 中文版本\n",
+                "中文纯文本\n",
+                "// english commit check\n",
+            ),
+        ] {
+            let mut options = BTreeMap::new();
+            options.insert("skill_lang".to_string(), serde_json::json!(lang));
+            options.insert("commit_zh".to_string(), serde_json::json!(commit_zh));
+            generate(&templates, proj, &layers, options, &tmp).unwrap();
+
+            let dir = tmp.join(proj);
+            // 渲染器会去掉文件末尾换行，比较时统一 trim
+            assert_eq!(
+                std::fs::read_to_string(dir.join("config.js"))
+                    .unwrap()
+                    .trim(),
+                js.trim(),
+                "{} 应取对应语言变体",
+                proj
+            );
+            assert_eq!(
+                std::fs::read_to_string(dir.join("sub/plain.txt"))
+                    .unwrap()
+                    .trim(),
+                txt.trim(),
+                "{} 子目录变体应生效",
+                proj
+            );
+            assert_eq!(
+                std::fs::read_to_string(dir.join("msg.js")).unwrap().trim(),
+                msg.trim(),
+                "{} 提交轴变体应跟随 commit_zh",
+                proj
+            );
+            assert!(dir.join("shared.txt").is_file(), "普通文件应照常生成");
+            assert!(
+                !dir.join("config.zh.js").exists()
+                    && !dir.join("config.en.js").exists()
+                    && !dir.join("msg.commit.zh.js").exists()
+                    && !dir.join("msg.commit.en.js").exists(),
+                "变体源文件不应出现在产物里"
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&tpl);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
