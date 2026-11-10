@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    # 在此处添加工作区成员 crate，例如 "crates/*" 或具体子目录
+    # {% if options["skill_lang"] == "en" %}Add workspace member crates here, e.g. "crates/*" or explicit subdirectories{% else %}在此处添加工作区成员 crate，例如 "crates/*" 或具体子目录{% endif %}
 ]
 
 [workspace.package]
@@ -9,7 +9,7 @@ version = "0.1.0"
 edition = "{{ options["edition"] or "2024" }}"
 
 {% if options["chinese_programming"] %}
-# 中文编程：允许中文标识符与字符串字面量，关闭相关命名 lint
+# {% if options["skill_lang"] == "en" %}Chinese programming: allow CJK identifiers and string literals, disable the related naming lints{% else %}中文编程：允许中文标识符与字符串字面量，关闭相关命名 lint{% endif %}
 [workspace.lints.rust]
 non_ascii_idents = "allow"
 

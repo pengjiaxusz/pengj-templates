@@ -1,6 +1,6 @@
-# justfile — 项目统一任务入口（由 just 层托管）
-# 框架区在下方托管块内，由模板更新原位替换；块外的项目专属区归项目所有。
-# 重型任务统一走 `just q-run <cmd>`，性能跑分走 `just q-bench <cmd>`。
+# {% if options["skill_lang"] == "en" %}justfile — unified task entry point (managed by the just layer){% else %}justfile — 项目统一任务入口（由 just 层托管）{% endif %}
+# {% if options["skill_lang"] == "en" %}The framework area below is a managed block: template updates replace it in place; everything outside the block belongs to the project.{% else %}框架区在下方托管块内，由模板更新原位替换；块外的项目专属区归项目所有。{% endif %}
+# {% if options["skill_lang"] == "en" %}Heavy commands go through `just q-run <cmd>`; benchmarks go through `just q-bench <cmd>`.{% else %}重型任务统一走 `just q-run <cmd>`，性能跑分走 `just q-bench <cmd>`。{% endif %}
 # PENGJ_TEMPLATE_START
 [unix]
 set shell := ["sh", "-uc"]
@@ -22,13 +22,13 @@ import 'just/rust-workspace.just'
 import 'just/rust.just'
 {% endif %}
 
-# 列出所有可用任务
+# {% if options["skill_lang"] == "en" %}List all available recipes{% else %}列出所有可用任务{% endif %}
 default:
     @just --list
 # PENGJ_TEMPLATE_END
 
 # ---------------------------------------------------------------------------
-# 项目专属区：模板更新只替换上方托管块，本区域归项目所有、完整保留。
-# 在这里登记项目自己的 recipe；新增重任务请调用 `just q-run <cmd>` / `just q-bench <cmd>`，
-# 不要裸跑 cargo / cmake / ninja / pnpm build / tsc 等编译命令。
+# {% if options["skill_lang"] == "en" %}Project-owned area: template updates only replace the managed block above. This area belongs to the project and is preserved in full.{% else %}项目专属区：模板更新只替换上方托管块，本区域归项目所有、完整保留。{% endif %}
+# {% if options["skill_lang"] == "en" %}Register project recipes here; new heavy tasks must call `just q-run <cmd>` / `just q-bench <cmd>`.{% else %}在这里登记项目自己的 recipe；新增重任务请调用 `just q-run <cmd>` / `just q-bench <cmd>`，{% endif %}
+# {% if options["skill_lang"] == "en" %}Never run cargo / cmake / ninja / pnpm build / tsc or other compilers raw.{% else %}不要裸跑 cargo / cmake / ninja / pnpm build / tsc 等编译命令。{% endif %}
 # ---------------------------------------------------------------------------

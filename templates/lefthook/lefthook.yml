@@ -1,6 +1,6 @@
-# lefthook.yml — git hooks 配置（lefthook 层）
+# {% if options["skill_lang"] == "en" %}lefthook.yml — git hook configuration (lefthook layer){% else %}lefthook.yml — git hooks 配置（lefthook 层）{% endif %}
 commit-msg:
   commands:
     commitlint:
-      # 用 pnpm exec（本地已装 commitlint）而非 npx；"{1}" 是 lefthook 占位符（跨平台，勿用 $1）
+      # {% if options["skill_lang"] == "en" %}Use pnpm exec (commitlint is installed locally) instead of npx; "{1}" is a lefthook placeholder (cross-platform, do not use $1){% else %}用 pnpm exec（本地已装 commitlint）而非 npx；"{1}" 是 lefthook 占位符（跨平台，勿用 $1）{% endif %}
       run: pnpm exec commitlint --edit "{1}"

@@ -23,3 +23,9 @@
 - 勾 `bque` 层时会自动把 `bque` 技能并入 `options["skills"]`，避免「有配方没文档」的半接入；`audit` 对半接入、以及缺少 justfile 托管块的项目给出配置提示。
 - 存量项目加层走 `add-layer --dir <项目> --layers just,bque`：只合并层清单并重跑 `update`，不做全量重纳管。
 - bque 是 Windows 全局锁；`[unix]` 分支的同一批配方直接透传，CI 与 Unix 裸跑属预期行为。
+
+## 语言轴 / Language axes
+
+- `skill_lang`（`zh` / `en`）决定**所有层**面向人的文案：注释、报错提示、脚本日志、`.gitignore` 拼接段标题以及 agent 层文档。模板统一用 `{% if options["skill_lang"] == "en" %}…{% else %}…{% endif %}` **行内分支**（不引入额外空行），中文分支渲染结果必须与改动前逐字节一致，避免存量中文项目漂移。
+- `commit_zh` 独立控制 `commitlint.base.js` 的 `subject-language` 规则值（`zh` / `en`）与提交规范技能文档。
+- 全英文项目用 `--skill-lang en --no-commit-zh`；生成后所有文本文件零汉字（`crates/core` 有端到端单测保障）。`.agents/skills/*/scripts/` 与 npm `prepare` 脚本恒为英文，不受语言轴影响。

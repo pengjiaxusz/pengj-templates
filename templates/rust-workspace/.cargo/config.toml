@@ -1,7 +1,7 @@
-# .cargo/config.toml — Cargo 本地配置
+# {% if options["skill_lang"] == "en" %}.cargo/config.toml — local Cargo configuration{% else %}.cargo/config.toml — Cargo 本地配置{% endif %}
 
 # PENGJ_TEMPLATE_START
-# 模板托管的编译与链接器优化
+# {% if options["skill_lang"] == "en" %}Compiler and linker optimisations managed by the template{% else %}模板托管的编译与链接器优化{% endif %}
 {% if options["use_sccache"] %}
 [build]
 rustc-wrapper = "sccache"
@@ -15,7 +15,7 @@ linker = "lld"
 {% endif %}
 # PENGJ_TEMPLATE_END
 
-# --- 用户自定义配置区域 (User Custom Section) ---
-# 项目特有的 [alias]、rustflags、target 配置请写在受管区域外部
-# 模板更新时仅替换上方 PENGJ_TEMPLATE 区域，本区域内容 100% 保留
+# --- {% if options["skill_lang"] == "en" %}User Custom Section{% else %}用户自定义配置区域 (User Custom Section){% endif %} ---
+# {% if options["skill_lang"] == "en" %}Put project-specific [alias], rustflags and target settings outside the managed block{% else %}项目特有的 [alias]、rustflags、target 配置请写在受管区域外部{% endif %}
+# {% if options["skill_lang"] == "en" %}Template updates only replace the PENGJ_TEMPLATE block above; this area is preserved in full{% else %}模板更新时仅替换上方 PENGJ_TEMPLATE 区域，本区域内容 100% 保留{% endif %}
 
