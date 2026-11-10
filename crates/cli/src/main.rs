@@ -62,10 +62,10 @@ enum Command {
         /// 中文编程（仅 rust 层生效）：允许中文标识符/字面量，关闭相关命名 lint
         #[arg(long)]
         chinese: bool,
-        /// 技能书写语言（仅 agent 层生效）：zh 中文 / en 英文
+        /// 项目文案语言：zh 中文 / en 英文（技能文档及各层注释、报错、日志）
         #[arg(long, default_value = "zh")]
         skill_lang: String,
-        /// 提交信息是否用中文（仅 agent 层生效；默认开，传 --no-commit-zh 关闭）
+        /// 提交信息是否用中文（决定 commitlint 规则与提交规范文档；默认开，传 --no-commit-zh 关闭）
         #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
         commit_zh: bool,
         /// 阶段性完工与收尾时是否要求自动提交并推送（仅 agent 层生效；默认关，传 --commit-and-push 开启）
@@ -143,10 +143,10 @@ enum Command {
         /// 中文编程：允许中文标识符/字面量，关闭相关命名 lint
         #[arg(long)]
         chinese: bool,
-        /// 技能书写语言：zh 中文 / en 英文
+        /// 项目文案语言：zh 中文 / en 英文（技能文档及各层注释、报错、日志）
         #[arg(long, default_value = "zh")]
         skill_lang: String,
-        /// 提交信息是否用中文（默认开，传 --no-commit-zh 关闭）
+        /// 提交信息是否用中文（决定 commitlint 规则与提交规范文档；默认开，传 --no-commit-zh 关闭）
         #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
         commit_zh: bool,
         /// 阶段性完工与收尾时是否要求自动提交并推送（默认关，传 --commit-and-push 开启）
