@@ -36,6 +36,7 @@ cargo run -p pengj-templates-cli -- list-layers                          # 列�
 cargo run -p pengj-templates-cli -- create my-app --layers rust          # 生成 common + rust
 cargo run -p pengj-templates-cli -- create my-app --layers rust --edition 2024 --channel nightly --no-lld
 cargo run -p pengj-templates-cli -- create my-app --layers agent --skills commit,caveman   # 只生成选中的技能
+cargo run -p pengj-templates-cli -- create my-app --layers rust --skill-lang en --no-commit-zh  # 全英文项目：所有文案与提交信息均为英文
 cargo run -p pengj-templates-cli -- update --dir ./my-app                # 同步模板更新
 cargo run -p pengj-templates-cli -- add-layer --dir ./my-app --layers just,bque  # 存量项目增量加层
 cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # 巡检半接入与托管块漂移
@@ -45,7 +46,7 @@ cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # 巡�
 
 `create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2024）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--sccache` 开启编译缓存（默认关）、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates.json`，`update` 同步时按各项目当年的选项重新渲染。
 
-`agent` 层的技能与规范选项（选 agent 层时生效）：`--skills commit,caveman,grill-me,arch-align,template-sync,subrepo-sync,branch-sync` 决定生成哪些技能（逗号分隔，默认全部；GUI 里用勾选框选择）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）、`--commit-and-push` 要求 Agent 阶段性完工与收尾时自动提交并推送到远端仓库（默认关）。`mcp-bootstrap` 是基线技能：只要有 agent 层就始终附带（显式传空技能列表除外），保证项目离开模板仓库后仍能自行安装与校验 MCP。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `commit`（约定式提交）、`template-sync`（模板同步/纳管）、`subrepo-sync`（子仓库同步与升级）、`branch-sync`（Worktree感知分支极速同步）、`caveman`（超压缩通信）、`grill-me`（设计质询）、`arch-align`（架构对齐）、`mcp-bootstrap`（项目内 MCP 安装与握手校验）等，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可。三个中文概念互相独立：**中文编程**（代码标识符）、**技能用中文写**（文档语言，`skill_lang`）、**提交信息是中文**（提交信息语言，`commit_zh`）。
+`agent` 层的技能与规范选项（选 agent 层时生效）：`--skills commit,caveman,grill-me,arch-align,template-sync,subrepo-sync,branch-sync` 决定生成哪些技能（逗号分隔，默认全部；GUI 里用勾选框选择）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）、`--commit-and-push` 要求 Agent 阶段性完工与收尾时自动提交并推送到远端仓库（默认关）。`mcp-bootstrap` 是基线技能：只要有 agent 层就始终附带（显式传空技能列表除外），保证项目离开模板仓库后仍能自行安装与校验 MCP。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `commit`（约定式提交）、`template-sync`（模板同步/纳管）、`subrepo-sync`（子仓库同步与升级）、`branch-sync`（Worktree感知分支极速同步）、`caveman`（超压缩通信）、`grill-me`（设计质询）、`arch-align`（架构对齐）、`mcp-bootstrap`（项目内 MCP 安装与握手校验）等，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可。三条语言选项互相独立：**中文编程**（代码标识符，`chinese_programming`）、**项目文案语言**（`skill_lang`，决定所有层的注释、报错、日志与技能文档）、**提交信息语言**（`commit_zh`，决定 commitlint 规则与提交规范文档）；技能脚本恒为英文，无选项。全英文项目须同时传 `--skill-lang en --no-commit-zh`，生成后所有文本文件零汉字（有端到端单测保障）。
 
 **技能扩展**：每个技能 = 托管框架 + 项目专属区。`SKILL.md` 的 `PENGJ_TEMPLATE_START/END` 块内是模板框架（`update` 时原位替换），块外归项目所有、永不覆盖——提交前检查的定义、领域判定表、红线全部写在块外；可执行门禁用什么形式（任意语言脚本 / task runner / 纯清单）由项目自定并在块外声明，框架不预设实现。存量全自定义技能纳管时自动接管：模板整页（含 description）直接覆盖，原正文下移到「纳管过渡区」，双流程由用户合并去重。
 
