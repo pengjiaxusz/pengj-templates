@@ -37,7 +37,7 @@
     ".agents\\skills\\arch-align\\SKILL.md": "911129a46fd7f8d9d22822c5474ffde63621c4b375b721327a8d84dd89cf518f",
     ".agents\\skills\\arch-align\\references\\GENERATE-DOC.md": "7cbd5aca4240f88d8ccce5b7a8278778de791aa7152c3c912c243ec2808511df",
     ".agents\\skills\\arch-align\\references\\GENERATE-INDEX.md": "8631df67a99bc9eb96096b4edc28d050e1d63151ef6f05be545ba37fb73396bb",
-    ".agents\\skills\\bque\\SKILL.md": "795dae355fdba547d04286098d05ae6778ebfa95a17a96cd4449b9b1455879b1",
+    ".agents\\skills\\bque\\SKILL.md": "936fd95c64c5f9948d3dc91b3e4f04dac9018767679c0626563dfadf03c6b54f",
     ".agents\\skills\\bque\\references\\install.md": "1b87fa1ccf520a90a57b62555b3672b12b7f423eacf6b04d8aede13c1c6e83ff",
     ".agents\\skills\\bque\\references\\usage-matrix.md": "2c11dcb32f89a20284d7a6bff587d818e7e80ca925336ce4b8f1aac9eb8b97c9",
     ".agents\\skills\\caveman\\SKILL.md": "56a31b9be677ca0afcc24e2273846931841534990657251e1d47815adf661914",
@@ -64,11 +64,11 @@
     ".cargo\\config.toml": "1b06aced2448d86dc3dffeba01ffac746b65059315367c4d54e5801e5af7b98d",
     ".gitattributes": "b5099197608cab315182fadad3cdf0e06ad5ab9b21f3decf8ace9e328cb9a121",
     ".gitignore": "10fc518efad9b43b5cff3dea30046f7f86a78b9aa771837d3768792ee50b0438",
-    "AGENTS.md": "f537e444a30da4c12ed460d4cedb66e86ca33412707e32054c1b5dde67296747",
-    "commitlint.base.js": "3067231e1559d023504d2f0a51f06b301b7ea058eac4e92a3b545d5077da471f",
+    "AGENTS.md": "a1dda79356d51ffa069e1c94e76f3f4068af23a797a9684cd105f87e7708bde7",
+    "commitlint.base.js": "0d81be3222e681a569c4b9c0a39a2cc93c68190252bdbd652d15e187a2f0de42",
     "just\\bque.just": "cf01148f49e980d5df19c46e7c616cc3812cd3a52b613779da1f4aa918b3f487",
     "just\\rust-workspace.just": "2915c643d9464d2f44a516fd5c5dffc5b0b3290f1ee26f52c9420a0e71e4bb46",
-    "justfile": "9d325bf15455e0363b45377e472ef3de9cd07e36b54a9b7f9ef05105e13c17a2",
-    "package.json": "a9f9eff37a34ac0819dbfa46986774b5c97d84d119406c0288dc1687d0caec0b"
+    "justfile": "16505a759f20c475cf39228b1a8cd3b43ce1a27de7fc0bd7bbee9a355a4f8077",
+    "package.json": "9c8f2dbabeb18426cdf8b1aad5fe1208b25d9d570b8b0e3fe00e853b98b77309"
   }
 }
