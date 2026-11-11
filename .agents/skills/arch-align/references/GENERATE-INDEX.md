@@ -1,3 +1,4 @@
+
 # 架构主索引生成指南 (`docs/architecture/README.md`)
 
 > **用途**：当项目中不存在 `docs/architecture/README.md` 时，通过本指南在用户授权后扫描现有架构文档与模块结构，生成标准、现代化的架构主索引文件。

@@ -4952,12 +4952,6 @@ mod tests {
         .unwrap();
         assert!(report.files.iter().any(|f| f.contains("commit")));
 
-        let agents_md = std::fs::read_to_string(out_dir.join("demo").join("AGENTS.md")).unwrap();
-        assert!(
-            agents_md.contains("- commit"),
-            "AGENTS.md 应渲染出默认补全的 commit 技能"
-        );
-
         let manifest = ProjectManifest::load(&out_dir.join("demo")).unwrap();
         assert_eq!(manifest.options["skills"], serde_json::json!(["commit"]));
 
@@ -4989,9 +4983,16 @@ mod tests {
         opts.insert("commit_and_push".to_string(), serde_json::json!(true));
         opts.insert("skill_lang".to_string(), serde_json::json!("zh"));
         let report = generate(&templates, "zh_proj", &["agent".to_string()], opts, &tmp).unwrap();
-        assert!(report.files.iter().any(|f| f == "AGENTS.md"));
-        let zh_md = std::fs::read_to_string(tmp.join("zh_proj").join("AGENTS.md")).unwrap();
-        assert!(zh_md.contains("回复前提交门禁（硬性拦截，禁止堆积）"));
+        assert!(report.files.iter().any(|f| f.ends_with("SKILL.md")));
+        let zh_md = std::fs::read_to_string(
+            tmp.join("zh_proj")
+                .join(".agents")
+                .join("skills")
+                .join("git-workflow")
+                .join("SKILL.md"),
+        )
+        .unwrap();
+        assert!(zh_md.contains("回复前提交门禁"));
         assert!(zh_md.contains("规划模式（`/plan` / `/boost`）特别约束"));
         assert!(zh_md.contains("所有改动必须已提交并推送到远端（commit & push）"));
 
@@ -5000,7 +5001,14 @@ mod tests {
         opts_en.insert("commit_and_push".to_string(), serde_json::json!(true));
         opts_en.insert("skill_lang".to_string(), serde_json::json!("en"));
         generate(&templates, "en_proj", &["agent".to_string()], opts_en, &tmp).unwrap();
-        let en_md = std::fs::read_to_string(tmp.join("en_proj").join("AGENTS.md")).unwrap();
+        let en_md = std::fs::read_to_string(
+            tmp.join("en_proj")
+                .join(".agents")
+                .join("skills")
+                .join("git-workflow")
+                .join("SKILL.md"),
+        )
+        .unwrap();
         assert!(en_md.contains("Pre-Response Commit Gate (Mandatory Barrier — No Accumulation)"));
         assert!(en_md.contains("Planning Modes (`/plan` / `/boost`) Enforcement"));
         assert!(en_md.contains(
@@ -5018,8 +5026,15 @@ mod tests {
             &tmp,
         )
         .unwrap();
-        let off_md = std::fs::read_to_string(tmp.join("off_proj").join("AGENTS.md")).unwrap();
-        assert!(!off_md.contains("commit & push"));
+        let off_md = std::fs::read_to_string(
+            tmp.join("off_proj")
+                .join(".agents")
+                .join("skills")
+                .join("git-workflow")
+                .join("SKILL.md"),
+        )
+        .unwrap();
+        assert!(!off_md.contains("回复前提交门禁"));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

@@ -35,8 +35,15 @@ See [references/non-interactive.md](references/non-interactive.md) for full conf
 Always push immediately after committing to prevent work loss.
 
 ### 1.1 Trigger Conditions (Mandatory Proactive Triggers)
-- **Code modification & milestone completion (Mandatory barrier — no accumulation)**: Whenever files are modified and verified in the current turn, you MUST run this commit workflow before reporting back to the user or proceeding to the next step. Never leave verified changes sitting in the working directory before yielding control; writing `walkthrough.md` in planning modes (`/plan` / `/boost`) does NOT conclude the task — you must commit and push immediately after.
-- **Task conclusion (Mandatory)**: Before concluding any development/maintenance task or delivering final responses, ensure the working tree is clean and all commits are pushed.
+{%- if options["commit_and_push"] %}
+- **Pre-Response Commit Gate (Mandatory Barrier — No Accumulation)**: Whenever files (code, tests, or docs) are created, modified, or deleted in the current turn and have passed verification (builds/tests pass), **you MUST run the commit workflow (completeness checks, split commits, and `git push`) as the very last tool-calling step BEFORE stopping to output your final response to the user**. Never leave verified changes sitting in the working directory before yielding control; never defer committing until the end of a multi-turn conversation or wait for the user to prompt `/commit`.
+  - **Planning Modes (`/plan` / `/boost`) Enforcement**: In planning modes, creating or updating `walkthrough.md` does NOT conclude the task; **you are strictly forbidden from stopping after writing a walkthrough — you MUST proceed immediately to commit and push before finishing your turn**.
+  - **Exemptions**: Committing is only skipped if the turn is purely conversational (zero file changes in `git status`) or if tests/builds failed and you are stopping specifically to ask the user for diagnostic input.
+- **Task Conclusion**: Before concluding any task or delivering final responses, the working tree must be clean and all commits pushed to the remote repository.
+{%- else %}
+- **Code modification & milestone completion**: Whenever files are modified and verified, run this commit workflow before reporting back to the user or proceeding to the next step.
+- **Task conclusion**: Before concluding any task, ensure the working tree is clean.
+{%- endif %}
 - **Explicit user instruction**: When user invokes `/commit`, "commit", "commit & push", etc.
 
 ### 1.2 Pre-Commit Completeness Check — Project-Defined
@@ -130,8 +137,15 @@ Detailed rebase and conflict resolution steps: [references/rebase-conflict.md](r
 提交后立即 push，防止工作丢失。
 
 ### 1.1 触发时机（主动触发规则）
-- **代码修改与阶段性完工（回复前硬性门禁，禁止堆积）**：凡本轮对话存在已通过构建/测试验证的代码修改，在向用户输出最终汇报前，**必须将运行提交流程（执行检查、拆分提交并 `git push`）作为最后一个工具调用步骤**。严禁在工作区留存已验证修改直接结束回复；在 `/plan` 等规划模式下生成 `walkthrough.md` 后，亦必须紧随其后执行提交与推送，不可中途停顿。
-- **任务收尾（硬性触发）**：任何开发或维护任务结束、向用户做最终交付前，必须确保工作区干净已推送，不留未提交修改。
+{%- if options["commit_and_push"] %}
+- **代码修改与阶段性完工（回复前提交门禁（硬性拦截，禁止堆积））**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（完整性检查、语义拆分、commit 与 `git push`）作为最后一个工具调用步骤**。严禁在工作区留存已验证的代码修改就结束工具调用向用户汇报；严禁在多轮对话中拖延堆积改动或等待用户催促 `/commit`。
+  - **规划模式（`/plan` / `/boost`）特别约束**：即使在规划模式下生成或更新了 `walkthrough.md`，写完文档亦绝不等于任务完结；**严禁仅写完 walkthrough 就直接交差，必须紧随其后执行 commit 与 push，未提交推送前严禁结束对话汇报**。
+  - **无需提交的豁免情况**：仅当本轮对话为纯问答/无任何文件变动，或构建/测试失败正在排查取证阶段且需向用户提问时，方可不提交。
+- **任务收尾要求**：任何开发或维护任务结束、向用户做最终交差前，工作区必须保持干净，所有改动必须已提交并推送到远端（commit & push）。
+{%- else %}
+- **代码修改与阶段性完工**：凡存在已通过验证的代码修改，在汇报前运行提交流程完成提交。
+- **任务收尾**：任何任务收尾前，确保工作区修改已提交。
+{%- endif %}
 - **用户显式指令**：用户发送 `/commit`、"提交"、"commit & push" 等。
 
 ### 1.2 提交前完整性检查 —— 项目自定义

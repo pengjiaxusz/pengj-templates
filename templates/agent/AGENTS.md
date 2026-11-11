@@ -6,42 +6,17 @@
 
 ## General conventions
 
-- Commits follow Conventional Commits — {% if options["commit_zh"] %}type/scope in English, subject/body in Chinese{% else %}titles in English{% endif %}{% if options["skills"] is undefined or 'git-workflow' in options["skills"] or 'commit' in options["skills"] %} (see `.agents/skills/git-workflow`){% endif %}.
-{%- if options["commit_and_push"] %}
-- **Pre-Response Commit Gate (Mandatory Barrier — No Accumulation)**: Whenever files (code, tests, or docs) are created, modified, or deleted in the current turn and have passed verification (builds/tests pass), **you MUST run the commit workflow (completeness checks, split commits, and `git push`) as the very last tool-calling step BEFORE stopping to output your final response to the user**. Never leave verified changes sitting in the working directory before yielding control; never defer committing until the end of a multi-turn conversation or wait for the user to prompt `/commit`.
-  - **Planning Modes (`/plan` / `/boost`) Enforcement**: In planning modes, creating or updating `walkthrough.md` does NOT conclude the task; **you are strictly forbidden from stopping after writing a walkthrough — you MUST proceed immediately to commit and push before finishing your turn**.
-  - **Exemptions**: Committing is only skipped if the turn is purely conversational (zero file changes in `git status`) or if tests/builds failed and you are stopping specifically to ask the user for diagnostic input.
-- **Task Conclusion**: Before concluding any task or delivering final responses, the working tree must be clean and all commits pushed to the remote repository.
-{%- endif %}
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
-- **Build & Test Execution Red Line (Strictly Prohibit Raw Build Commands)**: Directly running raw build/test commands (`ninja`, `cmake --build`, `cargo build/test/clippy`, `cl.exe`, `ctest`, `pnpm build`, etc.) in the terminal is strictly prohibited! All compilation, linting, tests, and benchmarks MUST run via unified `just` recipes (`just build`, `just check`, `just test`, `just bench`, or `just q-run <cmd>` / `just q-bench <cmd>` for ad-hoc commands) or native bque CLI (bque run -- <cmd>, bque bench -- <cmd>) to ensure cross-worktree queue serialization and `Idle` CPU priority. Benchmarks must run in clean-room mode to freeze background builds and guarantee 0% CPU disturbance. bque is a Windows-only global lock: on Unix and in CI the same `just` recipes pass through directly, which is expected; never wrap them in a raw bque call there. Run `just queue-doctor` to check the local installation (see `.agents/skills/bque/SKILL.md`).
+- **Unified Task Entry & CPU Guard (Strictly Prohibit Raw Build Commands)**: All compilation, linting, tests, and benchmarks MUST run via unified `just` recipes (`just check`, `just test`, `just bench`, or `just q-run <cmd>` / `just q-bench <cmd>` for ad-hoc commands) to ensure cross-worktree queue serialization and `Idle` CPU priority (see `.agents/skills/bque/SKILL.md`). Never run raw `cargo`, `ninja`, `cmake`, or compiler commands directly in terminal.
 {%- endif %}
-- **Template Anti-Tampering Red Line (Strict Protection)**: All files under `.agents/skills/*/scripts/` and all content inside `PENGJ_TEMPLATE_START/END` managed blocks belong to `pengj-templates`. Directly modifying managed script files or tampering with code inside managed blocks in downstream projects is strictly prohibited! When encountering environment mismatch or needing project-specific settings:
-  1. Always declare configuration in the project-specific area outside the managed block in `SKILL.md` (e.g. integration branch declaration, untracked path ignore regex, or verification gates);
-  2. If the template lacks necessary capabilities, propose generic features to upstream `pengj-templates` instead of keeping local hacks in downstream;
-  3. Run `cargo run -p pengj-templates-cli -- audit --dir . --diff` anytime to inspect alignment and keep drift violations at zero.
+- **Template Anti-Tampering Red Line**: Files under `.agents/skills/*/scripts/` and content inside `PENGJ_TEMPLATE_START/END` managed blocks are managed by `pengj-templates`. Directly modifying them in downstream projects is prohibited. Put project-specific configurations in the project-owned area outside managed blocks; run `cargo run -p pengj-templates-cli -- audit --dir . --diff` anytime to inspect alignment.
 {%- if options["chinese_programming"] %}
 
 ### Chinese programming conventions
 
 - **Naming & Generic Terms**: File names and variable names prefer Chinese; short common English terms (`code`, `tests`, `xml`, `existing`, `output_dir`, etc.) remain as-is. Avoid awkward multi-word English concatenation.
 - **Mixed Chinese-English naming (Recommended)**: Use "Standard/API English anchor + Domain Chinese role" (e.g. Type `HttpRequest快照`, field `创建信息快照`/`补丁`; underlying spec field names remain English). Avoid long compound English suffixes (e.g. `HttpRequestSnapshot`) or literal translations of spec names.
-- **Natural Localized Terminology (Strict)**: Express concepts in natural native terms; avoid literal translations of English architecture/graph jargon (e.g. `plane` -> `通路/管道` instead of `平面`; `edge` -> `关联/依赖` instead of `边/交叉边`; `node` -> `对象记录/条目`; `backpressure` -> `限流排队`; `provenance` -> `来源`). Self-check: read aloud as if explaining to a colleague; rephrase if it sounds like machine translation; keep spec/protocol proper nouns in English.
-{%- endif %}
-{%- if options["skills"] is defined and options["skills"] | length > 0 %}
-
-### Enabled skills
-
-{% for skill in options["skills"] -%}
-- `{{ skill }}` — see `.agents/skills/{{ skill }}/SKILL.md`
-{% endfor %}
-### Skill extension convention
-
-- A skill file = managed framework + project-specific area: inside `SKILL.md`, the `PENGJ_TEMPLATE_START/END` block holds the template framework (replaced in place on update); **content outside the block belongs to the project** and is never touched by template updates.
-- Document-style customization (domain checklists, judgment tables, red lines) goes directly into the project-specific area outside the block — keep everything in one file so a single read yields all conventions; do not create external files.
-- Executable pre-commit gates are project-defined (any language, any tool — script, task runner, or plain checklist); document how to invoke them in the skill's project-specific area. The framework prescribes no implementation.
-- **Scripts under `.agents/skills/*/scripts/` are written in English** — identifiers, structured field names, comments and log output — regardless of `skill_lang`. They are shared infrastructure run by agents, CI and other tools; put the Chinese explanation in `SKILL.md`, never in the script.
-- Legacy fully-custom skills (no managed block) are taken over automatically on adopt/update: the template page wins entirely (frontmatter incl. description is overwritten) and the original body moves down into a transition zone (temporary double flow). Merge domain differences into the project-specific area, then delete the zone.
+- **Natural Localized Terminology (Strict)**: Express concepts in natural native terms; avoid literal translations of English architecture/graph jargon. Self-check: read aloud as if explaining to a colleague; rephrase if it sounds like machine translation; keep spec/protocol proper nouns in English.
 {%- endif %}
 {%- if 'rust' in layers or 'rust-workspace' in layers %}
 
@@ -74,42 +49,17 @@
 
 ## 通用约定
 
-- 提交信息遵守约定式提交：`type(scope): 标题`{% if options["commit_zh"] %}，type 用英文、标题正文用中文{% else %}，标题用英文{% endif %}{% if options["skills"] is undefined or 'git-workflow' in options["skills"] or 'commit' in options["skills"] %}（见 `.agents/skills/git-workflow`）{% endif %}。
-{%- if options["commit_and_push"] %}
-- **回复前提交门禁（硬性拦截，禁止堆积）**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（完整性检查、语义拆分、commit 与 `git push`）作为最后一个工具调用步骤**。严禁在工作区留存已验证的代码修改就结束工具调用向用户汇报；严禁在多轮对话中拖延堆积改动或等待用户催促 `/commit`。
-  - **规划模式（`/plan` / `/boost`）特别约束**：即使在规划模式下生成或更新了 `walkthrough.md`，写完文档亦绝不等于任务完结；**严禁仅写完 walkthrough 就直接交差，必须紧随其后执行 commit 与 push，未提交推送前严禁结束对话汇报**。
-  - **无需提交的豁免情况**：仅当本轮对话为纯问答/无任何文件变动，或构建/测试失败正在排查取证阶段且需向用户提问时，方可不提交。
-- **任务收尾要求**：任何开发或维护任务结束、向用户做最终交差前，工作区必须保持干净，所有改动必须已提交并推送到远端（commit & push）。
-{%- endif %}
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
-- **构建与测试排队红线（严禁裸跑原生构建命令）**：严禁直接在命令行运行 `ninja`、`cmake --build`、`cargo build/test/clippy`、`cl.exe`、`ctest`、`pnpm build` 等底层构建/编译器工具！所有编译、检查、单测与性能跑分必须统一走 `just`（如 `just build`、`just check`、`just test`、`just bench`，临时命令用 `just q-run <cmd>` / `just q-bench <cmd>`）或原生 bque 命令行（如 bque run -- <cmd>、bque bench -- <cmd>）进行全局跨工作树排队调度与 `Idle` 降级，性能跑分必须走 bench 模式自动挂起后台编译以提供 0% 干扰的纯净环境。bque 是 Windows 全局锁：Unix 与 CI 环境下同一批 `just` 配方会直跑透传，属预期行为，严禁在那里强行套 bque；用 `just queue-doctor` 检查本机安装（详见 `.agents/skills/bque/SKILL.md`）。
+- **统一任务入口与防卡顿（严禁裸跑编译器）**：所有编译、检查、单测与跑分必须统一通过 `just`（如 `just check`、`just test`、`just bench`）或 `just q-run <cmd>` 调度，严禁直接在命令行裸跑 `cargo`/`ninja`/`cmake` 等底层构建工具，确保全局跨工作树排队调度与 CPU 降级防卡顿（详见 `.agents/skills/bque/SKILL.md`）。
 {%- endif %}
-- **模板受管区域防篡改禁令（硬性红线）**：`.agents/skills/*/scripts/` 脚本文件及所有带 `PENGJ_TEMPLATE_START/END` 的托管块区间归 `pengj-templates` 统一托管。严禁在下游仓库直接修改托管脚本文件或私自篡改托管块内代码！若遇到下游环境不适配或需要定制：
-  1. 优先查阅对应技能的 `SKILL.md`，在托管块外「项目专属区」以声明式配置解决（如 `集成分支登记`、`忽略未追踪路径正则` 或项目门禁）；
-  2. 若模板缺乏相应扩展能力，应向上游 `pengj-templates` 反馈或进行通用化改造，严禁在下游私自保留本地 hack；
-  3. 随时运行 `cargo run -p pengj-templates-cli -- audit --dir . --diff` 巡检模板对齐状态，确保违规漂移清零。
+- **模板受管区域防篡改**：带 `PENGJ_TEMPLATE_START/END` 的托管块与 `.agents/skills/*/scripts/` 脚本由 `pengj-templates` 托管，严禁私自篡改。项目专属配置请写在托管块外的项目专属区；随时运行 `cargo run -p pengj-templates-cli -- audit --dir . --diff` 巡检对齐状态。
 {%- if options["chinese_programming"] %}
 
 ### 中文编程规范
 
-- **中文化命名与通用保留**：文件名与变量名优先使用中文；简短通用英文（`code`、`tests`、`xml`、`existing`、`output_dir` 等）保持原样；避免冗长别扭的英文多词拼接（如 `wrapper_handle` 中文化为「包装线程句柄」）。
-- **中英拼接规范（推荐）**：采用「规范/API 英文锚点 + 领域中文角色」形式（例：类型 `HttpRequest快照`、`SwapchainCreateInfo快照`，字段 `创建信息快照` / `补丁`；底层规范原样字段保持英文）。禁止生造超长英文多词后缀（如 `SwapchainCreateInfoSnapshot`）或规范结构体硬译中文（如 `交换链创建信息拥有体`）。自检标准：类型名像「规范名 + 中文角色」、字段名像「同事会这么说」。
-- **中文本土化与母语自然表达（硬性）**：用母语自然词表达领域意思，禁止英文架构/图论/运维黑话逐词生硬直译（例：`plane`→`通路`/`管道`而非「平面」；`edge`→`关联`/`依赖`而非「边」/「交叉边」；`node`→`对象记录`/`条目`；`backpressure`→`限流排队`；`provenance`→`来源`）。自检：默念「给同事口述这个概念会不会这么说」，像机翻必须改名。文档、注释、提交信息、UI 文案与代码标识符同一标准；规范专名（Win32/Vulkan/Web/POSIX 等）保留英文。
-{%- endif %}
-{%- if options["skills"] is defined and options["skills"] | length > 0 %}
-
-### 启用的技能
-
-{% for skill in options["skills"] -%}
-- `{{ skill }}` —— 见 `.agents/skills/{{ skill }}/SKILL.md`
-{% endfor %}
-### 技能扩展规范
-
-- 技能文件 = 托管框架 + 项目专属区：`SKILL.md` 中 `PENGJ_TEMPLATE_START/END` 托管块内是模板框架（更新时原位替换）；**块外内容归项目所有**，模板更新永不触碰。
-- 文档型定制（领域检查清单、判定表、红线）直接写在托管块外的项目专属区，保证单次读取即可获得全部约定，不要另建外部文件。
-- 可执行门禁的形式与位置由项目自定（任意语言脚本、task runner 或纯清单），并在项目专属区写明调用方式；框架不预设实现。
-- **`.agents/skills/*/scripts/` 下的脚本一律用英文写**：标识符、结构化字段名、注释、日志输出都用英文，不随 `skill_lang` 变化。脚本是被 agent、CI 与其他工具执行的共享基础设施，中文含义写进 `SKILL.md`，不要写进脚本。
-- 存量的全自定义技能（无托管块）在纳管/更新时自动接管：以模板整页为准（frontmatter 含 description 一并覆盖），原正文下移为「纳管过渡区」（暂时双流程），由用户把领域差异合并进项目专属区后删除过渡区。
+- **中文化命名与通用保留**：文件名与变量名优先使用中文；简短通用英文（`code`、`tests`、`xml`、`existing`、`output_dir` 等）保持原样；避免冗长别扭的英文多词拼接。
+- **中英拼接规范（推荐）**：采用「规范/API 英文锚点 + 领域中文角色」形式（例：类型 `HttpRequest快照`、`SwapchainCreateInfo快照`，字段 `创建信息快照` / `补丁`；底层规范原样字段保持英文）。禁止生造超长英文多词后缀或规范结构体硬译中文。
+- **中文本土化与母语自然表达（硬性）**：用母语自然词表达领域意思，禁止英文架构/图论/运维黑话逐词生硬直译。文档、注释、提交信息、UI 文案与代码标识符同一标准；规范专名保留英文。
 {%- endif %}
 {%- if 'rust' in layers or 'rust-workspace' in layers %}
 
@@ -143,5 +93,3 @@
 {% else %}
 <!-- 项目专属规范可写在下方（锚点之外），模板更新时将完整保留用户内容 -->
 {% endif %}
-
-

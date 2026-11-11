@@ -1,8 +1,11 @@
 ---
 name: arch-align
 description: >-
+
   需求开发与复杂问题定位前的通用架构检索与约束对齐技能。通过渐进式披露检索 docs/architecture/README.md 权威架构主索引；若缺失主索引或领域架构文档，询问用户并按指南生成；对齐架构红线、核心代价取舍与守卫测试后再展开实施。当需要查阅架构、新需求规划、跨模块修改、架构对齐、或用户要求"先看架构"/"架构文档"时使用。 Triggers: arch-align, 架构对齐, 查阅架构, 架构文档, 架构先行, architecture-alignment, 先看架构.
+
 ---
+
 
 # 架构对齐 (Architecture Alignment)
 

@@ -107,37 +107,8 @@
 > 供 AI 编码助手在修改本仓库时遵循。由 pengj-templates 的 `agent` 层按所选层与选项生成。
 
 ## 通用约定
-
-- 提交信息遵守约定式提交：`type(scope): 标题`，type 用英文、标题正文用中文（见 `.agents/skills/git-workflow`）。
-- **回复前提交门禁（硬性拦截，禁止堆积）**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（完整性检查、语义拆分、commit 与 `git push`）作为最后一个工具调用步骤**。严禁在工作区留存已验证的代码修改就结束工具调用向用户汇报；严禁在多轮对话中拖延堆积改动或等待用户催促 `/commit`。
-  - **规划模式（`/plan` / `/boost`）特别约束**：即使在规划模式下生成或更新了 `walkthrough.md`，写完文档亦绝不等于任务完结；**严禁仅写完 walkthrough 就直接交差，必须紧随其后执行 commit 与 push，未提交推送前严禁结束对话汇报**。
-  - **无需提交的豁免情况**：仅当本轮对话为纯问答/无任何文件变动，或构建/测试失败正在排查取证阶段且需向用户提问时，方可不提交。
-- **任务收尾要求**：任何开发或维护任务结束、向用户做最终交差前，工作区必须保持干净，所有改动必须已提交并推送到远端（commit & push）。
-- **构建与测试排队红线（严禁裸跑原生构建命令）**：严禁直接在命令行运行 `ninja`、`cmake --build`、`cargo build/test/clippy`、`cl.exe`、`ctest`、`pnpm build` 等底层构建/编译器工具！所有编译、检查、单测与性能跑分必须统一走 `just`（如 `just build`、`just check`、`just test`、`just bench`，临时命令用 `just q-run <cmd>` / `just q-bench <cmd>`）或原生 bque 命令行（如 bque run -- <cmd>、bque bench -- <cmd>）进行全局跨工作树排队调度与 `Idle` 降级，性能跑分必须走 bench 模式自动挂起后台编译以提供 0% 干扰的纯净环境。bque 是 Windows 全局锁：Unix 与 CI 环境下同一批 `just` 配方会直跑透传，属预期行为，严禁在那里强行套 bque；用 `just queue-doctor` 检查本机安装（详见 `.agents/skills/bque/SKILL.md`）。
-- **模板受管区域防篡改禁令（硬性红线）**：`.agents/skills/*/scripts/` 脚本文件及所有带 `PENGJ_TEMPLATE_START/END` 的托管块区间归 `pengj-templates` 统一托管。严禁在下游仓库直接修改托管脚本文件或私自篡改托管块内代码！若遇到下游环境不适配或需要定制：
-  1. 优先查阅对应技能的 `SKILL.md`，在托管块外「项目专属区」以声明式配置解决（如 `集成分支登记`、`忽略未追踪路径正则` 或项目门禁）；
-  2. 若模板缺乏相应扩展能力，应向上游 `pengj-templates` 反馈或进行通用化改造，严禁在下游私自保留本地 hack；
-  3. 随时运行 `cargo run -p pengj-templates-cli -- audit --dir . --diff` 巡检模板对齐状态，确保违规漂移清零。
-
-### 启用的技能
-
-- `arch-align` —— 见 `.agents/skills/arch-align/SKILL.md`
-- `bque` —— 见 `.agents/skills/bque/SKILL.md`
-- `caveman` —— 见 `.agents/skills/caveman/SKILL.md`
-- `git-workflow` —— 见 `.agents/skills/git-workflow/SKILL.md`
-- `grill-me` —— 见 `.agents/skills/grill-me/SKILL.md`
-- `mcp-bootstrap` —— 见 `.agents/skills/mcp-bootstrap/SKILL.md`
-- `subrepo-sync` —— 见 `.agents/skills/subrepo-sync/SKILL.md`
-- `template-sync` —— 见 `.agents/skills/template-sync/SKILL.md`
-- `write-a-skill` —— 见 `.agents/skills/write-a-skill/SKILL.md`
-
-### 技能扩展规范
-
-- 技能文件 = 托管框架 + 项目专属区：`SKILL.md` 中 `PENGJ_TEMPLATE_START/END` 托管块内是模板框架（更新时原位替换）；**块外内容归项目所有**，模板更新永不触碰。
-- 文档型定制（领域检查清单、判定表、红线）直接写在托管块外的项目专属区，保证单次读取即可获得全部约定，不要另建外部文件。
-- 可执行门禁的形式与位置由项目自定（任意语言脚本、task runner 或纯清单），并在项目专属区写明调用方式；框架不预设实现。
-- **`.agents/skills/*/scripts/` 下的脚本一律用英文写**：标识符、结构化字段名、注释、日志输出都用英文，不随 `skill_lang` 变化。脚本是被 agent、CI 与其他工具执行的共享基础设施，中文含义写进 `SKILL.md`，不要写进脚本。
-- 存量的全自定义技能（无托管块）在纳管/更新时自动接管：以模板整页为准（frontmatter 含 description 一并覆盖），原正文下移为「纳管过渡区」（暂时双流程），由用户把领域差异合并进项目专属区后删除过渡区。
+- **统一任务入口与防卡顿（严禁裸跑编译器）**：所有编译、检查、单测与跑分必须统一通过 `just`（如 `just check`、`just test`、`just bench`）或 `just q-run <cmd>` 调度，严禁直接在命令行裸跑 `cargo`/`ninja`/`cmake` 等底层构建工具，确保全局跨工作树排队调度与 CPU 降级防卡顿（详见 `.agents/skills/bque/SKILL.md`）。
+- **模板受管区域防篡改**：带 `PENGJ_TEMPLATE_START/END` 的托管块与 `.agents/skills/*/scripts/` 脚本由 `pengj-templates` 托管，严禁私自篡改。项目专属配置请写在托管块外的项目专属区；随时运行 `cargo run -p pengj-templates-cli -- audit --dir . --diff` 巡检对齐状态。
 
 ## Rust 编码规范
 
