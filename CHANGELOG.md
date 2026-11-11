@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.53.0-beta.1...v0.54.0-beta.1) (2026-11-11)
+
+
+### Features
+
+* **agent:** 将三元锚定与代价矩阵等架构模式反哺至 arch-align 技能 ([69559a7](https://github.com/pengjiaxusz/pengj-templates/commit/69559a7d0e63e9017bf85b69ac6fb1ae3e252072))
+
 ## [0.53.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.52.1-beta.1...v0.53.0-beta.1) (2026-11-10)
 
 
