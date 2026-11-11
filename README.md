@@ -14,8 +14,8 @@
 | `lefthook` | Git hooks（lefthook）+ commitlint 约定式提交校验 | 需要 Git 钩子的仓库 |
 | `agent` | AI 编码助手规范（`AGENTS.md`），按所选层/选项生成 rust、中文编程等约定 | 希望 agent 遵循规范 |
 | `vscode` | VS Code 工作区配置：推荐扩展、中文编程下 rust 检查走 clippy | 使用 VS Code 开发 |
-| `rust` | Rust 仓库专属：`Cargo.toml`、clippy/rustfmt、sccache、`just/rust.just` | Rust 项目 |
-| `rust-workspace` | Rust 多 crate 工作区：工作区 `Cargo.toml`、sccache/lld、`just/rust-workspace.just` | Rust workspace |
+| `rust` | Rust 仓库专属：`Cargo.toml`、clippy/rustfmt、可选 sccache、`just/rust.just` | Rust 项目 |
+| `rust-workspace` | Rust 多 crate 工作区：工作区 `Cargo.toml`、可选 sccache/lld、`just/rust-workspace.just` | Rust workspace |
 | ... | 按需扩展（新增目录 + `layer.toml` 即可） | ... |
 
 模板文件支持 minijinja 占位符（`{{ project_name }}`、`{{ project_slug }}`、`{{ year }}`）。

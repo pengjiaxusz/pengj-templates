@@ -19,11 +19,6 @@ desc = "Rust 包管理器（rustup 自带）"
 check = ["--version"]
 
 [[required]]
-name = "sccache"
-desc = "编译缓存（模板强制使用）"
-check = ["--version"]
-
-[[required]]
 name = "just"
 desc = "任务运行器（cargo install just 或 scoop 安装）"
 check = ["--version"]

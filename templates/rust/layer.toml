@@ -1,5 +1,5 @@
 name = "Rust 仓库"
-description = "Rust 项目：Cargo 配置、clippy/rustfmt、sccache 缓存、just/rust.just 语言配方"
+description = "Rust 项目：Cargo 配置、clippy/rustfmt、可选 sccache 缓存、just/rust.just 语言配方"
 depends = ["common", "just"]
 
 # 更新黑名单：这些文件仅首次生成时写入，之后归用户所有，模板更新时跳过
