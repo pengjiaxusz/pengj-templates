@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.54.0-beta.1...v0.55.0-beta.1) (2026-11-11)
+
+
+### Features
+
+* **templates:** 统一启用 pre-commit 自动格式化并解耦 fmt 与 fmt-check ([cadb6b9](https://github.com/pengjiaxusz/pengj-templates/commit/cadb6b9e737b37b47f240cc2d1e3cdfe2a5ee063))
+
 ## [0.54.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.53.0-beta.1...v0.54.0-beta.1) (2026-11-11)
 
 
