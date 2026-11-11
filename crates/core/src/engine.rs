@@ -474,7 +474,7 @@ fn dummy_skill_ctx() -> RenderContext {
         ("chinese_programming", serde_json::json!(false)),
         ("edition", serde_json::json!("2021")),
         ("channel", serde_json::json!("stable")),
-        ("use_sccache", serde_json::json!(true)),
+        ("use_sccache", serde_json::json!(false)),
         ("use_lld", serde_json::json!(true)),
     ] {
         options.insert(k.to_string(), v);
