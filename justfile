@@ -35,6 +35,10 @@ setup:
 fmt:
     cargo fmt
 
+# 格式化检查（CI 校验用）
+fmt-check:
+    cargo fmt --check
+
 # 编译检查（全 workspace，受 bque 全局排队与优先级管控）
 check:
     @bque run -- cargo check --workspace
@@ -100,4 +104,4 @@ mcp *ARGS:
 # ---------- 综合 ----------
 
 # CI 全量校验：格式化检查 + 编译 + clippy + 测试 + 前端构建
-ci: fmt check clippy test frontend-build
+ci: fmt-check check clippy test frontend-build

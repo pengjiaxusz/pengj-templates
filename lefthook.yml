@@ -1,10 +1,10 @@
 # lefthook 配置：pre-commit + commit-msg（约定式提交校验）
 pre-commit:
-  parallel: true
   commands:
     rustfmt:
       glob: "*.rs"
-      run: cargo fmt -- --check
+      run: rustfmt {staged_files}
+      stage_fixed: true
 
 commit-msg:
   commands:

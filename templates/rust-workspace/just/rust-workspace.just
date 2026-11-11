@@ -51,9 +51,13 @@ bench *ARGS:
     cargo bench --workspace {% raw %}{{ARGS}}{% endraw %}
 {% endif %}
 
-# {% if options["skill_lang"] == "en" %}Format check (lightweight, no queue){% else %}格式化检查（轻量，不排队）{% endif %}
+# {% if options["skill_lang"] == "en" %}Format code (lightweight, no queue){% else %}代码就地格式化（轻量，不排队）{% endif %}
 fmt:
+    cargo fmt
+
+# {% if options["skill_lang"] == "en" %}Format check (CI only){% else %}格式化检查（CI 校验用，不修改文件）{% endif %}
+fmt-check:
     cargo fmt --check
 
 # {% if options["skill_lang"] == "en" %}Full CI check (each sub-command takes the lock separately; bque handles re-entrancy){% else %}一键全检查（CI 用；各子命令各自取锁，bque 原生防重入穿透）{% endif %}
-ci: fmt check test
+ci: fmt-check check test

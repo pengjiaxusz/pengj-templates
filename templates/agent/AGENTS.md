@@ -22,7 +22,7 @@
 
 ## Rust conventions
 
-- Format: `cargo fmt`; CI uses `just fmt` (`cargo fmt --check`).
+- Format: `cargo fmt` (local commits auto-format staged code via lefthook with `stage_fixed`; CI verifies via `cargo fmt --check`).
 - Lint: `cargo clippy --all-targets --all-features -- -D warnings` (`just check`); keep zero warnings.
 - Naming: variables/functions/modules `snake_case`, types/traits/enums `CamelCase`, constants `SCREAMING_SNAKE_CASE`.
 - Template-managed: `Cargo.toml`, `.cargo/config.toml`, `rust-toolchain.toml` — sync compile/toolchain changes via the template (`pengj-templates-cli update`). `src/main.rs` is user-owned and not overwritten on update.
@@ -65,7 +65,7 @@
 
 ## Rust 编码规范
 
-- 格式化：`cargo fmt`；CI 用 `just fmt`（`cargo fmt --check`）。
+- 格式化：`cargo fmt`（本地提交通过 lefthook 自动格式化暂存代码并重新暂存；CI 校验走 `cargo fmt --check`）。
 - 静态检查：`cargo clippy --all-targets --all-features -- -D warnings`（`just check`），保持 warnings 清零。
 - 命名：变量/函数/模块 `snake_case`，类型/特征/枚举 `CamelCase`，常量 `SCREAMING_SNAKE_CASE`。
 - 《`Cargo.toml`、`.cargo/config.toml`、`rust-toolchain.toml` 由模板托管：改编译选项、工具链需同步模板（`pengj-templates-cli update`）。`src/main.rs` 归用户所有，模板更新不覆盖。
