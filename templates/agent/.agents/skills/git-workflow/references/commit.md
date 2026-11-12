@@ -32,8 +32,8 @@ git --no-pager diff --cached --stat
 
 This step belongs to the **PROJECT**, not the template:
 Follow whatever the project-specific area in `SKILL.md` defines (commands, test suites, checklists). If the project-specific area defines no checks, use the generic fallback:
-- Scan the diff: if it touches build/deps, docs/AGENTS.md/config, or public naming, verify build / update docs / run formatter as appropriate before committing.{% if options["skills"] is undefined or 'arch-align' in options["skills"] %}
-- **Architecture doc consistency check**: If this change touches architecture (new/adjusted module boundaries, data flow, lifecycle, system topology, core invariants, etc.), verify `docs/architecture/README.md` and the corresponding domain docs are in sync; see `.agents/skills/arch-align` for details.{% endif %}
+- Scan the diff: if it touches build/deps, docs/AGENTS.md/config, or public naming, verify build / update docs / run formatter as appropriate before committing.
+- **Doc consistency check**: If this change touches module boundaries, public APIs, data flow, lifecycle, or adds a module/subsystem, update the matching architecture/design docs before committing.
 
 Do NOT invent arbitrary checks on the fly; reference the project-specific area.
 
@@ -126,8 +126,8 @@ git --no-pager diff --cached --stat
 
 本步骤归**项目**所有，模板不硬编码具体检查：
 按主入口 `SKILL.md` 托管块外「项目专属提交流程与红线」的定义执行——跑什么命令、查哪些项，由项目自行声明。项目专属区未定义时，执行兜底自检：
-- 扫 diff：改动构建/依赖、文档/AGENTS.md/配置、公开命名时对应校验构建、更新文档、跑格式化；{% if options["skills"] is undefined or 'arch-align' in options["skills"] %}
-- **架构文档一致性检查**：触及架构（新增/调整模块边界、数据流、生命周期、系统拓扑、核心不变式等）时，检查 `docs/architecture/README.md` 与对应领域文档是否已同步，详情参见 `.agents/skills/arch-align`。{% endif %}
+- 扫 diff：改动构建/依赖、文档/AGENTS.md/配置、公开命名时对应校验构建、更新文档、跑格式化；
+- **文档一致性检查**：改动涉及模块边界、公共 API、数据流、生命周期或新增模块/子系统时，同步更新对应的架构/设计文档再提交。
 
 ---
 

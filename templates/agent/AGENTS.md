@@ -9,6 +9,7 @@
 {%- if options["commit_and_push"] %}
 - After changes pass verification, commit and push before replying. Skip only for pure Q&A or when reporting failing builds/tests.
 {%- endif %}
+- If a change touches module boundaries, public APIs, data flow, lifecycle, or adds a module/subsystem, update the matching architecture/design docs before committing.
 {%- if options["chinese_programming"] %}
 
 ### Chinese programming conventions
@@ -33,6 +34,7 @@
 {%- if options["commit_and_push"] %}
 - 完成修改并通过验证后，先 commit & push 再回复；纯问答或构建/测试失败待排查时除外。
 {%- endif %}
+- 改动涉及模块边界、公共 API、数据流、生命周期或新增模块/子系统时，同步更新对应的架构/设计文档再提交。
 {%- if options["chinese_programming"] %}
 
 ### 中文编程规范
