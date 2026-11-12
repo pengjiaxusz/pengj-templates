@@ -49,6 +49,9 @@ Always push immediately after committing to prevent work loss.
 ### 1.2 Pre-Commit Completeness Check — Project-Defined
 This step belongs to the **PROJECT**, not the template: follow whatever the project-specific area below the managed block defines (which commands to run, what to verify). If undefined, use the generic fallback (scan diff: verify build / update docs / run format as appropriate).{% if options["skills"] is undefined or 'arch-align' in options["skills"] %}
 If this change touches architecture (new/adjusted module boundaries, data flow, lifecycle, system topology, core invariants, etc.), verify `docs/architecture/README.md` and the corresponding domain docs are in sync; see `.agents/skills/arch-align` for details.{% endif %}
+{%- if 'rust' in layers or 'rust-workspace' in layers %}
+- **Rust static check**: run `just check` (or `cargo clippy --all-targets --all-features -- -D warnings`, adding `--workspace` for workspaces) and keep warnings at zero before committing.
+{%- endif %}
 
 ### 1.3 Commit Format & Immediate Push
 `git commit -m "<type>(<scope>): <subject>"` followed immediately by `git push`.
@@ -151,6 +154,9 @@ Detailed rebase and conflict resolution steps: [references/rebase-conflict.md](r
 ### 1.2 提交前完整性检查 —— 项目自定义
 本步骤归**项目**所有，模板不硬编码具体检查：按下方托管块外「项目专属提交流程与红线」的定义执行。项目专属区未定义时执行兜底自检（扫 diff 校验构建/更新文档/跑格式化）。{% if options["skills"] is undefined or 'arch-align' in options["skills"] %}
 触及架构（新增/调整模块边界、数据流、生命周期、系统拓扑、核心不变式等）时，检查 `docs/architecture/README.md` 与对应领域文档是否已同步，详情参见 `.agents/skills/arch-align`。{% endif %}
+{%- if 'rust' in layers or 'rust-workspace' in layers %}
+- **Rust 静态检查**：运行 `just check`（或 `cargo clippy --all-targets --all-features -- -D warnings`，工作区加 `--workspace`），warnings 清零后再提交。
+{%- endif %}
 
 ### 1.3 提交格式与立即推送
 执行 `git commit -m "<type>(<scope>): <标题>"` 后立即 `git push`。

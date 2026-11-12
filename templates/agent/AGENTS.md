@@ -9,7 +9,9 @@
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
 - **Unified Task Entry & CPU Guard (Strictly Prohibit Raw Build Commands)**: All compilation, linting, tests, and benchmarks MUST run via unified `just` recipes (`just check`, `just test`, `just bench`, or `just q-run <cmd>` / `just q-bench <cmd>` for ad-hoc commands) to ensure cross-worktree queue serialization and `Idle` CPU priority (see `.agents/skills/bque/SKILL.md`). Never run raw `cargo`, `ninja`, `cmake`, or compiler commands directly in terminal.
 {%- endif %}
-- **Template Anti-Tampering Red Line**: Files under `.agents/skills/*/scripts/` and content inside `PENGJ_TEMPLATE_START/END` managed blocks are managed by `pengj-templates`. Directly modifying them in downstream projects is prohibited. Put project-specific configurations in the project-owned area outside managed blocks; run `cargo run -p pengj-templates-cli -- audit --dir . --diff` anytime to inspect alignment.
+{%- if options["commit_and_push"] %}
+- **Commit & Push (Mandatory)**: After each finished change passes verification (or a task is concluded), commit and push before ending your reply. Exempt only for pure Q&A turns or when reporting failing builds/tests.
+{%- endif %}
 {%- if options["chinese_programming"] %}
 
 ### Chinese programming conventions
@@ -18,15 +20,9 @@
 - **Mixed Chinese-English naming (Recommended)**: Use "Standard/API English anchor + Domain Chinese role" (e.g. Type `HttpRequest快照`, field `创建信息快照`/`补丁`; underlying spec field names remain English). Avoid long compound English suffixes (e.g. `HttpRequestSnapshot`) or literal translations of spec names.
 - **Natural Localized Terminology (Strict)**: Express concepts in natural native terms; avoid literal translations of English architecture/graph jargon. Self-check: read aloud as if explaining to a colleague; rephrase if it sounds like machine translation; keep spec/protocol proper nouns in English.
 {%- endif %}
-{%- if 'rust' in layers or 'rust-workspace' in layers %}
+{%- if ('rust' in layers or 'rust-workspace' in layers) and options["chinese_programming"] %}
 
 ## Rust conventions
-
-- Format: `cargo fmt` (local commits auto-format staged code via lefthook with `stage_fixed`; CI verifies via `cargo fmt --check`).
-- Lint: `cargo clippy --all-targets --all-features -- -D warnings` (`just check`); keep zero warnings.
-- Naming: variables/functions/modules `snake_case`, types/traits/enums `CamelCase`, constants `SCREAMING_SNAKE_CASE`.
-- Template-managed: `Cargo.toml`, `.cargo/config.toml`, `rust-toolchain.toml` — sync compile/toolchain changes via the template (`pengj-templates-cli update`). `src/main.rs` is user-owned and not overwritten on update.
-{%- if options["chinese_programming"] %}
 
 ### Rust Chinese-programming specifics
 
@@ -41,7 +37,6 @@
 - **Recommended dependencies**:
   - Prefer derive macros (such as `derive_more`) to automatically implement common traits and eliminate boilerplate.
 {%- endif %}
-{%- endif %}
 {%- else %}
 # {{ project_name }} 编码规范
 
@@ -52,7 +47,9 @@
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
 - **统一任务入口与防卡顿（严禁裸跑编译器）**：所有编译、检查、单测与跑分必须统一通过 `just`（如 `just check`、`just test`、`just bench`）或 `just q-run <cmd>` 调度，严禁直接在命令行裸跑 `cargo`/`ninja`/`cmake` 等底层构建工具，确保全局跨工作树排队调度与 CPU 降级防卡顿（详见 `.agents/skills/bque/SKILL.md`）。
 {%- endif %}
-- **模板受管区域防篡改**：带 `PENGJ_TEMPLATE_START/END` 的托管块与 `.agents/skills/*/scripts/` 脚本由 `pengj-templates` 托管，严禁私自篡改。项目专属配置请写在托管块外的项目专属区；随时运行 `cargo run -p pengj-templates-cli -- audit --dir . --diff` 巡检对齐状态。
+{%- if options["commit_and_push"] %}
+- **提交并推送（硬性）**：每完成一轮修改并通过验证（或任务收尾）后，先 commit & push 再结束回复；纯问答、或构建/测试失败需报告时除外。
+{%- endif %}
 {%- if options["chinese_programming"] %}
 
 ### 中文编程规范
@@ -61,15 +58,9 @@
 - **中英拼接规范（推荐）**：采用「规范/API 英文锚点 + 领域中文角色」形式（例：类型 `HttpRequest快照`、`SwapchainCreateInfo快照`，字段 `创建信息快照` / `补丁`；底层规范原样字段保持英文）。禁止生造超长英文多词后缀或规范结构体硬译中文。
 - **中文本土化与母语自然表达（硬性）**：用母语自然词表达领域意思，禁止英文架构/图论/运维黑话逐词生硬直译。文档、注释、提交信息、UI 文案与代码标识符同一标准；规范专名保留英文。
 {%- endif %}
-{%- if 'rust' in layers or 'rust-workspace' in layers %}
+{%- if ('rust' in layers or 'rust-workspace' in layers) and options["chinese_programming"] %}
 
 ## Rust 编码规范
-
-- 格式化：`cargo fmt`（本地提交通过 lefthook 自动格式化暂存代码并重新暂存；CI 校验走 `cargo fmt --check`）。
-- 静态检查：`cargo clippy --all-targets --all-features -- -D warnings`（`just check`），保持 warnings 清零。
-- 命名：变量/函数/模块 `snake_case`，类型/特征/枚举 `CamelCase`，常量 `SCREAMING_SNAKE_CASE`。
-- 《`Cargo.toml`、`.cargo/config.toml`、`rust-toolchain.toml` 由模板托管：改编译选项、工具链需同步模板（`pengj-templates-cli update`）。`src/main.rs` 归用户所有，模板更新不覆盖。
-{%- if options["chinese_programming"] %}
 
 ### Rust 中文编程特定规范
 
@@ -83,7 +74,6 @@
   - 含中文标识符不强制蛇形（如 `解析AST`），纯英文标识符仍遵循 Rust 惯例（变量/函数 `snake_case`，类型 `PascalCase`，常量 `SCREAMING_SNAKE_CASE`）。
 - **推荐依赖**：
   - 优先利用派生宏（如 `derive_more` 等）自动派生常用 Trait，减少冗余样板代码。
-{%- endif %}
 {%- endif %}
 {%- endif %}
 <!-- PENGJ_TEMPLATE_END -->

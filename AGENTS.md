@@ -27,13 +27,12 @@
 
 ## Rust 规范 / Rust (crates/core, crates/cli, crates/mcp, src-tauri)
 
-- 格式化：`cargo fmt`；静态检查：`cargo clippy --workspace --all-targets -- -D warnings`（warnings 视为错误）。
 - 编译检查：`cargo check --workspace`；测试：`cargo test --workspace`。
 - 命名：变量/函数/模块 `snake_case`，类型/特征/枚举 `CamelCase`，常量 `SCREAMING_SNAKE_CASE`；文档注释用中文。
 - 错误处理：`anyhow::Result` / `CoreError`（`thiserror`），禁止裸 `unwrap`/`panic`、禁止 `as any` 式逃生门。
 - CLI 参数用 clap 派生；核心库的公开类型加 `#[derive(Debug, Clone, serde::Serialize)]` 供 CLI/GUI 共用。
 
-> EN: rustfmt + clippy -D warnings required; workspace-level checks; Chinese doc comments; typed errors, no unwrap/panic.
+> EN: workspace-level checks; Chinese doc comments; typed errors, no unwrap/panic.
 
 ## 前端规范 / Frontend (crates/app/src)
 
@@ -87,10 +86,10 @@
 
 改动提交前至少跑与改动面相关的检查：
 
-- Rust / 模板 / 构建配置：`cargo fmt` → `cargo clippy --workspace --all-targets -- -D warnings` → `cargo test --workspace`。
+- Rust / 模板 / 构建配置：按 `.agents/skills/git-workflow` 的提交前检查执行，再跑 `cargo test --workspace`。
 - 前端（`crates/app/src` 等）：`just frontend-build`。
-- 模板改动：临时目录端到端验证，如 `cargo run -q -p pengj-templates-cli -- create demo --layers agent --skills commit,caveman --output <临时目录>`，检查生成文件与 AGENTS.md 渲染结果。
-- 全量 CI 校验：`just ci`（fmt check + 编译 + clippy + 测试 + 前端构建）。
+- 模板改动：临时目录端到端验证，如 `cargo run -q -p pengj-templates-cli -- create demo --layers agent --skills git-workflow,caveman --output <临时目录>`，检查生成文件与 AGENTS.md 渲染结果。
+- 全量 CI 校验：`just ci`（fmt check + 编译 + 静态检查 + 测试 + 前端构建）。
 
 > EN: run the checks matching your change surface before committing (see above). Template changes: verify with an end-to-end CLI create into a temp dir. Full check: `just ci`.
 
@@ -98,7 +97,7 @@
 
 - `README.md` 为中文主文档；agent 层内容双语。
 - CI 对纯文档改动（根目录 `*.md`、`docs/**`、`.agents/**`）自动跳过；模板（`templates/**`）改动必触发构建。
-- 版本号与发布走 release-please（conventional commits 驱动），见 `.github/workflows/release.yml` 与 commit 技能 §5b。
+- 版本号与发布走 release-please（conventional commits 驱动），见 `.github/workflows/release.yml`。
 
 <!-- PENGJ_TEMPLATE_START -->
 
@@ -108,12 +107,5 @@
 
 ## 通用约定
 - **统一任务入口与防卡顿（严禁裸跑编译器）**：所有编译、检查、单测与跑分必须统一通过 `just`（如 `just check`、`just test`、`just bench`）或 `just q-run <cmd>` 调度，严禁直接在命令行裸跑 `cargo`/`ninja`/`cmake` 等底层构建工具，确保全局跨工作树排队调度与 CPU 降级防卡顿（详见 `.agents/skills/bque/SKILL.md`）。
-- **模板受管区域防篡改**：带 `PENGJ_TEMPLATE_START/END` 的托管块与 `.agents/skills/*/scripts/` 脚本由 `pengj-templates` 托管，严禁私自篡改。项目专属配置请写在托管块外的项目专属区；随时运行 `cargo run -p pengj-templates-cli -- audit --dir . --diff` 巡检对齐状态。
-
-## Rust 编码规范
-
-- 格式化：`cargo fmt`（本地提交通过 lefthook 自动格式化暂存代码并重新暂存；CI 校验走 `cargo fmt --check`）。
-- 静态检查：`cargo clippy --all-targets --all-features -- -D warnings`（`just check`），保持 warnings 清零。
-- 命名：变量/函数/模块 `snake_case`，类型/特征/枚举 `CamelCase`，常量 `SCREAMING_SNAKE_CASE`。
-- 《`Cargo.toml`、`.cargo/config.toml`、`rust-toolchain.toml` 由模板托管：改编译选项、工具链需同步模板（`pengj-templates-cli update`）。`src/main.rs` 归用户所有，模板更新不覆盖。
+- **提交并推送（硬性）**：每完成一轮修改并通过验证（或任务收尾）后，先 commit & push 再结束回复；纯问答、或构建/测试失败需报告时除外。
 <!-- PENGJ_TEMPLATE_END -->
