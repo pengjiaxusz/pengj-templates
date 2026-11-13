@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.55.0-beta.1...v0.55.1-beta.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **templates:** 修复提交门禁静默失效并让模板同步自动提交下游项目 ([c49421b](https://github.com/pengjiaxusz/pengj-templates/commit/c49421b41306bfe5279a1f3b9bdfa2e527cf64cd))
+
 ## [0.55.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.54.0-beta.1...v0.55.0-beta.1) (2026-11-11)
 
 
