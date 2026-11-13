@@ -487,7 +487,8 @@ fn dummy_skill_ctx() -> RenderContext {
 /// - 生成时：各层按依赖顺序并集合并（后层覆盖同名依赖，用户自加项不冲突）
 /// - 更新/纳管时：依赖类字段的同名包**版本以模板为准**（含模板未定版的 `latest`；
 ///   实际解析版本由项目 lockfile 锁定，升级走 `pnpm update --latest`）；
-///   脚本与其余字段仍以用户为底、模板只补缺失，
+///   模板拥有的钩子生命周期脚本（见 [`MERGE_JSON_TEMPLATE_OWNED_SCRIPTS`]）同样以模板为准，
+///   其余脚本与字段仍以用户为底、模板只补缺失，
 ///   用户自己加的库与其余标量（name/version 等）同样原样保留
 const MERGE_JSON_FILES: &[&str] = &["package.json"];
 
@@ -508,6 +509,11 @@ const MERGE_JSON_DEP_KEYS: &[&str] = &[
     "peerDependencies",
     "optionalDependencies",
 ];
+
+/// 由模板拥有的生命周期脚本：更新/纳管时同名键必须跟随模板，而非保留用户旧值。
+/// 旧版 `prepare` 会吞掉 `lefthook install` 的失败，使 commit-msg 钩子缺失、
+/// 提交门禁静默失效；这类脚本属于模板基础设施，不是用户定制面。
+const MERGE_JSON_TEMPLATE_OWNED_SCRIPTS: &[&str] = &["prepare", "lefthook:install", "commitlint"];
 
 /// 模板渲染出的 VS Code 配置文件在项目内的相对路径。
 ///
@@ -632,8 +638,12 @@ fn merge_json(base: &mut serde_json::Value, incoming: &serde_json::Value, overwr
                     if let Some(iv) = v.as_object() {
                         let is_dep = MERGE_JSON_DEP_KEYS.contains(&k.as_str());
                         for (ik, ivv) in iv {
-                            if overwrite_other || is_dep {
-                                // 生成：层间覆盖；更新/纳管：依赖版本一律跟随模板
+                            // 钩子安装脚本由模板拥有：即便用户已有旧值也必须换成模板版本，
+                            // 否则吞异常的旧 prepare 会一直留在下游项目里
+                            let template_owned = k == "scripts"
+                                && MERGE_JSON_TEMPLATE_OWNED_SCRIPTS.contains(&ik.as_str());
+                            if overwrite_other || is_dep || template_owned {
+                                // 生成：层间覆盖；更新/纳管：依赖版本与模板拥有的脚本跟随模板
                                 bm.insert(ik.clone(), ivv.clone());
                             } else {
                                 // 更新语义：用户已有该键 → 保留用户值
@@ -4578,8 +4588,8 @@ mod tests {
             "用户独有依赖保留"
         );
         assert!(
-            pkg_text.contains("\"prepare\": \"lefthook install\""),
-            "用户脚本不被模板覆盖"
+            pkg_text.contains("\"prepare\": \"template-prepare\""),
+            "模板拥有的钩子脚本跟随模板，用户的旧 prepare 必须被替换，实际:\n{pkg_text}"
         );
         assert!(
             pkg_text.contains("\"commitlint\": \"commitlint\""),
@@ -4626,7 +4636,7 @@ mod tests {
     #[test]
     fn merge_json_update_dep_versions_follow_template_pins() {
         // 更新/纳管语义：依赖类字段同名包版本一律以模板为准（含模板未定版的
-        // latest）；脚本仍用户优先
+        // latest）；模板拥有的 prepare 脚本同样跟随模板
         let mut base: serde_json::Value = serde_json::from_str(
             r#"{"scripts":{"prepare":"user-prepare"},"devDependencies":{"lefthook":"^2.1.10","@commitlint/cli":"^20.5.3"}}"#,
         )
@@ -4645,7 +4655,10 @@ mod tests {
             base["devDependencies"]["lefthook"], "latest",
             "模板 latest 同样覆盖用户版本钉（解析版本由 lockfile 决定）"
         );
-        assert_eq!(base["scripts"]["prepare"], "user-prepare", "脚本保持用户值");
+        assert_eq!(
+            base["scripts"]["prepare"], "tpl-prepare",
+            "模板拥有的钩子安装脚本跟随模板，避免旧 prepare 吞掉安装失败"
+        );
     }
 
     #[test]
@@ -4880,12 +4893,12 @@ mod tests {
         )
         .unwrap();
 
-        // 更新语义（overwrite_other=false）：脚本同名键用户优先、缺失才补；
-        // 依赖类字段同名包版本一律以模板为准
+        // 更新语义（overwrite_other=false）：模板拥有的脚本跟随模板，
+        // 其余脚本同名键用户优先、缺失才补；依赖类字段同名包版本一律以模板为准
         merge_json(&mut base, &incoming, false);
         assert_eq!(base["aaa"], "keep");
         assert_eq!(base["bbb"], "tpl");
-        assert_eq!(base["scripts"]["prepare"], "user-prepare");
+        assert_eq!(base["scripts"]["prepare"], "tpl-prepare");
         assert_eq!(base["scripts"]["build"], "user-build");
         assert_eq!(base["scripts"]["test"], "tpl-test");
         assert_eq!(
@@ -4901,6 +4914,32 @@ mod tests {
         let mut fresh = serde_json::json!({});
         merge_json(&mut fresh, &incoming, true);
         assert_eq!(fresh["scripts"]["prepare"], "tpl-prepare");
+    }
+
+    #[test]
+    fn merge_json_update_refreshes_hook_scripts_but_keeps_custom_scripts() {
+        // 回归：下游项目里的旧 prepare 会吞掉 lefthook 安装失败，只补缺失键修不好它；
+        // 用户自己加的脚本不受影响
+        let mut base: serde_json::Value = serde_json::from_str(
+            r#"{"scripts":{"prepare":"legacy-prepare","lefthook:install":"lefthook install","commitlint":"commitlint","deploy":"deploy --prod"}}"#,
+        )
+        .unwrap();
+        let incoming: serde_json::Value = serde_json::from_str(
+            r#"{"scripts":{"prepare":"node scripts/install-hooks.mjs","lefthook:install":"node scripts/install-hooks.mjs","commitlint":"commitlint"}}"#,
+        )
+        .unwrap();
+
+        merge_json(&mut base, &incoming, false);
+        assert_eq!(base["scripts"]["prepare"], "node scripts/install-hooks.mjs");
+        assert_eq!(
+            base["scripts"]["lefthook:install"],
+            "node scripts/install-hooks.mjs"
+        );
+        assert_eq!(base["scripts"]["commitlint"], "commitlint");
+        assert_eq!(
+            base["scripts"]["deploy"], "deploy --prod",
+            "用户自定义脚本不应被模板覆盖"
+        );
     }
 
     #[test]

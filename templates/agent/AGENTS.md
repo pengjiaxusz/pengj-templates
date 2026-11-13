@@ -9,6 +9,11 @@
 {%- if options["commit_and_push"] %}
 - After changes pass verification, commit and push before replying. Skip only for pure Q&A or when reporting failing builds/tests.
 {%- endif %}
+{%- if options["commit_zh"] %}
+- Commit subjects MUST be Chinese (at least 2 CJK characters); type/scope stay English. Every commit entry point (including /commit commands) follows this rule — the commit-msg hook rejects pure-English subjects.
+{%- else %}
+- Commit subjects MUST be pure English (no CJK characters); type/scope stay English. Every commit entry point follows this rule — the commit-msg hook rejects Chinese subjects.
+{%- endif %}
 - If a change touches module boundaries, public APIs, data flow, lifecycle, or adds a module/subsystem, update the matching architecture/design docs before committing.
 {%- if options["chinese_programming"] %}
 
@@ -33,6 +38,11 @@
 {%- endif %}
 {%- if options["commit_and_push"] %}
 - 完成修改并通过验证后，先 commit & push 再回复；纯问答或构建/测试失败待排查时除外。
+{%- endif %}
+{%- if options["commit_zh"] %}
+- 提交标题必须用中文（至少 2 个汉字），type/scope 用英文；任何提交入口（含 /commit 命令）都不得写纯英文标题，commit-msg 钩子会拦截。
+{%- else %}
+- 提交标题必须用纯英文（不得含汉字），type/scope 用英文；任何提交入口都不得写中文标题，commit-msg 钩子会拦截。
 {%- endif %}
 - 改动涉及模块边界、公共 API、数据流、生命周期或新增模块/子系统时，同步更新对应的架构/设计文档再提交。
 {%- if options["chinese_programming"] %}

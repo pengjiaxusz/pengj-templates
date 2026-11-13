@@ -58,9 +58,11 @@ If this change touches module boundaries, public APIs, data flow, lifecycle, or 
 {% if options["commit_zh"] %}
 - Subject in Chinese (at least 2 Chinese characters; strictly forbidden to write pure English subjects).
 - Type/scope in English (`feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`).
+- Applies to EVERY commit entry point, including host-provided `/commit` commands and hand-written `git commit`: rewrite any auto-generated English subject before committing.
 {% else %}
 - Subject in English (imperative, short, no trailing period; strictly forbidden to contain Chinese characters).
 - Type/scope in English (`feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`).
+- Applies to EVERY commit entry point, including host-provided `/commit` commands and hand-written `git commit`: rewrite any auto-generated Chinese subject before committing.
 {% endif %}
 
 Detailed commit guidelines and semantic splitting: [references/commit.md](references/commit.md).
@@ -162,10 +164,12 @@ Detailed rebase and conflict resolution steps: [references/rebase-conflict.md](r
 执行 `git commit -m "<type>(<scope>): <标题>"` 后立即 `git push`。
 {% if options["commit_zh"] %}
 - 标题用中文短句（至少包含 2 个汉字，严禁写纯英文标题）；
-- type/scope 用英文（`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`）。
+- type/scope 用英文（`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`）；
+- 适用于所有提交入口（含宿主提供的 `/commit` 命令与手写 `git commit`）：此类命令生成的英文标题必须先改写为中文再提交。
 {% else %}
 - 标题用英文短句（纯英文，严禁包含汉字）；
-- type/scope 用英文（`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`）。
+- type/scope 用英文（`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`）；
+- 适用于所有提交入口（含宿主提供的 `/commit` 命令与手写 `git commit`）：此类命令生成的中文标题必须先改写为英文再提交。
 {% endif %}
 
 提交规范、语义拆分与 Amend 约束详见：[references/commit.md](references/commit.md)。

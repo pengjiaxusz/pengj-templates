@@ -56,6 +56,7 @@ Format: `type(scope): subject`
 - **Type/Scope in English**:
   - Types: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
   - Scope: from the project's `commitlint.config.js` scope-enum whitelist when present.
+- **Entry points**: host-provided `/commit` commands and hand-written `git commit` must obey the same rule; rewrite auto-generated English subjects before committing.
 {% else %}
 - **Subject in English** (imperative, short, no trailing period; strictly forbidden to contain non-English/CJK characters).
   - ❌ Forbidden: `feat(cli): add new flags.` (trailing period or non-English characters)
@@ -63,6 +64,7 @@ Format: `type(scope): subject`
 - **Type/Scope in English**:
   - Types: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
   - Scope: from the project's `commitlint.config.js` scope-enum whitelist when present.
+- **Entry points**: host-provided `/commit` commands and hand-written `git commit` must obey the same rule; rewrite auto-generated Chinese subjects before committing.
 {% endif %}
 
 ---
@@ -148,6 +150,7 @@ git --no-pager diff --cached --stat
 - **type/scope 用英文**：
   - 常用 type：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
   - scope 参考项目 `commitlint.config.js` 的 scope-enum 白名单，无合适则省略。
+- **提交入口**：宿主提供的 `/commit` 命令与手写 `git commit` 同样适用；此类命令生成的英文标题必须先改写为中文再提交。
 {% else %}
 - **标题用英文短句**（祈使式），不加句号（硬性要求：必须纯英文，严禁包含汉字）。
   - ❌ 严禁：`feat(cli): 新增参数支持`
@@ -155,6 +158,7 @@ git --no-pager diff --cached --stat
 - **type/scope 用英文**：
   - 常用 type：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
   - scope 参考项目 `commitlint.config.js` 的 scope-enum 白名单，无合适则省略。
+- **提交入口**：宿主提供的 `/commit` 命令与手写 `git commit` 同样适用；此类命令生成的中文标题必须先改写为英文再提交。
 {% endif %}
 
 ---

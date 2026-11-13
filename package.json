@@ -8,8 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "prepare": "lefthook install",
-    "lefthook:install": "lefthook install",
+    "prepare": "node scripts/install-hooks.mjs",
+    "lefthook:install": "node scripts/install-hooks.mjs",
     "commitlint": "commitlint",
     "mcp:doctor": "node .agents/skills/mcp-bootstrap/scripts/ensure-mcp.mjs doctor",
     "mcp:install": "node .agents/skills/mcp-bootstrap/scripts/ensure-mcp.mjs install",
