@@ -62,7 +62,7 @@
     ".agents\\skills\\template-sync\\scripts\\sync-template.ps1": "4ff8dba1749e8055a541718c9c66bd4fed6259482b0388e58eabc1ef45a1791a",
     ".agents\\skills\\write-a-skill\\SKILL.md": "aa7a797d0322191365c40eaff606a713247428eaaf11a4423870daa15b5dafac",
     ".cargo\\config.toml": "1b06aced2448d86dc3dffeba01ffac746b65059315367c4d54e5801e5af7b98d",
-    ".gitattributes": "b5099197608cab315182fadad3cdf0e06ad5ab9b21f3decf8ace9e328cb9a121",
+    ".gitattributes": "f0a5682286e5b1f2d0425c055c63c1a7a1c985c2f9358f841f25147be7026be7",
     ".gitignore": "10fc518efad9b43b5cff3dea30046f7f86a78b9aa771837d3768792ee50b0438",
     "AGENTS.md": "b09436fb2946b5f35dd99c3fdf252bc13b2e97bf8a03d03b31a9e278762e7006",
     "commitlint.base.js": "0d81be3222e681a569c4b9c0a39a2cc93c68190252bdbd652d15e187a2f0de42",
