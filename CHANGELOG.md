@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.55.1-beta.1...v0.55.2-beta.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* **templates:** 移除 export-ignore，发布包保留仓库规则与 AI 上下文 ([41e27f4](https://github.com/pengjiaxusz/pengj-templates/commit/41e27f48eac987e524d48e534c97d3b803f3f902))
+
 ## [0.55.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.55.0-beta.1...v0.55.1-beta.1) (2026-11-13)
 
 
