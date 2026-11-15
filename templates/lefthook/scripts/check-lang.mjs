@@ -20,6 +20,9 @@
 //   node scripts/check-lang.mjs [files...]   # staged files, or a full audit
 //   node scripts/check-lang.mjs --self-test
 //
+// A full audit walks the repository root and skips build output, dependency
+// copies, generated code and submodules.
+//
 // Flags:
 //   --mode=english|chinese   override the manifest (env: PENGJ_CODE_LANG)
 //   --max-ratio=0.01         string tolerance (env: PENGJ_LANG_MAX_RATIO)
@@ -31,8 +34,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const MANIFEST = '.pengj-templates.json';
-const SKIP_DIRS = new Set(['target', '.git', 'node_modules', 'third-party', 'generated']);
-const DEFAULT_ROOTS = ['crates', 'apps', 'src', 'tests'];
+// Skipped at any depth during a full audit. `submodules` holds vendored or
+// separately versioned repositories, so their copy is not ours to police.
+const SKIP_DIRS = new Set([
+  'target', '.git', 'node_modules', 'third-party', 'generated', 'submodules',
+]);
 const MAX_PRINTED = 80;
 
 // "Not English" means a non-Latin script: CJK, kana, hangul, Cyrillic, Hebrew,
@@ -96,8 +102,11 @@ function collectTargets(files) {
   if (files.length > 0) {
     return files.filter((file) => file.endsWith('.rs')).map((file) => file.replaceAll('\\', '/'));
   }
-  const roots = DEFAULT_ROOTS.map((root) => walk(root, [])).flat();
-  return roots.map((file) => file.replaceAll('\\', '/'));
+  // A full audit walks the repository root and lets SKIP_DIRS prune build
+  // output, dependency copies, generated code and submodules. Repository
+  // layouts vary (flat crates, backend/, apps/...), so hard-coded roots would
+  // silently audit nothing in a project that does not match them.
+  return walk('.', []).map((file) => file.replaceAll('\\', '/'));
 }
 
 /**
