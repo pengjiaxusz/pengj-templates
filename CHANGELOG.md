@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.59.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.58.0-beta.1...v0.59.0-beta.1) (2026-11-15)
+
+
+### Features
+
+* **templates:** 全量审计改为从仓库根扫描以适配任意布局 ([b19bb4a](https://github.com/pengjiaxusz/pengj-templates/commit/b19bb4ae9645287fc0e6f537da098baf69206677))
+
 ## [0.58.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.57.3-beta.1...v0.58.0-beta.1) (2026-11-15)
 
 
