@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.58.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.57.3-beta.1...v0.58.0-beta.1) (2026-11-15)
+
+
+### Features
+
+* **templates:** 代码语言守卫改为非英文占比并随 lefthook 层生成 ([59ea7e6](https://github.com/pengjiaxusz/pengj-templates/commit/59ea7e655a8a4630c6bfbee7faec3b1a316ce5af))
+
 ## [0.57.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.57.2-beta.1...v0.57.3-beta.1) (2026-11-15)
 
 
