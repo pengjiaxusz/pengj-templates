@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.57.1-beta.1...v0.57.2-beta.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **templates:** 模板源文件固定 LF，避免 CRLF 被原样渲染到下游 ([b7e2897](https://github.com/pengjiaxusz/pengj-templates/commit/b7e28979244cd423d25982da2bade8c92da7b947))
+
 ## [0.57.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.57.0-beta.1...v0.57.1-beta.1) (2026-11-15)
 
 
