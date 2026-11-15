@@ -38,7 +38,7 @@
     ".agents\\skills\\bque\\references\\install.md": "1b87fa1ccf520a90a57b62555b3672b12b7f423eacf6b04d8aede13c1c6e83ff",
     ".agents\\skills\\bque\\references\\usage-matrix.md": "2c11dcb32f89a20284d7a6bff587d818e7e80ca925336ce4b8f1aac9eb8b97c9",
     ".agents\\skills\\caveman\\SKILL.md": "56a31b9be677ca0afcc24e2273846931841534990657251e1d47815adf661914",
-    ".agents\\skills\\git-workflow\\SKILL.md": "9959a5397a776c78d1fce488df7dcc93cb9bc0e7db4fd75a2beb17fcab950686",
+    ".agents\\skills\\git-workflow\\SKILL.md": "5775a1201df71346a2fa77a6f575caa9d8fa8911729906b8c271d4d5fd6df7b4",
     ".agents\\skills\\git-workflow\\references\\branch-sync.md": "635fe0348c4842ed9e3d6ac8c25e3ff9d2912ed768993a152a5be5a3e1ba7f42",
     ".agents\\skills\\git-workflow\\references\\commit.md": "1c484d19c082c9e69484c9287db45997f6571a11e4127eda1b80fee6883ab15d",
     ".agents\\skills\\git-workflow\\references\\non-interactive.md": "8c8d716ccbf8248faf1d47555aea057826847c41d30d07489af9ff37c865affb",
@@ -55,7 +55,7 @@
     ".agents\\skills\\subrepo-sync\\REFERENCE.md": "64d4b665bb4ec3dc9d0dee8fe54d6b82b121f8b48b4c0b5708d7064b9c78a211",
     ".agents\\skills\\subrepo-sync\\SKILL.md": "53a4741b987a31cf8dd468c82ffc2d2591a02311793f7454fbabc75f51d1dbcf",
     ".agents\\skills\\subrepo-sync\\scripts\\show-unapplied-commits.ps1": "79c1d9410582a4f1eeb78f1031e7f601c0b0ce0e5a2d122808d61b7ae034f866",
-    ".agents\\skills\\template-sync\\SKILL.md": "cd96de81519dd5d12ce289b3cf71b1e51fd3dea8c2ae9304b009cae035beed9d",
+    ".agents\\skills\\template-sync\\SKILL.md": "b5f96ac87ddfe06f0f4fa652ff70a40b49472e7e5c8b822566628e857a0da92e",
     ".agents\\skills\\template-sync\\scripts\\sync-template.ps1": "4ff8dba1749e8055a541718c9c66bd4fed6259482b0388e58eabc1ef45a1791a",
     ".agents\\skills\\write-a-skill\\SKILL.md": "aa7a797d0322191365c40eaff606a713247428eaaf11a4423870daa15b5dafac",
     ".agents\\skills\\write-docs\\SKILL.md": "873c5688743b786c3f445229240d9faf562c5179f484be5b04d00b85a9dcfeca",
@@ -67,7 +67,7 @@
     "just\\bque.just": "cf01148f49e980d5df19c46e7c616cc3812cd3a52b613779da1f4aa918b3f487",
     "just\\rust-workspace.just": "5aae64c139f55f40f3cc65705d436ee549fb650d84038ef885f7d4d07f5fb87c",
     "justfile": "86d76fc7a330ecdceb2cd0bd484db747350dd4c50d69cce6c7df2e13575d11d0",
-    "package.json": "4348b9da052b0222771e38d1ca494575d1db131fa6a8104a171870e7c8004fb5",
+    "package.json": "0f6f04612a5242a27a593377e954ed465a15907d01dc21a809f0cb4846d97689",
     "scripts\\install-hooks.mjs": "617941adf71bde9644d6ff833ffe373298f77025497eb2c12f5c895d6b8c491f"
   }
 }
