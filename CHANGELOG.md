@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.3-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.57.2-beta.1...v0.57.3-beta.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **core:** 补齐被删除的受管文件并在审计中统计缺失 ([8fe1b08](https://github.com/pengjiaxusz/pengj-templates/commit/8fe1b0844b0c76362a3f464f8e277d3f819381e4))
+
 ## [0.57.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.57.1-beta.1...v0.57.2-beta.1) (2026-11-15)
 
 
