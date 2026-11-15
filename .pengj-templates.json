@@ -38,7 +38,7 @@
     ".agents\\skills\\bque\\references\\install.md": "1b87fa1ccf520a90a57b62555b3672b12b7f423eacf6b04d8aede13c1c6e83ff",
     ".agents\\skills\\bque\\references\\usage-matrix.md": "2c11dcb32f89a20284d7a6bff587d818e7e80ca925336ce4b8f1aac9eb8b97c9",
     ".agents\\skills\\caveman\\SKILL.md": "56a31b9be677ca0afcc24e2273846931841534990657251e1d47815adf661914",
-    ".agents\\skills\\git-workflow\\SKILL.md": "5775a1201df71346a2fa77a6f575caa9d8fa8911729906b8c271d4d5fd6df7b4",
+    ".agents\\skills\\git-workflow\\SKILL.md": "4bc170f6bbb588e2c0c4be47eb10a23fd5f021981f802043b338c6fb49f6a22f",
     ".agents\\skills\\git-workflow\\references\\branch-sync.md": "635fe0348c4842ed9e3d6ac8c25e3ff9d2912ed768993a152a5be5a3e1ba7f42",
     ".agents\\skills\\git-workflow\\references\\commit.md": "1c484d19c082c9e69484c9287db45997f6571a11e4127eda1b80fee6883ab15d",
     ".agents\\skills\\git-workflow\\references\\non-interactive.md": "8c8d716ccbf8248faf1d47555aea057826847c41d30d07489af9ff37c865affb",
@@ -60,14 +60,14 @@
     ".agents\\skills\\write-a-skill\\SKILL.md": "aa7a797d0322191365c40eaff606a713247428eaaf11a4423870daa15b5dafac",
     ".agents\\skills\\write-docs\\SKILL.md": "873c5688743b786c3f445229240d9faf562c5179f484be5b04d00b85a9dcfeca",
     ".cargo\\config.toml": "1b06aced2448d86dc3dffeba01ffac746b65059315367c4d54e5801e5af7b98d",
-    ".gitattributes": "f0a5682286e5b1f2d0425c055c63c1a7a1c985c2f9358f841f25147be7026be7",
+    ".gitattributes": "4ee58e87bb8620c14bb17475b90c9ffbf5baf0d804eee9c8a29071c1f9f04a63",
     ".gitignore": "10fc518efad9b43b5cff3dea30046f7f86a78b9aa771837d3768792ee50b0438",
     "AGENTS.md": "b09436fb2946b5f35dd99c3fdf252bc13b2e97bf8a03d03b31a9e278762e7006",
     "commitlint.base.js": "0d81be3222e681a569c4b9c0a39a2cc93c68190252bdbd652d15e187a2f0de42",
     "just\\bque.just": "cf01148f49e980d5df19c46e7c616cc3812cd3a52b613779da1f4aa918b3f487",
     "just\\rust-workspace.just": "5aae64c139f55f40f3cc65705d436ee549fb650d84038ef885f7d4d07f5fb87c",
     "justfile": "86d76fc7a330ecdceb2cd0bd484db747350dd4c50d69cce6c7df2e13575d11d0",
-    "package.json": "0f6f04612a5242a27a593377e954ed465a15907d01dc21a809f0cb4846d97689",
+    "package.json": "268f6f8425703aaafd6cccc5d70fc5dddf57a7626c4be87d1b3e2049bf4eecbb",
     "scripts\\install-hooks.mjs": "617941adf71bde9644d6ff833ffe373298f77025497eb2c12f5c895d6b8c491f"
   }
 }
