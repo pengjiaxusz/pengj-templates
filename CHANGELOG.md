@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.1-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.57.0-beta.1...v0.57.1-beta.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **templates:** 托管技能资产固定 LF，消除更新时的换行抖动 ([d758679](https://github.com/pengjiaxusz/pengj-templates/commit/d758679ddbe584ddd0c73c0f34b4c40ef36aad46))
+
 ## [0.57.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.56.0-beta.1...v0.57.0-beta.1) (2026-11-15)
 
 
