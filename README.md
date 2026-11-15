@@ -115,7 +115,7 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
 
 lefthook 层用法：commitlint CLI 走本地依赖（`pnpm exec commitlint`），`pnpm-lock.yaml` 由 git 托管以保持可复现；生成项目时先 `git init` 再 `pnpm install`，`prepare` 自动装 lefthook git 钩子；升级用 `pnpm update --latest`。
 
-lefthook 层同时生成代码语言守卫 `scripts/check-lang.mjs`，pre-commit 阶段扫描暂存的 `.rs`：按 manifest 的 `options.chinese_programming` 判定方向（英文编程拒绝非英文，中文编程拒绝非中文），并按文件计算占比——字符串违规不超过 `lang_ratio`（默认 1%）、标识符违规不超过 `lang_ident_ratio`（默认 0），额度向下取整。真实例外在源码里认证：行尾 `lang-ok: 理由` 只免该行，文件头 `lang-allow: 理由` 免整个文件（i18n 词表、CJK 测试样本）。全量审计直接跑 `node scripts/check-lang.mjs`（从仓库根递归扫描 `.rs`，跳过 `target`、`node_modules`、`third-party`、`generated` 与 `submodules`，因此 `backend/`、`launcher/` 这类自定义布局也能覆盖），加 `--list` 列出全部违规、`--json` 输出机器可读报告；`--max-ratio` / `--max-ident-ratio` 可临时放宽阈值，`PENGJ_CODE_LANG=english|chinese` 可覆盖判定方向。`lefthook.yml` 在 `update_ignore` 里，存量项目升级模板后需手工补 `lang-guard` 命令，新项目开箱即用。
+lefthook 层同时生成代码语言守卫 `scripts/check-lang.mjs`，pre-commit 阶段扫描暂存的 `.rs`：按 manifest 的 `options.chinese_programming` 判定方向（英文编程拒绝非英文，中文编程拒绝非中文），并按文件计算占比——字符串违规不超过 `lang_ratio`（默认 1%）、标识符违规不超过 `lang_ident_ratio`（默认 0），额度向下取整。中文模式只判定面向人的文案：命令行参数、路径、协议字段名、内嵌源码/着色器代码等机器字面量不算违规（仍计入分母，避免额度被稀释）。真实例外在源码里认证：行尾 `lang-ok: 理由` 只免该行，文件头 `lang-allow: 理由` 免整个文件（i18n 词表、CJK 测试样本）。全量审计直接跑 `node scripts/check-lang.mjs`（从仓库根递归扫描 `.rs`，跳过 `target`、`node_modules`、`third-party`、`generated` 与 `submodules`，因此 `backend/`、`launcher/` 这类自定义布局也能覆盖），加 `--list` 列出全部违规、`--json` 输出机器可读报告；`--max-ratio` / `--max-ident-ratio` 可临时放宽阈值，`PENGJ_CODE_LANG=english|chinese` 可覆盖判定方向。`lefthook.yml` 在 `update_ignore` 里，存量项目升级模板后需手工补 `lang-guard` 命令，新项目开箱即用。
 
 ### GUI
 

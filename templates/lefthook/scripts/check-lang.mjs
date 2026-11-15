@@ -242,9 +242,72 @@ function scan(source) {
   return { identifiers, strings, fileAllow, lineOk };
 }
 
-/** True when a string literal carries human-readable text worth judging. */
-function isLanguageString(text) {
+// A Rust format template ("{}: {}", "{:#x}") carries no copy of its own: what
+// matters is the prose around the placeholders.
+const PLACEHOLDER = /\{[^{}]*\}/g;
+// Escape sequences are not language either: "\n\t" or "\x00\x01" only look
+// word-like because of the letters inside the escape.
+const ESCAPE = /\\(?:[nrt0\\'"xuU]|x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]+\})/g;
+// Code, markup and shell syntax mean the literal is machine text: embedded
+// HLSL/GLSL, SQL, JSON fragments, paths, command lines, registry names.
+const CODE_SYNTAX = /[;{}[\]()=<>|\\/'"]/;
+// Digit strings and hex blobs (asset hashes, 0x-prefixed keys) read the same in
+// every language.
+const HEX_BLOB = /^(?:0x)?[0-9a-f]{6,}$/i;
+
+// Non-Han scripts outside the CJK ideograph blocks: kana, hangul, Cyrillic,
+// Hebrew, Arabic, Devanagari. Chinese mode treats these as copy outright even
+// without word spacing, because a stray kana or Cyrillic literal is never
+// machine vocabulary.
+const NON_HAN_SCRIPT = /[\u0400-\u04ff\u0590-\u05ff\u0600-\u06ff\u0900-\u097f\u3040-\u30ff\uac00-\ud7af]/;
+
+/** True when a literal carries any language at all (letters, CJK, other scripts). */
+function hasLanguageLetters(text) {
   return ASCII_LETTER.test(text) || CJK.test(text) || FOREIGN_SCRIPT.test(text);
+}
+
+/**
+ * True when an English literal reads like prose a human wrote: at least two
+ * words separated by whitespace, one of them lowercase, and no code syntax.
+ *
+ * Chinese mode needs this test because "does this ASCII string need
+ * translating?" is genuinely ambiguous: `"total_cases"`, `"-spirv"`,
+ * `"{unique}.hlsl"` and `"float4 main() : SV_Target { return 0; }"` are not copy.
+ * A sentence like "Detour already initialized" is.
+ */
+function looksLikeProse(text) {
+  const stripped = text.replace(ESCAPE, '').replace(PLACEHOLDER, '');
+  if (!/\s/.test(stripped)) return false;
+  if (CODE_SYNTAX.test(stripped)) return false;
+  if (stripped.includes('::') || stripped.includes('->')) return false;
+  if (HEX_BLOB.test(stripped.trim())) return false;
+  const words = stripped.match(/[A-Za-z]{2,}/g) || [];
+  if (words.length < 2) return false;
+  // A bare flag list ("-fullscreen --vsync") is a command line, not a sentence.
+  const tokens = stripped.trim().split(/\s+/);
+  if (tokens.every((token) => token.startsWith('-'))) return false;
+  return words.some((word) => /^[a-z]/.test(word));
+}
+
+/**
+ * True when the literal is human-readable copy that must follow the project
+ * language.
+ *
+ * English mode treats any non-Latin script as decisive: a stray CJK or kana
+ * literal is unambiguous evidence, whatever its shape. Chinese mode only
+ * judges prose, because machine vocabulary (placeholders, tokens, paths,
+ * embedded source) is expected to stay English.
+ *
+ * Machine vocabulary stays in the denominator either way: it is still a string
+ * literal, and shrinking the denominator would silently tighten every file's
+ * budget.
+ */
+function isCopy(text, mode) {
+  const withoutEscapes = text.replace(ESCAPE, '');
+  if (!hasLanguageLetters(withoutEscapes.replace(PLACEHOLDER, ''))) return false;
+  if (mode === 'english') return true;
+  if (NON_HAN_SCRIPT.test(withoutEscapes)) return true;
+  return looksLikeProse(withoutEscapes);
 }
 
 /**
@@ -279,8 +342,9 @@ function classify(source, mode) {
   for (const token of strings) {
     if (exempt(token.line)) continue;
     const text = token.text;
-    if (!isLanguageString(text)) continue;
+    if (!hasLanguageLetters(text)) continue;
     result.stringItems += 1;
+    if (!isCopy(text, mode)) continue;
     if (mode === 'english') {
       if (FOREIGN_SCRIPT.test(text)) result.stringViolations.push(token);
     } else if (!HAN.test(text) && LETTER.test(text)) {
@@ -367,7 +431,7 @@ function runSelfTest() {
   // project forbids Chinese in any generated text file, while the scanner
   // still receives real CJK characters at runtime.
   const englishSample = [
-    'fn title() -> &\'static str { "Hello" }',
+    'fn title() -> &\'static str { "Hello world" }',
     'fn \u6807\u9898() -> &\'static str { "\u4f60\u597d" }',
     'let x = "\u4f60\u597d"; // lang-ok: CJK input sample',
     '// \u4e2d\u6587\u6ce8\u91ca\u4e0d\u7b97\u8fdd\u89c4',
@@ -380,7 +444,7 @@ function runSelfTest() {
 
   const chineseSample = [
     'fn title() { let label = "\u4fdd\u5b58"; }',
-    'fn other() { let label = "Save"; }',
+    'fn other() { let label = "Save changes"; }',
     'fn tag() { let label = "UTF-8"; } // lang-ok: technical token',
   ].join('\n');
   const chinese = classify(chineseSample, 'chinese');
@@ -390,6 +454,25 @@ function runSelfTest() {
 
   const japanese = classify('let s = "\u3059\u308b";', 'chinese');
   check('chinese: kana-only copy still needs Han characters', japanese.stringViolations.length === 1);
+
+  const placeholders = classify('let s = "{:#x}"; let t = "{:08x}";', 'chinese');
+  check('format placeholders are never copy', placeholders.stringViolations.length === 0);
+  check('machine strings still count toward the denominator', placeholders.stringItems === 2);
+
+  const tokens = classify(
+    'let a = "total_cases"; let b = "D3D11CreateDevice"; let c = "chahu.dll";',
+    'chinese',
+  );
+  check('machine vocabulary is not copy', tokens.stringViolations.length === 0);
+
+  const embedded = classify(
+    'let hlsl = "float4 main() : SV_Target {\n    return 0;\n}";',
+    'chinese',
+  );
+  check('embedded source code is not copy', embedded.stringViolations.length === 0);
+
+  const proseWithPlaceholder = classify('let s = "Failed to open file: {err}";', 'chinese');
+  check('prose around a placeholder is still copy', proseWithPlaceholder.stringViolations.length === 1);
 
   const allowedSample = '// lang-allow: i18n table\nfn f() { let _ = "\u4f60\u597d"; }';
   const allowed = classify(allowedSample, 'english');

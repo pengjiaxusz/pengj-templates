@@ -33,4 +33,4 @@
   用于提交校验脚本）。生成时只写命中那份，产物路径去掉语言标记，另一版不会落到项目里，
   因此英文项目的脚本里不会残留中文校验逻辑，反之亦然。例：`lefthook/commitlint.base.commit.en.js`。
 - 全英文项目用 `--skill-lang en --no-commit-zh`；生成后所有文本文件零汉字（`crates/core` 有端到端单测保障）。`.agents/skills/*/scripts/` 与 npm `prepare` 脚本恒为英文，不受语言轴影响。
-- **代码语言守卫**：`lefthook/scripts/check-lang.mjs` 随 lefthook 层生成到项目的 `scripts/check-lang.mjs`，pre-commit 扫描暂存的 `.rs`。判定方向来自 `options.chinese_programming`（`false` 查非拉丁文字、`true` 查非中文），按文件算占比：字符串违规 ≤ `lang_ratio`（默认 1%）、标识符违规 ≤ `lang_ident_ratio`（默认 0）。真实例外用行尾 `lang-ok: 理由` 或文件头 `lang-allow: 理由` 认证。脚本本身与语言轴无关，en/zh 项目拿到同一份文件。
+- **代码语言守卫**：`lefthook/scripts/check-lang.mjs` 随 lefthook 层生成到项目的 `scripts/check-lang.mjs`，pre-commit 扫描暂存的 `.rs`。判定方向来自 `options.chinese_programming`（`false` 查非拉丁文字、`true` 查非中文），按文件算占比：字符串违规 ≤ `lang_ratio`（默认 1%）、标识符违规 ≤ `lang_ident_ratio`（默认 0）。中文模式只判定面向人的文案，机器字面量（参数、路径、协议字段、内嵌源码）不判违规但仍计入分母。真实例外用行尾 `lang-ok: 理由` 或文件头 `lang-allow: 理由` 认证。脚本本身与语言轴无关，en/zh 项目拿到同一份文件。
