@@ -577,6 +577,8 @@ fn cmd_audit(
     let mut in_sync_count = 0;
     let mut custom_count = 0;
     let mut upstream_newer_count = 0;
+    let mut missing_count = 0;
+    let mut orphan_count = 0;
     let mut violations = Vec::new();
 
     for item in &report.items {
@@ -605,9 +607,11 @@ fn cmd_audit(
                 );
             }
             pengj_core::AuditFileStatus::MissingOnDisk => {
-                println!("  [本地文件缺失] {}", item.path);
+                missing_count += 1;
+                println!("  [本地文件缺失] {} (可运行 update 补回)", item.path);
             }
             pengj_core::AuditFileStatus::OrphanInManifest => {
+                orphan_count += 1;
                 println!("  [上游已废弃]   {}", item.path);
             }
         }
@@ -615,10 +619,12 @@ fn cmd_audit(
 
     println!("------------------------------------------------------------");
     println!(
-        "统计: {} 个一致, {} 个项目合规定制, {} 个待更新, {} 个违规漂移",
+        "统计: {} 个一致, {} 个项目合规定制, {} 个待更新, {} 个本地缺失, {} 个上游已废弃, {} 个违规漂移",
         in_sync_count,
         custom_count,
         upstream_newer_count,
+        missing_count,
+        orphan_count,
         violations.len()
     );
     if !report.warnings.is_empty() {

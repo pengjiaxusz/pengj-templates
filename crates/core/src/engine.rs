@@ -1833,8 +1833,16 @@ pub fn update_project_with_options(
 
         match manifest.files.get(&rel_str) {
             Some(old_sha) if *old_sha == new_sha => {
-                unchanged += 1;
-                new_files.insert(rel_str, new_sha);
+                // 模板没变，但用户可能删掉了文件（或换了工作树）：仍然要补回来，
+                // 否则受管文件会永久缺失，而 update 每次都报「未变」。
+                if target.is_file() {
+                    unchanged += 1;
+                    new_files.insert(rel_str, new_sha);
+                } else {
+                    write_file(&target, bytes)?;
+                    new_files.insert(rel_str.clone(), new_sha);
+                    created.push(rel_str);
+                }
             }
             Some(old_sha) => {
                 let current = std::fs::read(&target).ok();
@@ -3922,6 +3930,52 @@ mod tests {
         assert!(merged.contains("managed v2"));
         assert!(merged.ends_with("\n\n## 项目专属\n- 用户规则\n"));
         assert!(!merged.contains("managed v1"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn update_restores_missing_managed_file_even_when_template_unchanged() {
+        let tmp = std::env::temp_dir().join(format!("pengj-upd-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"
+description = \"x\"
+",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("common").join("README.md"),
+            "hello
+",
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        generate(
+            &templates,
+            "proj",
+            &["common".to_string()],
+            BTreeMap::new(),
+            &tmp,
+        )
+        .unwrap();
+
+        let proj = tmp.join("proj");
+        let target = proj.join("README.md");
+        assert!(target.is_file());
+        std::fs::remove_file(&target).unwrap();
+
+        let report = update_project(&templates, &proj).unwrap();
+        assert_eq!(
+            report.created,
+            vec!["README.md".to_string()],
+            "模板未变但文件被删时，update 应把它补回来而不是报未变"
+        );
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "hello");
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

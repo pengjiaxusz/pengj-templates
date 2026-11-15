@@ -67,7 +67,7 @@
     "just\\bque.just": "cf01148f49e980d5df19c46e7c616cc3812cd3a52b613779da1f4aa918b3f487",
     "just\\rust-workspace.just": "5aae64c139f55f40f3cc65705d436ee549fb650d84038ef885f7d4d07f5fb87c",
     "justfile": "73a694e438e196c461ea5da13f6c46fbd0b064111aebf2797fd4ed57147d08cd",
-    "package.json": "268f6f8425703aaafd6cccc5d70fc5dddf57a7626c4be87d1b3e2049bf4eecbb",
+    "package.json": "d4f24b1f82b28a0b7637e40edd7f7318c5d7ab1a41e717afda2354bb3fa0dec5",
     "scripts\\install-hooks.mjs": "617941adf71bde9644d6ff833ffe373298f77025497eb2c12f5c895d6b8c491f"
   }
 }
