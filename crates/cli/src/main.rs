@@ -498,6 +498,9 @@ fn cmd_update(
     for f in &report.removed {
         println!("  [移除] {f}");
     }
+    for name in &report.dropped_skills {
+        println!("  [清理] 技能 {name}（模板中已无此技能，已从技能清单移除）");
+    }
     Ok(())
 }
 
@@ -543,6 +546,9 @@ fn cmd_add_layer(
     }
     for f in &u.needs_review {
         println!("  [待复核] {f}");
+    }
+    for name in &u.dropped_skills {
+        println!("  [清理] 技能 {name}（模板中已无此技能，已从技能清单移除）");
     }
     Ok(())
 }

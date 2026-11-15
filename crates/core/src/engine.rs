@@ -935,6 +935,8 @@ pub fn generate(
             options.insert("skills".to_string(), serde_json::json!(all_skills));
         }
         let available: BTreeSet<String> = all_skills.into_iter().collect();
+        // 用户显式勾选的技能名可能已从模板删除，先裁剪再补基线/联动技能
+        migrate_skills_option(&mut options, &available);
         ensure_baseline_skills(&mut options, &available);
         ensure_queue_skill(&mut options, &ordered, &available);
     }
@@ -1244,6 +1246,8 @@ pub fn adopt_project(
             options.insert("skills".to_string(), serde_json::json!(all_skills));
         }
         let available: BTreeSet<String> = all_skills.into_iter().collect();
+        // 用户显式勾选的技能名可能已从模板删除，先裁剪再补基线/联动技能
+        migrate_skills_option(&mut options, &available);
         ensure_baseline_skills(&mut options, &available);
         ensure_queue_skill(&mut options, &ordered, &available);
     }
@@ -1503,14 +1507,21 @@ pub struct UpdateReport {
     pub removed: Vec<String>,
     /// 模板内容被追加/并入既有 legacy 文件、建议人工复核去重的路径
     pub needs_review: Vec<String>,
+    /// `options["skills"]` 中被清理掉的失效技能名（模板里已无此技能）
+    pub dropped_skills: Vec<String>,
     pub unchanged: usize,
 }
 
-/// 平滑迁移 options 中的技能列表（向后兼容废弃或合并的技能）
+/// 平滑迁移 options 中的技能列表（向后兼容废弃或合并的技能）。
+///
+/// 同时清理模板里已不存在的技能名：技能目录由模板自由增删，存量项目的
+/// `options["skills"]` 会长期留着已删技能的名字，导致选项与磁盘实际技能不一致。
+/// 返回被清理掉的名字（已排序去重），供调用方上报。
 fn migrate_skills_option(
     options: &mut BTreeMap<String, serde_json::Value>,
     available_skills: &BTreeSet<String>,
-) {
+) -> Vec<String> {
+    let mut dropped = Vec::new();
     if let Some(serde_json::Value::Array(skills_arr)) = options.get_mut("skills") {
         let mut new_set = BTreeSet::new();
         for v in skills_arr.iter() {
@@ -1522,11 +1533,15 @@ fn migrate_skills_option(
                             new_set.insert("git-workflow".to_string());
                         } else if available_skills.contains(s) {
                             new_set.insert(s.to_string());
+                        } else {
+                            dropped.push(s.to_string());
                         }
                     }
                     other => {
                         if available_skills.contains(other) {
                             new_set.insert(other.to_string());
+                        } else {
+                            dropped.push(other.to_string());
                         }
                     }
                 }
@@ -1534,6 +1549,9 @@ fn migrate_skills_option(
         }
         *skills_arr = new_set.into_iter().map(serde_json::Value::String).collect();
     }
+    dropped.sort();
+    dropped.dedup();
+    dropped
 }
 
 /// 递归清理因文件删除而变空的父目录（直到项目根目录停止）
@@ -1595,6 +1613,7 @@ pub fn update_project_with_options(
         .filter(|l| metas.contains_key(l))
         .collect();
     let ordered = templates.resolve_layers(&valid_layers)?;
+    let mut dropped_skills = Vec::new();
     if ordered.iter().any(|l| l == "agent") {
         let available_skills: BTreeSet<String> = templates
             .list_skills()
@@ -1608,7 +1627,7 @@ pub fn update_project_with_options(
                     .insert("skills".to_string(), serde_json::json!(all_skills));
             }
         } else {
-            migrate_skills_option(&mut manifest.options, &available_skills);
+            dropped_skills = migrate_skills_option(&mut manifest.options, &available_skills);
         }
         // 新模板加进来的基线技能要在存量项目里补齐，否则更新永远带不上
         ensure_baseline_skills(&mut manifest.options, &available_skills);
@@ -1957,6 +1976,7 @@ pub fn update_project_with_options(
         conflicted,
         removed,
         needs_review,
+        dropped_skills,
         unchanged,
     })
 }
@@ -2113,7 +2133,8 @@ pub fn audit_project(
                 options.insert("skills".to_string(), serde_json::json!(all_skills));
             }
         } else {
-            migrate_skills_option(&mut options, &available_skills);
+            // 巡检只做本地影子裁剪，不回写 manifest（audit 必须只读）
+            let _ = migrate_skills_option(&mut options, &available_skills);
         }
     }
     let ctx = RenderContext::new(&manifest.project_name, ordered.clone(), options.clone());
@@ -5405,7 +5426,12 @@ mod tests {
         available.insert("git-workflow".to_string());
         available.insert("caveman".to_string());
 
-        migrate_skills_option(&mut opts, &available);
+        let dropped = migrate_skills_option(&mut opts, &available);
+        assert_eq!(
+            dropped,
+            vec!["obsolete-skill".to_string()],
+            "失效技能名应被上报"
+        );
 
         let migrated = opts["skills"].as_array().unwrap();
         let list: Vec<String> = migrated
@@ -5417,6 +5443,78 @@ mod tests {
             list,
             vec!["caveman".to_string(), "git-workflow".to_string()]
         );
+    }
+
+    #[test]
+    fn generate_and_update_prune_skill_names_missing_from_templates() {
+        let tmp = std::env::temp_dir().join(format!("pengj-skill-prune-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let tpl_dir = tmp.join("templates");
+        let proj_dir = tmp.join("proj");
+
+        let layer = tpl_dir.join("agent");
+        std::fs::create_dir_all(layer.join(".agents/skills/caveman")).unwrap();
+        std::fs::write(
+            layer.join("layer.toml"),
+            "name = \"agent\"
+description = \"Test\"
+",
+        )
+        .unwrap();
+        std::fs::write(
+            layer.join(".agents/skills/caveman/SKILL.md"),
+            "---
+name: caveman
+description: test
+---
+body
+",
+        )
+        .unwrap();
+
+        let templates = Templates::new(&tpl_dir);
+        let mut options = BTreeMap::new();
+        options.insert(
+            "skills".to_string(),
+            serde_json::json!(["caveman", "arch-align"]),
+        );
+        generate(&templates, "proj", &["agent".to_string()], options, &tmp).unwrap();
+
+        let manifest = ProjectManifest::load(&proj_dir).unwrap();
+        let names = |m: &ProjectManifest| -> Vec<String> {
+            m.options["skills"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        assert_eq!(
+            names(&manifest),
+            vec!["caveman".to_string()],
+            "生成时就该丢弃模板里不存在的技能名"
+        );
+
+        // 模拟模板又删掉一个技能：存量 manifest 里仍留着旧名字，update 应清理并上报
+        let mut stale = manifest;
+        stale.options.insert(
+            "skills".to_string(),
+            serde_json::json!(["arch-align", "caveman"]),
+        );
+        stale.save(&proj_dir).unwrap();
+
+        let report = update_project(&templates, &proj_dir).unwrap();
+        assert_eq!(
+            report.dropped_skills,
+            vec!["arch-align".to_string()],
+            "update 报告应列出被清理的失效技能名"
+        );
+        let after = ProjectManifest::load(&proj_dir).unwrap();
+        assert_eq!(names(&after), vec!["caveman".to_string()]);
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

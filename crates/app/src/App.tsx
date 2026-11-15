@@ -67,6 +67,8 @@ interface UpdateReport {
   conflicted: ConflictInfo[];
   removed: string[];
   needs_review: string[];
+  // options["skills"] 中被清理掉的失效技能名（模板里已无此技能）
+  dropped_skills: string[];
   unchanged: number;
 }
 
@@ -876,11 +878,19 @@ function UpdateTab() {
                         <span className="text-[10px] text-muted-foreground/60">(已清理废弃文件)</span>
                       </div>
                     ))}
+                    {report.dropped_skills.map((name) => (
+                      <div key={`ds-${name}`} className="flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">清理</Badge>
+                        <span>{name}</span>
+                        <span className="text-[10px] text-muted-foreground/60">(技能已从模板移除，已从技能清单清理)</span>
+                      </div>
+                    ))}
                     {report.updated.length === 0 &&
                       report.created.length === 0 &&
                       report.conflicted.length === 0 &&
                       report.removed.length === 0 &&
-                      report.needs_review.length === 0 && (
+                      report.needs_review.length === 0 &&
+                      report.dropped_skills.length === 0 && (
                         <div className="py-8 text-center text-muted-foreground space-y-1">
                           <CheckCircle2 className="size-6 text-emerald-500 mx-auto" />
                           <p className="text-xs font-medium">项目与最新模板完全一致</p>
