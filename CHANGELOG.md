@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.55.2-beta.1...v0.56.0-beta.1) (2026-11-15)
+
+
+### Features
+
+* **agent:** 以通用 write-docs 技能取代 arch-align ([8ef1118](https://github.com/pengjiaxusz/pengj-templates/commit/8ef11180c0fe2628f4b094873bc33c58657ffa7f))
+
 ## [0.55.2-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.55.1-beta.1...v0.55.2-beta.1) (2026-11-14)
 
 
