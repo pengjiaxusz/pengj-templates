@@ -6,6 +6,8 @@
 set shell := ["sh", "-uc"]
 [windows]
 set shell := ["pwsh", "-NoProfile", "-Command"]
+# {% if options["skill_lang"] == "en" %}Let the project area override a framework recipe with the same name (e.g. a `test` that pre-builds an artifact), instead of editing the managed imports.{% else %}允许项目专属区用同名 recipe 覆盖框架配方（例如 `test` 前需要先产出某个产物），避免去改受管的 import 文件。{% endif %}
+set allow-duplicate-recipes := true
 
 {% if "bque" in layers %}
 import 'just/bque.just'
@@ -31,4 +33,5 @@ default:
 # {% if options["skill_lang"] == "en" %}Project-owned area: template updates only replace the managed block above. This area belongs to the project and is preserved in full.{% else %}项目专属区：模板更新只替换上方托管块，本区域归项目所有、完整保留。{% endif %}
 # {% if options["skill_lang"] == "en" %}Register project recipes here; new heavy tasks must call `just q-run <cmd>` / `just q-bench <cmd>`.{% else %}在这里登记项目自己的 recipe；新增重任务请调用 `just q-run <cmd>` / `just q-bench <cmd>`，{% endif %}
 # {% if options["skill_lang"] == "en" %}Never run cargo / cmake / ninja / pnpm build / tsc or other compilers raw.{% else %}不要裸跑 cargo / cmake / ninja / pnpm build / tsc 等编译命令。{% endif %}
+# {% if options["skill_lang"] == "en" %}Need to specialize a framework recipe (same name)? Redefine it here — the copy below overrides the import.{% else %}需要特化框架配方时，在这里定义同名 recipe 即可覆盖 import 的版本。{% endif %}
 # ---------------------------------------------------------------------------

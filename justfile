@@ -3,6 +3,8 @@
 set shell := ["sh", "-uc"]
 [windows]
 set shell := ["pwsh", "-NoProfile", "-Command"]
+# 允许项目专属区用同名 recipe 覆盖框架配方（例如 `test` 前需要先产出某个产物），避免去改受管的 import 文件。
+set allow-duplicate-recipes := true
 
 
 import 'just/bque.just'

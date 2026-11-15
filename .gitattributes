@@ -68,3 +68,10 @@ Cargo.lock linguist-generated=true
 # (.agents/, .github/, .vscode/). Projects that need a trimmed tarball can add
 # export-ignore entries outside this managed block.
 # PENGJ_TEMPLATE_END
+
+# ---------------------------------------------------------------------------
+# 本仓库专属：模板源文件必须以 LF 存储
+# 引擎按字节把模板渲染到下游，源文件是 CRLF 就会把 CRLF 带进项目，
+# 并让受管文件的指纹校验在每次更新时反复失配。
+# ---------------------------------------------------------------------------
+templates/** text eol=lf
