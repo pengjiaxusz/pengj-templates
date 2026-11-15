@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.57.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.56.0-beta.1...v0.57.0-beta.1) (2026-11-15)
+
+
+### Features
+
+* **core:** 自动清理模板中已删除的技能名 ([8456c15](https://github.com/pengjiaxusz/pengj-templates/commit/8456c15437cca98cacfa4fd8de14ca454bf4037d))
+
 ## [0.56.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.55.2-beta.1...v0.56.0-beta.1) (2026-11-15)
 
 
