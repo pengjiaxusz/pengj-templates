@@ -5224,6 +5224,96 @@ description = \"x\"
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// lefthook 层负责代码语言守卫：脚本随层生成、钩子按层挂载、规范条目随
+    /// `chinese_programming` 与 `skill_lang` 渲染；脚本本身与语言轴无关（en/zh 字节一致），
+    /// 因为它读取 manifest 自行判定方向。
+    #[test]
+    fn lefthook_layer_ships_code_language_guard() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+        let tmp = std::env::temp_dir().join(format!("pengj-lang-guard-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let layers: Vec<String> = ["agent", "lefthook", "rust-workspace"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        let mut zh_opts = BTreeMap::new();
+        zh_opts.insert("chinese_programming".to_string(), serde_json::json!(false));
+        zh_opts.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        generate(&templates, "guard_zh", &layers, zh_opts, &tmp).unwrap();
+
+        let mut en_opts = BTreeMap::new();
+        en_opts.insert("chinese_programming".to_string(), serde_json::json!(true));
+        en_opts.insert("skill_lang".to_string(), serde_json::json!("en"));
+        generate(&templates, "guard_en", &layers, en_opts, &tmp).unwrap();
+
+        let zh_root = tmp.join("guard_zh");
+        let en_root = tmp.join("guard_en");
+
+        let zh_script = std::fs::read_to_string(zh_root.join("scripts/check-lang.mjs")).unwrap();
+        let en_script = std::fs::read_to_string(en_root.join("scripts/check-lang.mjs")).unwrap();
+        assert_eq!(zh_script, en_script, "语言守卫脚本不应随语言轴变化");
+        assert!(zh_script.contains("lang-allow:"));
+        assert!(zh_script.contains("lang-ok:"));
+        assert!(zh_script.contains("--self-test"));
+        assert!(zh_script.contains("chinese_programming"));
+
+        let hooks = std::fs::read_to_string(zh_root.join("lefthook.yml")).unwrap();
+        assert!(hooks.contains("lang-guard"));
+        assert!(hooks.contains("node scripts/check-lang.mjs {staged_files}"));
+        assert!(hooks.contains("rustfmt"), "rust 层应保留 rustfmt 命令");
+
+        // 非 Rust 项目不挂语言守卫：没有 .rs 可扫，钩子只是噪声。
+        generate(
+            &templates,
+            "guard_non_rust",
+            &["agent".to_string(), "lefthook".to_string()],
+            BTreeMap::new(),
+            &tmp,
+        )
+        .unwrap();
+        let non_rust_hooks =
+            std::fs::read_to_string(tmp.join("guard_non_rust").join("lefthook.yml")).unwrap();
+        assert!(!non_rust_hooks.contains("lang-guard"));
+        assert!(!non_rust_hooks.contains("pre-commit"));
+
+        let pkg = std::fs::read_to_string(zh_root.join("package.json")).unwrap();
+        assert!(pkg.contains("\"lang:check\": \"node scripts/check-lang.mjs\""));
+
+        let zh_agents = std::fs::read_to_string(zh_root.join("AGENTS.md")).unwrap();
+        assert!(zh_agents.contains("代码语言守卫"));
+        assert!(!zh_agents.contains("Code-language guard"));
+
+        let en_agents = std::fs::read_to_string(en_root.join("AGENTS.md")).unwrap();
+        assert!(en_agents.contains("Code-language guard"));
+        // 中文编程本身就会在示例里给出中文标识符（如 `HttpRequest快照`），这里只校验文案语言。
+        assert!(!en_agents.contains("代码语言守卫"));
+
+        // 没有 lefthook 层的项目不该出现这条规范（也就没有脚本可跑）
+        let mut bare_opts = BTreeMap::new();
+        bare_opts.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        generate(
+            &templates,
+            "guard_bare",
+            &["agent".to_string()],
+            bare_opts,
+            &tmp,
+        )
+        .unwrap();
+        let bare_agents =
+            std::fs::read_to_string(tmp.join("guard_bare").join("AGENTS.md")).unwrap();
+        assert!(!bare_agents.contains("代码语言守卫"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     #[test]
     fn audit_project_detects_clean_customized_and_violations() {
         let tmp = std::env::temp_dir().join(format!("pengj_test_audit_{}", std::process::id()));

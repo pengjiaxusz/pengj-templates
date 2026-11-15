@@ -6,6 +6,10 @@ pre-commit:
       glob: "*.rs"
       run: rustfmt {staged_files}
       stage_fixed: true
+    # {% if options["skill_lang"] == "en" %}Code-language guard: identifiers and copy must follow options.chinese_programming; a small per-file ratio is tolerated, genuine exceptions are certified with lang-ok: / lang-allow:{% else %}代码语言守卫：标识符与文案须符合 options.chinese_programming；每文件容忍小比例例外，真实例外用 lang-ok: / lang-allow: 认证{% endif %}
+    lang-guard:
+      glob: "*.rs"
+      run: node scripts/check-lang.mjs {staged_files}
 {% endif %}
 commit-msg:
   commands:

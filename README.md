@@ -11,7 +11,7 @@
 | `common` | 所有仓库共用：`.gitignore` | 所有仓库 |
 | `just` | 唯一的根 `justfile` 主入口：托管块框架区 + 块外项目专属区，按层 import 语言/排队配方 | 需要统一任务入口的仓库 |
 | `bque` | Windows 全局编译排队：`just/bque.just`（`queue-*` / `queue-doctor` / `q-run` / `q-bench`） | 需要跨工作树排队与纯净跑分 |
-| `lefthook` | Git hooks（lefthook）+ commitlint 约定式提交校验 | 需要 Git 钩子的仓库 |
+| `lefthook` | Git hooks（lefthook）+ commitlint 约定式提交校验 + 代码语言守卫 | 需要 Git 钩子的仓库 |
 | `agent` | AI 编码助手规范（`AGENTS.md`），按所选层/选项生成 rust、中文编程等约定 | 希望 agent 遵循规范 |
 | `vscode` | VS Code 工作区配置：推荐扩展、中文编程下 rust 检查走 clippy | 使用 VS Code 开发 |
 | `rust` | Rust 仓库专属：`Cargo.toml`、clippy/rustfmt、可选 sccache、`just/rust.just` | Rust 项目 |
@@ -114,6 +114,8 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
 `.vscode/settings.json` 的模板配置在**项目根已有 `*.code-workspace` 文件时并入工作区文件的 `settings` 节点**（不新建独立 settings 文件）；没有工作区文件时才创建/维护 `.vscode/settings.json`。
 
 lefthook 层用法：commitlint CLI 走本地依赖（`pnpm exec commitlint`），`pnpm-lock.yaml` 由 git 托管以保持可复现；生成项目时先 `git init` 再 `pnpm install`，`prepare` 自动装 lefthook git 钩子；升级用 `pnpm update --latest`。
+
+lefthook 层同时生成代码语言守卫 `scripts/check-lang.mjs`，pre-commit 阶段扫描暂存的 `.rs`：按 manifest 的 `options.chinese_programming` 判定方向（英文编程拒绝非英文，中文编程拒绝非中文），并按文件计算占比——字符串违规不超过 `lang_ratio`（默认 1%）、标识符违规不超过 `lang_ident_ratio`（默认 0），额度向下取整。真实例外在源码里认证：行尾 `lang-ok: 理由` 只免该行，文件头 `lang-allow: 理由` 免整个文件（i18n 词表、CJK 测试样本）。全量审计直接跑 `node scripts/check-lang.mjs`，加 `--list` 列出全部违规、`--json` 输出机器可读报告；`--max-ratio` / `--max-ident-ratio` 可临时放宽阈值，`PENGJ_CODE_LANG=english|chinese` 可覆盖判定方向。`lefthook.yml` 在 `update_ignore` 里，存量项目升级模板后需手工补 `lang-guard` 命令，新项目开箱即用。
 
 ### GUI
 
