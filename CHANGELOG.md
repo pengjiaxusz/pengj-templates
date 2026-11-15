@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.59.0-beta.1...v0.60.0-beta.1) (2026-11-15)
+
+
+### Features
+
+* **templates:** 中文模式只判定面向人的文案 ([3b7caff](https://github.com/pengjiaxusz/pengj-templates/commit/3b7caffdabb0ae944b851dd2aec5b074ee63c0ff))
+
 ## [0.59.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.58.0-beta.1...v0.59.0-beta.1) (2026-11-15)
 
 
