@@ -12,7 +12,7 @@
 - **引擎**（Rust）：`crates/core` — 层发现、依赖排序、合并渲染、生成/更新、`.pengj-templates.json` manifest
 - **CLI**（Rust/clap）：`crates/cli`，命令 `pengj-templates-cli`
 - **MCP 安装**（Rust）：`crates/mcp` — 配方目录（catalog）、五家客户端适配、stdio 握手巡检；命令面挂在 `crates/cli` 的 `mcp` 子命令。它作用于**机器上的客户端配置**（`~/.workbuddy/mcp.json`、`~/.claude.json` 等），与项目模板无关，因此不依赖 `--templates`
-- **GUI**（Tauri 2 + React + Vite + TypeScript + Tailwind v4 + shadcn/ui）：`crates/app`（`src-tauri/` 为 Rust 壳，`src/` 为前端）
+- **提交门禁**（Rust）：`crates/gate` — 约定式提交校验、代码语言守卫、rustfmt 暂存格式化；零第三方依赖，既是独立二进制 `gate`，也是 CLI 的 `gate` 子命令
 - **模板**：`templates/<layer>/`，运行时读取（改模板无需重编译，直接 re-run 生效）
 
 ## 提交规范 / Commits
@@ -21,41 +21,43 @@
 - type：`feat fix docs style refactor perf test build ci chore revert`。
 - **回复前提交门禁（硬性拦截，禁止堆积）**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（检查、拆分、提交并 git push）作为最后一个工具调用步骤**。严禁在工作区留存已验证修改直接结束回复；严禁在多轮对话中拖延堆积或等待用户催促 `/commit`；在 `/plan` 等规划模式下生成 `walkthrough.md` 后，必须紧随其后执行提交与推送，不可中途停顿。
 - 提交前跑「提交前完整性检查」（构建验证 / 文档同步 / 格式与命名）；无关改动拆分多次提交；**提交后立即 push**。
-- 提交由 `tools/gate` 校验（Rust 实现，无 node 依赖），格式不符会被拦截；规则见 `.gate.toml`。
+- 提交由 `crates/gate` 校验（Rust 实现，无 Node 依赖），格式不符会被拦截；规则见 `.gate.toml`。
 
 > EN: Conventional commits, Chinese subject. Type/scope whitelisted (see `.gate.toml`). Pre-response commit gate: whenever files are modified and verified in a turn, commit & push must be the final tool-calling step before outputting the final reply to user. Split unrelated changes; push immediately after commit; hooks enforce format.
 
-## Rust 规范 / Rust (crates/core, crates/cli, crates/mcp, src-tauri)
+## Rust 规范 / Rust (crates/core, crates/cli, crates/mcp, crates/gate)
 
 - 编译检查：`cargo check --workspace`；测试：`cargo test --workspace`。
 - 命名：变量/函数/模块 `snake_case`，类型/特征/枚举 `CamelCase`，常量 `SCREAMING_SNAKE_CASE`；文档注释用中文。
 - 错误处理：`anyhow::Result` / `CoreError`（`thiserror`），禁止裸 `unwrap`/`panic`、禁止 `as any` 式逃生门。
-- CLI 参数用 clap 派生；核心库的公开类型加 `#[derive(Debug, Clone, serde::Serialize)]` 供 CLI/GUI 共用。
+- CLI 参数用 clap 派生；核心库的公开类型加 `#[derive(Debug, Clone, serde::Serialize)]` 供 CLI 复用。
 
 > EN: workspace-level checks; Chinese doc comments; typed errors, no unwrap/panic.
 
-## 前端规范 / Frontend (crates/app/src)
+## 提交门禁规范 / Commit gate (crates/gate)
 
-- 构建：`just frontend-build`（tsc 类型检查 + vite 产物）。
-- React + TypeScript + Tailwind v4 + shadcn/ui；组件放 `src/components/ui/`，页面逻辑放 `src/App.tsx` 或 `src/components/`。
-- UI 文案用中文；与 Tauri 通信走 `invoke("cmd_xxx", ...)`，命令定义在 `crates/app/src-tauri/src/lib.rs`。
-- 新增后端命令时：`#[tauri::command]` + `invoke_handler` 注册 + 前端 `invoke` 三处同步。
+- 零第三方依赖：只允许标准库，新增依赖要显式讨论。
+- 规则集中在 `crates/gate/src/config.rs`（`.gate.toml` 解析）与 `crates/gate/src/commit.rs`（约定式提交校验），不要把规则散落到别处。
+- 钩子安装走 `core.hooksPath=.githooks` + `git update-index --chmod=+x`——Linux 克隆会静默跳过没有可执行位的钩子，改钩子文件时必须确认模式位。
+- 钩子文件必须含 marker `gate hook`；`install` 遇到非 gate 写的钩子会拒绝覆盖，并提示 lefthook / husky 与门禁争抢 `core.hooksPath`。
+- 语料来自真实 commitlint 的裁决（`crates/gate/tests/commit_corpus.jsonl`）：门禁不能比它替换掉的工具更松，改规则前先看语料。
+- 门禁二进制同时以 `crates/gate`（库 + `gate` 二进制）与 `crates/cli` 的 `gate` 子命令两种形态分发，两者共用 `crates/gate/src/cli.rs` 的同一个解析器，不允许行为漂移。
 
-> EN: tsc + vite build; shadcn/ui components; Chinese UI copy; Tauri commands defined in src-tauri/src/lib.rs.
+> EN: the commit gate has zero third-party dependencies; rules live in config.rs / commit.rs; hooks need `core.hooksPath=.githooks` plus the executable bit recorded in the index; hook files carry the `gate hook` marker; the corpus pins the gate to commitlint's verdicts; the standalone binary and the CLI subcommand share one parser.
 
 ## 模板层规范 / Template layers (templates/)
 
 - **新增层** = `templates/<layer>/` 目录 + `layer.toml`（`name` / `description` / `depends` / `update_ignore`），自动发现、无需注册。
-- **合并规则**：按依赖顺序合并、后层覆盖前层；`.gitignore`、`.gitattributes` 按层累加拼接（`ACCUMULATE_FILES`）；`package.json` 结构化并集（`MERGE_JSON_FILES`，更新/纳管时依赖类字段同名包版本一律以模板为准，脚本与其余字段用户优先、键序保持）；`.cargo/config.toml` 走 TOML 结构化受管合并（表级并集、等值去重、冲突跳过并上报，见 `crates/core/src/toml_merge.rs`）。
+- **合并规则**：按依赖顺序合并、后层覆盖前层；`.gitignore`、`.gitattributes` 按层累加拼接（`ACCUMULATE_FILES`）；`.cargo/config.toml` 走 TOML 结构化受管合并（表级并集、等值去重、冲突跳过并上报，见 `crates/core/src/toml_merge.rs`）。模板源文件带可执行位时（钩子脚本），写盘后由 `apply_executable_bits` 补回——`std::fs::write` 不复制权限位，缺位会让 git 在 Unix 上静默跳过钩子。
 - **占位符**：minijinja（`{{ project_name }}`、`{{ project_slug }}`、`{{ year }}`、`layers`、`options`），渲染逻辑在 `crates/core/src/render.rs`。
 - **选项**：生成时用户选项（edition、skills、skill_lang 等）固化进 `.pengj-templates.json` manifest；`update` 按同一批选项重渲染。
 - **技能过滤**：`options["skills"]`（字符串数组）决定生成哪些技能文件；缺失时包含全部（向后兼容），过滤逻辑在 `crates/core/src/engine.rs`（`skill_name_of` / `selected_skills`）。
 - 层内「种子文件、后续归用户」的文件在 `layer.toml` 的 `update_ignore` 声明，`update` 时跳过。
-- **just / bque 装配**：根 `justfile` 只由 `just` 层产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（按 `layers` / `options["just_recipes"]` 条件 `import`），块外项目专属区归用户所有；`bque` / `rust` / `rust-workspace` 层产出 `just/*.just` 模块并依赖 `just`。`justfile` **不得**列入 `update_ignore`，否则框架区无法随模板演进。
+- **just / bque / gate 装配**：根 `justfile` 只由 `just` 层产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（按 `layers` / `options["just_recipes"]` 条件 `import`），块外项目专属区归用户所有；`bque` / `gate` / `rust` / `rust-workspace` 层产出 `just/*.just` 模块并依赖 `just`。`justfile` **不得**列入 `update_ignore`，否则框架区无法随模板演进。
 - **层-技能联动**：勾 `bque` 层时自动把 `bque` 技能并入 `options["skills"]`（`generate` / `adopt` / `update` / `add-layer` 四处一致），避免「有配方没文档」的半接入；`audit` 对半接入与缺少 justfile 托管块给出非阻断配置提示。
 - **增量加层**：`add-layer --dir <项目> --layers <层>` 只合并层清单并重跑 `update`，禁止用 `adopt --force` 全量重纳管；已有自定义编排的项目设 `options["just_recipes"] = "none"` 保留自己的 recipe。
 
-> EN: a layer = directory + layer.toml, auto-discovered. Merge by dependency order, later overrides earlier; .gitignore accumulates; package.json unions. minijinja placeholders; options persisted in manifest and reused by update. The root justfile is owned by the `just` layer via a managed block; queue/language layers emit `just/*.just` modules and depend on it. Selecting the bque layer auto-selects the bque skill; `add-layer` appends layers without full re-adoption.
+> EN: a layer = directory + layer.toml, auto-discovered. Merge by dependency order, later overrides earlier; .gitignore accumulates; the executable bit of hook scripts is preserved on write. minijinja placeholders; options persisted in manifest and reused by update. The root justfile is owned by the `just` layer via a managed block; queue/gate/language layers emit `just/*.just` modules and depend on it. Selecting the bque layer auto-selects the bque skill; `add-layer` appends layers without full re-adoption.
 
 ## 技能规范 / Skills
 
@@ -71,26 +73,25 @@
 
 - **agent 层全部内容必须中英双语**：`templates/agent/AGENTS.md` 与每个技能 `SKILL.md`。
 - 双语写法：`{% if options["skill_lang"] == "en" %}` … `{% else %}` … `{% endif %}` 分支（zh 为默认）；frontmatter 的 `description` 也要双语分支（供 UI 勾选列表展示）。
-- 新增技能必须照抄现有技能（如 `commit`）的双语模板结构；新增语言时同步扩展 `skill_lang` 校验（CLI / GUI / core）。
+- 新增技能必须照抄现有技能（如 `git-workflow`）的双语模板结构；新增语言时同步扩展 `skill_lang` 校验（CLI / core）。
 - **只有文档双语，代码不双语**：`.agents/skills/*/scripts/` 下的脚本一律英文——标识符、结构化字段名（如 `type` / `source` / `entry`）、注释、日志输出都用英文，不随 `skill_lang` 变化。脚本是被 agent、CI 与其他工具执行的共享基础设施，中文标识符在编码、diff、shell 传参与工具链交接上都容易出问题；中文含义写在 `SKILL.md`，不写进脚本。存量中文脚本在改造时一并英文化（参考 `mcp-bootstrap/scripts/ensure-mcp.mjs`）。
 - 四条语言轴互相独立：**中文编程**（目标项目代码的标识符，`chinese_programming`）、**技能文档语言**（`skill_lang`）、**提交信息语言**（`commit_zh`）、**技能脚本语言**（恒为英文，无选项）。
-- **`skill_lang` 是全部模板层「面向人的文案」总开关**：除 agent 层文档外，`just` / `bque` / `rust*` / `lefthook` / `common` 各层的注释、报错提示、日志、`.gitignore` 拼接段标题都按 `{% if options["skill_lang"] == "en" %}` 分支渲染，`en` 时生成的所有文本文件不得出现汉字。新增模板文案必须同时写中英两支，且**中文分支渲染结果要与改动前逐字节一致**（否则存量中文项目整体漂移）。`commit_zh` 只控制提交校验脚本的选版与提交规范文档；全英文项目须同时设 `skill_lang=en` 与 `commit_zh=false`。技能脚本与 npm `prepare` 脚本恒为英文，不随语言轴变化。
+- **`skill_lang` 是全部模板层「面向人的文案」总开关**：除 agent 层文档外，`just` / `bque` / `gate` / `rust*` / `common` 各层的注释、报错提示、日志、`.gitignore` 拼接段标题都按 `{% if options["skill_lang"] == "en" %}` 分支渲染，`en` 时生成的所有文本文件不得出现汉字。新增模板文案必须同时写中英两支，且**中文分支渲染结果要与改动前逐字节一致**（否则存量中文项目整体漂移）。`commit_zh` 只控制门禁的提交主题语言规则与提交规范文档；全英文项目须同时设 `skill_lang=en` 与 `commit_zh=false`。技能脚本恒为英文，不随语言轴变化。
 - **代码类产物按语言拆文件，不在脚本里写双语分支**：脚本、配置、YAML 等「另一种语言的逻辑会变成死代码」的文件，用**语言变体文件**各写一版完整文件，引擎按语言轴二选一写盘（输出时去掉语言标记，另一份完全不落到项目里）：
   - `<stem>.<lang>.<ext>`（如 `foo.zh.js` / `foo.en.js`）跟随 `skill_lang`；
-  - `<stem>.commit.<lang>.<ext>`（如 `commitlint.base.commit.en.js`）跟随 `commit_zh`，用于提交校验类脚本——`commit_zh` 与 `skill_lang` 是独立轴，「中文文档 + 英文提交」时按提交轴选版。
+  - `<stem>.commit.<lang>.<ext>` 跟随 `commit_zh`，用于提交校验类产物——`commit_zh` 与 `skill_lang` 是独立轴，「中文文档 + 英文提交」时按提交轴选版。
   - 解析实现：`crates/core/src/engine.rs::resolve_language_variant`；`update` 语义不变（产物路径无语言标记，manifest 照常记录）。
-- **代码语言守卫（lefthook 层）**：`scripts/check-lang.mjs` 在 pre-commit 扫描暂存 `.rs`，按 `options.chinese_programming` 判定——`false`（英文编程）时标识符必须 ASCII、字符串文案必须英文；`true`（中文编程）时字符串文案必须中文（标识符允许英文锚点，符合中文编程规范）。中文模式只判定面向人的文案：命令行参数、路径、协议字段名、内嵌源码/着色器代码等机器字面量不算违规，但仍计入分母，避免额度被稀释。判定按文件算占比：字符串违规数 ÷ 字符串总数 ≤ `lang_ratio`（默认 1%），标识符违规数 ÷ 标识符总数 ≤ `lang_ident_ratio`（默认 0），允许额度向下取整。真实例外在源码里认证：行尾 `lang-ok: 理由` 免该行，文件头 `lang-allow: 理由` 免整文件（i18n 词表、CJK 测试样本）。`lefthook.yml` 属 `update_ignore`，存量项目不会被自动挂上这道门禁，需手工补 `lang-guard` 命令；新项目由模板直接生成。模板仓库自身的中文 CLI 文案是 `skill_lang=zh` 的文案，不是英文编程项目的代码，因此本仓库不启用该门禁。
+- **代码语言守卫（gate 层）**：门禁在 pre-commit 扫描暂存 `.rs`，按 `.gate.toml` 的 `mode` 判定——`english` 时标识符必须 ASCII、字符串文案必须英文；`chinese` 时字符串文案必须中文（标识符允许英文锚点，符合中文编程规范）。中文模式只判定面向人的文案：命令行参数、路径、协议字段名、内嵌源码/着色器代码等机器字面量不算违规，但仍计入分母，避免额度被稀释。判定按文件算占比：字符串违规数 ÷ 字符串总数 ≤ `lang.max_ratio`（默认 1%），标识符违规数 ÷ 标识符总数 ≤ `lang.max_ident_ratio`（默认 0），允许额度向下取整。真实例外在源码里认证：行尾 `lang-ok: 理由` 免该行，文件头 `lang-allow: 理由` 免整文件（i18n 词表、CJK 测试样本）。`.gate.toml` 属 `update_ignore`（首次生成后归用户所有），但 `.githooks/*` 由模板托管、随更新同步；存量项目从 `lefthook` 层迁过来时，层名由 `lefthook` 自动映射为 `gate`（`LEGACY_LAYER_ALIASES`），门禁不会被静默丢弃。模板仓库自身的中文 CLI 文案是 `skill_lang=zh` 的文案，不是英文编程项目的代码，因此本仓库在 `.gate.toml` 的 `project.disabled` 里关掉了 `lang-guard`。
 
-> EN: ALL agent-layer content (AGENTS.md template + every skill) must be bilingual zh/en via `{% if options["skill_lang"] == "en" %}` branches. Frontmatter descriptions too (shown in the GUI skill picker). Copy the commit skill's structure for new skills. Docs are bilingual, code is not: scripts under `.agents/skills/*/scripts/` are always English (identifiers, structured field names, comments, log lines) regardless of `skill_lang` — they are shared infrastructure run by agents, CI and other tools, so Chinese identifiers hurt encoding, diffing and shell hand-off. Put the Chinese meaning in `SKILL.md`. Four independent language axes: `chinese_programming` (identifiers in the target project), `skill_lang` (all human-facing text in every layer), `commit_zh` (commitlint script variant + commit guidelines), and skill scripts (always English, no option). A fully English project needs `skill_lang=en` together with `commit_zh=false`; inline `{% if %}` branches must keep the zh output byte-identical. Code-like artifacts must NOT carry bilingual runtime branches: split them into language-variant files — `<stem>.<lang>.<ext>` follows `skill_lang`, `<stem>.commit.<lang>.<ext>` follows `commit_zh` — and the engine writes only the selected one under the unmarked name (`resolve_language_variant` in `crates/core/src/engine.rs`). The lefthook layer also ships `scripts/check-lang.mjs`: a pre-commit guard that reads `options.chinese_programming` and, per file, caps violating strings at `lang_ratio` (default 1%) and violating identifiers at `lang_ident_ratio` (default 0, rounded down). Chinese mode judges human-facing copy only — flags, paths, protocol field names and embedded source are machine text, not violations, yet they stay in the denominator so the budget is not diluted. Genuine exceptions are certified in source with `lang-ok: <reason>` (line) or `lang-allow: <reason>` (file: i18n tables, CJK fixtures). `lefthook.yml` is in `update_ignore`, so existing projects must add the `lang-guard` command by hand; freshly generated projects get it automatically. This repository's own Chinese CLI copy belongs to the `skill_lang=zh` axis, not to English-programming code, so the gate is not enabled here.
+> EN: ALL agent-layer content (AGENTS.md template + every skill) must be bilingual zh/en via `{% if options["skill_lang"] == "en" %}` branches. Frontmatter descriptions too. Copy the `git-workflow` skill's structure for new skills. Docs are bilingual, code is not: scripts under `.agents/skills/*/scripts/` are always English (identifiers, structured field names, comments, log lines) regardless of `skill_lang` — they are shared infrastructure run by agents, CI and other tools, so Chinese identifiers hurt encoding, diffing and shell hand-off. Put the Chinese meaning in `SKILL.md`. Four independent language axes: `chinese_programming` (identifiers in the target project), `skill_lang` (all human-facing text in every layer), `commit_zh` (the gate's commit-subject language rule + commit guidelines), and skill scripts (always English, no option). A fully English project needs `skill_lang=en` together with `commit_zh=false`; inline `{% if %}` branches must keep the zh output byte-identical. Code-like artifacts must NOT carry bilingual runtime branches: split them into language-variant files — `<stem>.<lang>.<ext>` follows `skill_lang`, `<stem>.commit.<lang>.<ext>` follows `commit_zh` — and the engine writes only the selected one under the unmarked name (`resolve_language_variant` in `crates/core/src/engine.rs`). The gate layer ships the code-language guard: a pre-commit check that reads `mode` from `.gate.toml` and, per file, caps violating strings at `lang.max_ratio` (default 1%) and violating identifiers at `lang.max_ident_ratio` (default 0, rounded down). Chinese mode judges human-facing copy only — flags, paths, protocol field names and embedded source are machine text, not violations, yet they stay in the denominator so the budget is not diluted. Genuine exceptions are certified in source with `lang-ok: <reason>` (line) or `lang-allow: <reason>` (file: i18n tables, CJK fixtures). `.gate.toml` is in `update_ignore` (it belongs to the project after the first generation), while `.githooks/*` stays template-managed; projects migrating from the old `lefthook` layer get their layer name mapped to `gate` automatically (`LEGACY_LAYER_ALIASES`), so the gate is never silently dropped. This repository's own Chinese CLI copy belongs to the `skill_lang=zh` axis, not to English-programming code, so the language guard is disabled here through `project.disabled`.
 
 ## 验证 / Verification
 
 改动提交前至少跑与改动面相关的检查：
 
 - Rust / 模板 / 构建配置：按 `.agents/skills/git-workflow` 的提交前检查执行，再跑 `cargo test --workspace`。
-- 前端（`crates/app/src` 等）：`just frontend-build`。
 - 模板改动：临时目录端到端验证，如 `cargo run -q -p pengj-templates-cli -- create demo --layers agent --skills git-workflow,caveman --output <临时目录>`，检查生成文件与 AGENTS.md 渲染结果。
-- 全量 CI 校验：`just ci`（fmt check + 编译 + 静态检查 + 测试 + 前端构建）。
+- 全量 CI 校验：`just ci`（fmt check + 编译 + 静态检查 + 测试）。
 
 > EN: run the checks matching your change surface before committing (see above). Template changes: verify with an end-to-end CLI create into a temp dir. Full check: `just ci`.
 

@@ -11,7 +11,7 @@
 | `common` | 所有仓库共用：`.gitignore` | 所有仓库 |
 | `just` | 唯一的根 `justfile` 主入口：托管块框架区 + 块外项目专属区，按层 import 语言/排队配方 | 需要统一任务入口的仓库 |
 | `bque` | Windows 全局编译排队：`just/bque.just`（`queue-*` / `queue-doctor` / `q-run` / `q-bench`） | 需要跨工作树排队与纯净跑分 |
-| `lefthook` | Git hooks（lefthook）+ commitlint 约定式提交校验 + 代码语言守卫 | 需要 Git 钩子的仓库 |
+| `gate` | 提交门禁：`.gate.toml` 配置 + `.githooks/*` 钩子（约定式提交校验、代码语言守卫、rustfmt），纯 Rust 实现、零第三方依赖 | 需要 Git 钩子的仓库 |
 | `agent` | AI 编码助手规范（`AGENTS.md`），按所选层/选项生成 rust、中文编程等约定 | 希望 agent 遵循规范 |
 | `vscode` | VS Code 工作区配置：推荐扩展、中文编程下 rust 检查走 clippy | 使用 VS Code 开发 |
 | `rust` | Rust 仓库专属：`Cargo.toml`、clippy/rustfmt、可选 sccache、`just/rust.just` | Rust 项目 |
@@ -22,10 +22,10 @@
 
 ## 技术栈
 
-- **引擎**：Rust（`crates/core`）— 分层合并、渲染、diff 与更新逻辑，模板编译期嵌入二进制
+- **引擎**：Rust（`crates/core`）— 分层合并、渲染、diff 与更新逻辑；模板从运行时目录加载（`PENGJ_TEMPLATES` > 当前目录 `templates/` > 可执行文件旁 `templates/`）
 - **MCP 安装**：Rust（`crates/mcp`）— 配方目录 + 客户端适配 + 真实握手巡检，机器级（跨项目）配置
-- **GUI**：Tauri 2 + React + Vite + TypeScript + Tailwind v4 + shadcn/ui（`crates/app`）
-- **CLI**：clap（`crates/cli`，命令 `pengj-templates-cli`），与 GUI 共用同一套引擎
+- **提交门禁**：Rust（`crates/gate`）— 约定式提交校验、代码语言守卫、rustfmt 暂存格式化；零第三方依赖，同时是独立二进制与 CLI 子命令
+- **CLI**：clap（`crates/cli`，命令 `pengj-templates-cli`），全仓库唯一入口；内置 `gate` 子命令透传门禁参数
 
 ## 使用
 
@@ -42,11 +42,11 @@ cargo run -p pengj-templates-cli -- add-layer --dir ./my-app --layers just,bque 
 cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # 巡检半接入与托管块漂移
 ```
 
-**just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`bque` / `rust` / `rust-workspace` 层分别产出 `just/bque.just`、`just/rust.just`、`just/rust-workspace.just`，三层都依赖 `just`；`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾 `bque` 层会自动补齐 `bque` 技能，避免半接入；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。
+**just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`bque` / `gate` / `rust` / `rust-workspace` 层分别产出 `just/bque.just`、`just/gate.just`、`just/rust.just`、`just/rust-workspace.just`，四层都依赖 `just`；`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾 `bque` 层会自动补齐 `bque` 技能，避免半接入；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。
 
 `create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2024）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--sccache` 开启编译缓存（默认关）、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates.json`，`update` 同步时按各项目当年的选项重新渲染。
 
-`agent` 层的技能与规范选项（选 agent 层时生效）：`--skills commit,caveman,grill-me,write-docs,template-sync,subrepo-sync,branch-sync` 决定生成哪些技能（逗号分隔，默认全部；GUI 里用勾选框选择）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）、`--commit-and-push` 要求 Agent 阶段性完工与收尾时自动提交并推送到远端仓库（默认关）。`mcp-bootstrap` 是基线技能：只要有 agent 层就始终附带（显式传空技能列表除外），保证项目离开模板仓库后仍能自行安装与校验 MCP。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `commit`（约定式提交）、`template-sync`（模板同步/纳管）、`subrepo-sync`（子仓库同步与升级）、`branch-sync`（Worktree感知分支极速同步）、`caveman`（超压缩通信）、`grill-me`（设计质询）、`write-docs`（通用文档编写与更新，规则由项目自己决定）、`mcp-bootstrap`（项目内 MCP 安装与握手校验）等，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可；模板删掉某个技能后，存量项目 manifest 里遗留的技能名会在 `update` / `add-layer` 时自动清理（输出 `[清理]` 行），不会长期与磁盘实际技能不一致。三条语言选项互相独立：**中文编程**（代码标识符，`chinese_programming`）、**项目文案语言**（`skill_lang`，决定所有层的注释、报错、日志与技能文档）、**提交信息语言**（`commit_zh`，决定提交校验脚本选版与提交规范文档）；技能脚本恒为英文，无选项。全英文项目须同时传 `--skill-lang en --no-commit-zh`，生成后所有文本文件零汉字（有端到端单测保障）。
+`agent` 层的技能与规范选项（选 agent 层时生效）：`--skills git-workflow,caveman,grill-me,write-docs,template-sync,subrepo-sync,write-a-skill` 决定生成哪些技能（逗号分隔，默认全部）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）、`--commit-and-push` 要求 Agent 阶段性完工与收尾时自动提交并推送到远端仓库（默认关）。`mcp-bootstrap` 是基线技能：只要有 agent 层就始终附带（显式传空技能列表除外），保证项目离开模板仓库后仍能自行安装与校验 MCP。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `git-workflow`（约定式提交与分支同步）、`template-sync`（模板同步/纳管）、`subrepo-sync`（子仓库同步与升级）、`bque`（编译排队）、`caveman`（超压缩通信）、`grill-me`（设计质询）、`write-docs`（通用文档编写与更新，规则由项目自己决定）、`write-a-skill`（新增技能）、`mcp-bootstrap`（项目内 MCP 安装与握手校验）等，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可；模板删掉某个技能后，存量项目 manifest 里遗留的技能名会在 `update` / `add-layer` 时自动清理（输出 `[清理]` 行），不会长期与磁盘实际技能不一致。三条语言选项互相独立：**中文编程**（代码标识符，`chinese_programming`）、**项目文案语言**（`skill_lang`，决定所有层的注释、报错、日志与技能文档）、**提交信息语言**（`commit_zh`，决定门禁的提交主题语言规则与提交规范文档）；技能脚本恒为英文，无选项。全英文项目须同时传 `--skill-lang en --no-commit-zh`，生成后所有文本文件零汉字（有端到端单测保障）。
 
 **技能扩展**：每个技能 = 托管框架 + 项目专属区。`SKILL.md` 的 `PENGJ_TEMPLATE_START/END` 块内是模板框架（`update` 时原位替换），块外归项目所有、永不覆盖——提交前检查的定义、领域判定表、红线全部写在块外；可执行门禁用什么形式（任意语言脚本 / task runner / 纯清单）由项目自定并在块外声明，框架不预设实现。存量全自定义技能纳管时自动接管：模板整页（含 description）直接覆盖，原正文下移到「纳管过渡区」，双流程由用户合并去重。
 
@@ -88,16 +88,15 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
 
 ## CI / Release
 - **CI**（`.github/workflows/ci.yml`）：
-  - 按变更自动分流：改动 Rust/模板/构建配置 → 跑 `cargo fmt --check`、`clippy -D warnings`、build、test；改动前端（`crates/app/src` 等）→ 跑类型检查 + 前端构建（tsc + vite）。
+  - 改动 Rust/模板/构建配置 → 跑 `cargo fmt --check`、`clippy -D warnings`、build、`cargo test --workspace`；只改纯文档则整个 job 跳过。
   - **纯文档改动自动跳过**（根目录 `*.md`、`docs/**`、`.agents/**`），不占 CI 额度；同一分支/PR 连续推送会自动取消上一次未完成的运行。
-  - 缓存：Rust 编译缓存（rust-cache，含失败缓存）+ pnpm 依赖缓存。
+  - 缓存：Rust 编译缓存（rust-cache，含失败缓存）。
 - **自动版本号 + Release**（`.github/workflows/release.yml`）：
   - 纯文档改动（与 CI 相同的忽略列表）不触发本流程，只有改动代码/模板/配置时才跑。
-  - `release-please` 读 conventional commits 自动 bump semver，多人改版本号到 root `Cargo.toml`、`crates/app` Cargo/package.json、`tauri.conf.json`，并创建 release PR；合并后打 tag、建 GitHub Release。发布后由 `sync-lockfile` job 自动把新版本号写回 `Cargo.lock` 并提交，无需手动同步。
-  - 有 `release` 时自动构建发布。**产物命名统一带「系统-架构」**：`pengj-templates_<版本>_<os>-<arch>.<后缀>`。
+  - `release-please` 读 conventional commits 自动 bump semver，多人改版本号到 root `Cargo.toml`，并创建 release PR；合并后打 tag、建 GitHub Release。发布后由 `sync-lockfile` job 自动把新版本号写回 `Cargo.lock` 并提交，无需手动同步。
+  - 有 `release` 时自动构建发布 CLI。**产物命名统一带「系统-架构」**：`pengj-templates_<版本>_<os>-<arch>_portable.zip`。
     - 覆盖 Windows x64/arm64、Linux x86_64/arm64、macOS arm64/x86_64（arm 用 GitHub 原生 arm64 runner 构建）。
-    - 安装包：Windows `_windows-<arch>.msi` / `-setup.exe`、Linux `_linux-<arch>.deb` / `.AppImage`、macOS `_macos-<arch>.dmg`。
-    - 每组合一个**便携版 zip** `pengj-templates_<版本>_<os>-<arch>_portable.zip`，同时含 GUI + CLI（CLI 命名 `pengj-templates-cli`）。
+    - 每个组合一个便携版 zip，内含单个可执行文件 `pengj-templates-cli`。
   - **全自动发布**：`auto-merge` job 在 release-please 创建 Release PR 后用 PAT 自动合并（无需手动），合并即触发上文构建。
   - **beta/preview 分阶段**：release-please 原生支持用 commit footer 指定预发布号并自动递增：
     - 切到某预发布号：正常提交时在其描述加 `Release-As: 0.5.0-beta.1`、`0.5.0-rc.1`、`0.5.0-preview.1` 等；
@@ -107,34 +106,29 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
 
 `rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。
 
-`package.json` 走**结构化并集合并**：生成时各层并集（后层覆盖同名项）；更新/纳管时以用户现有文件为底——**依赖类字段（dependencies/devDependencies 等）的同名包版本一律以模板为准**（依赖集合由模板统一维护；模板用 `latest` 时实际解析版本由项目 lockfile 锁定，升级走 `pnpm update --latest`），`scripts` 与其余字段仍用户优先、模板只补缺失，键顺序保持原样不产生噪声 diff。`layer.toml` 里用 `update_ignore` 声明黑名单文件。
-
-`.cargo/config.toml` 走 **TOML 结构化受管合并**：受管块内的表与用户配置做表级并集、键级去重——用户已有的等价键自动去重（避免重复表定义炸掉 cargo），模板新增表进入受管块；同键不同值或需要往用户已有表里补新键时报冲突并跳过写盘，由用户手工对齐后重跑。文本类文件（AGENTS.md、技能 SKILL.md）走**受管块注入**：磁盘已有托管块则原位替换，无块的 legacy 文件则把托管块追加到末尾并计入 `needs_review` 提示人工复核。纳管/更新时若既有 `commitlint.config.js` 未继承 `commitlint.base.js`，会自动改写为继承形态（base 规则铺底、项目规则同名覆盖，计入 `needs_review`）；无法安全改写的形态（CJS 等）才在报告中给出手动接线指引。
+`.cargo/config.toml` 走 **TOML 结构化受管合并**：受管块内的表与用户配置做表级并集、键级去重——用户已有的等价键自动去重（避免重复表定义炸掉 cargo），模板新增表进入受管块；同键不同值或需要往用户已有表里补新键时报冲突并跳过写盘，由用户手工对齐后重跑。文本类文件（AGENTS.md、技能 SKILL.md）走**受管块注入**：磁盘已有托管块则原位替换，无块的 legacy 文件则把托管块追加到末尾并计入 `needs_review` 提示人工复核。`layer.toml` 里用 `update_ignore` 声明黑名单文件——`gate` 层的 `.gate.toml` 就在黑名单里：首次生成后归项目所有，模板更新时跳过，用户的 scope 白名单不会被覆盖。
 
 `.vscode/settings.json` 的模板配置在**项目根已有 `*.code-workspace` 文件时并入工作区文件的 `settings` 节点**（不新建独立 settings 文件）；没有工作区文件时才创建/维护 `.vscode/settings.json`。
 
-lefthook 层用法：commitlint CLI 走本地依赖（`pnpm exec commitlint`），`pnpm-lock.yaml` 由 git 托管以保持可复现；生成项目时先 `git init` 再 `pnpm install`，`prepare` 自动装 lefthook git 钩子；升级用 `pnpm update --latest`。
+gate 层用法：门禁是纯 Rust 二进制，没有任何 Node 依赖。生成项目后先 `git init`，再执行一次 `just gate-hooks`——它把 `core.hooksPath` 指向 `.githooks` 并把可执行位写进 git 索引（这一步必须做：`core.hooksPath` 存在 `.git/config` 里，不会随克隆传播）。
 
-lefthook 层同时生成代码语言守卫 `scripts/check-lang.mjs`，pre-commit 阶段扫描暂存的 `.rs`：按 manifest 的 `options.chinese_programming` 判定方向（英文编程拒绝非英文，中文编程拒绝非中文），并按文件计算占比——字符串违规不超过 `lang_ratio`（默认 1%）、标识符违规不超过 `lang_ident_ratio`（默认 0），额度向下取整。中文模式只判定面向人的文案：命令行参数、路径、协议字段名、内嵌源码/着色器代码等机器字面量不算违规（仍计入分母，避免额度被稀释）。真实例外在源码里认证：行尾 `lang-ok: 理由` 只免该行，文件头 `lang-allow: 理由` 免整个文件（i18n 词表、CJK 测试样本）。全量审计直接跑 `node scripts/check-lang.mjs`（从仓库根递归扫描 `.rs`，跳过 `target`、`node_modules`、`third-party`、`generated` 与 `submodules`，因此 `backend/`、`launcher/` 这类自定义布局也能覆盖），加 `--list` 列出全部违规、`--json` 输出机器可读报告；`--max-ratio` / `--max-ident-ratio` 可临时放宽阈值，`PENGJ_CODE_LANG=english|chinese` 可覆盖判定方向。`lefthook.yml` 在 `update_ignore` 里，存量项目升级模板后需手工补 `lang-guard` 命令，新项目开箱即用。
+钩子按以下顺序定位门禁二进制：`$PENGJ_GATE`（显式路径）→ PATH 上的 `gate` → PATH 上的 `pengj-templates-cli`（走 `gate` 子命令）→ 项目内 `crates/gate`（自带一份时）。
 
-### GUI
+`.gate.toml` 是门禁的唯一配置面，扁平 TOML 子集：`mode`（`english`/`chinese`，代码语言方向）、`commit.subject_lang`（`zh`/`en`，提交主题语言）、`commit.types`（类型白名单）、`commit.scopes`（scope 白名单，空列表接受任意）、`commit.subject_min_han`（中文主题的最少汉字数）、`commit.max_header`（标题行长度上限）、`lang.max_ratio` / `lang.max_ident_ratio`（代码语言守卫的字符串/标识符违规容忍比例）、`project.disabled`（项目自行关闭的检查）。
 
-```bash
-just frontend-install
-just dev
-```
+代码语言守卫在 pre-commit 阶段扫描暂存的 `.rs`：按 `mode` 判定方向（英文编程拒绝非英文，中文编程拒绝非中文），并按文件计算占比——字符串违规不超过 `lang.max_ratio`（默认 1%）、标识符违规不超过 `lang.max_ident_ratio`（默认 0），额度向下取整。中文模式只判定面向人的文案：命令行参数、路径、协议字段名、内嵌源码/着色器代码等机器字面量不算违规（仍计入分母，避免额度被稀释）。真实例外在源码里认证：行尾 `lang-ok: 理由` 只免该行，文件头 `lang-allow: 理由` 免整个文件（i18n 词表、CJK 测试样本）。全量审计跑 `just gate-check`（或 `gate check`），从仓库根递归扫描 `.rs`，跳过 `target`、`node_modules`、`third-party`、`generated` 与 `submodules`，因此 `backend/`、`launcher/` 这类自定义布局也能覆盖；加 `--list` 列出全部违规、`--json` 输出机器可读报告；`--max-ratio` / `--max-ident-ratio` 可临时放宽阈值，`PENGJ_CODE_LANG=english|chinese` 可覆盖判定方向。
 
-生成项目时写入 `.pengj-templates.json` manifest（记录层与模板托管文件哈希），`update` 依据它只更新模板托管文件：本地未改动的文件直接覆盖、被改过的报冲突跳过、含受管块的文件做块级合并（TOML 结构化合并 / 文本托管块注入）、模板新增的自动创建。报告中 `needs_review` 列出建议人工复核的合并结果，adopt 的 `manual_steps` 给出需要手动完成的接线步骤。
+生成项目时写入 `.pengj-templates.json` manifest（记录层与模板托管文件哈希），`update` 依据它只更新模板托管文件：本地未改动的文件直接覆盖、被改过的报冲突跳过、含受管块的文件做块级合并（TOML 结构化合并 / 文本托管块注入）、模板新增的自动创建。报告中 `needs_review` 列出建议人工复核的合并结果。
 
 ## 目录结构
 
 ```
 crates/
 ├── core/         # 引擎：层发现、依赖排序、合并渲染、生成/更新、manifest
-├── cli/          # CLI（pengj-templates-cli）
+├── cli/          # CLI（pengj-templates-cli，内置 gate 子命令）
 ├── mcp/          # MCP 安装与巡检：配方目录、客户端适配、握手校验
-└── app/          # Tauri GUI（src-tauri + React 前端）
-templates/        # 层模板（common/ rust/ frontend/ ...），编译期嵌入
+└── gate/         # 提交门禁（pengj-gate）：约定式提交校验、代码语言守卫、rustfmt
+templates/        # 层模板（common/ gate/ rust/ ...），运行时目录加载
 ```
 
 ## 开发
@@ -142,19 +136,19 @@ templates/        # 层模板（common/ rust/ frontend/ ...），编译期嵌入
 ```bash
 just setup            # 克隆后一键初始化：构建 gate、安装 git 钩子并验证编译
 just check            # Rust 全部编译检查
-just frontend-build   # 前端构建（自动先构建组件库 cha-set）
+just ci               # 格式化检查 + 编译 + clippy + 测试
 ```
 
 ### 本仓库的环境构成
 
-本仓库**没有 pnpm 工作区根**——`package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` 都不在仓库根目录，前端是 `crates/app` 下的独立包。
+本仓库是**纯 Rust 工作区**，没有任何 Node 生态依赖：没有 `package.json`、没有 `pnpm-lock.yaml`、没有前端构建链。
 
-| 目录 | 用途 | 依赖安装 |
-|---|---|---|
-| `crates/app` | Tauri GUI 的 React 前端 | `pnpm --dir crates/app install` |
-| `submodules/cha-set` | 组件库（git submodule，自带工作区） | `pnpm --dir submodules/cha-set install` |
-| `tools/gate` | 提交门禁（独立 Rust crate，不在 workspace 里） | 无（零第三方依赖） |
+| 目录 | 用途 |
+|---|---|
+| `crates/core` | 模板引擎：层发现、依赖排序、合并渲染、生成/更新、manifest |
+| `crates/cli` | 命令行入口 `pengj-templates-cli`（含 `gate` 子命令） |
+| `crates/mcp` | MCP 安装与巡检 |
+| `crates/gate` | 提交门禁 `pengj-gate`（零第三方依赖） |
+| `templates/` | 层模板目录，运行时加载 |
 
-组件库 `cha-set` 的 `dist` 是构建产物、不入版本库，所以编译前端前必须先构建它：`just cha-set-build`（`frontend-build` 会自动先跑）。`crates/app` 通过 `link:` 协议引用它，保持软链，因此组件库改动后无需重装依赖，只需重新构建。
-
-提交门禁由 `tools/gate` 承担（Rust 实现，无 node 依赖）：`just gate-hooks` 安装 git 钩子，规则见 `.gate.toml`。
+提交门禁由 `crates/gate` 承担（Rust 实现，无 Node 依赖）：`just gate-hooks` 安装 git 钩子，规则见 `.gate.toml`；`just gate` 透传任意门禁子命令（`check` / `commit-msg` / `fmt` / `hooks install` / `selftest`）。
