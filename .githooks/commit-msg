@@ -1,8 +1,9 @@
 #!/bin/sh
-# The commit-msg hook: validate the commit message against the conventional
-# commit rules configured in `.gate.toml`.
+# gate hook: the commit-msg stage.
 #
-# Git passes the path to the message file as the first argument.
+# Validate the commit message against the conventional commit rules
+# configured in `.gate.toml`. Git passes the path to the message file as the
+# first argument.
 
 set -e
 

@@ -1,8 +1,9 @@
 #!/bin/sh
-# The pre-commit hook: rustfmt the staged Rust files and guard the code
-# language. The gate is a standalone Rust package, so it is invoked through
-# `cargo run`; a prebuilt binary is used when one is present to keep the hook
-# fast.
+# gate hook: the pre-commit stage.
+#
+# rustfmt the staged Rust files and guard the code language. The gate is a
+# standalone Rust package, so it is invoked through `cargo run`; a prebuilt
+# binary is used when one is present to keep the hook fast.
 #
 # The gate lives in `tools/gate`, outside the project's workspace, because the
 # workspace manifest belongs to the project.

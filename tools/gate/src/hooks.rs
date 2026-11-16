@@ -28,6 +28,22 @@ fn make_executable(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// The marker every gate hook carries. A hook without it was written by
+/// another tool and must not be overwritten.
+const MARKER: &str = "gate hook";
+
+/// The tools that are known to fight over `core.hooksPath`.
+const RIVALS: [(&str, &str); 2] = [
+    (
+        "lefthook",
+        "lefthook writes its own hooks into core.hooksPath and will replace the gate hooks",
+    ),
+    (
+        "husky",
+        "husky writes its own hooks into core.hooksPath and will replace the gate hooks",
+    ),
+];
+
 pub fn install() -> Result<(), String> {
     if !crate::git::in_work_tree() {
         println!("[gate] not a git work tree, skipping hook installation");
@@ -41,6 +57,15 @@ pub fn install() -> Result<(), String> {
         if !path.is_file() {
             return Err(format!(
                 "{} is missing; the .githooks directory is incomplete",
+                path.display()
+            ));
+        }
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        if !text.contains(MARKER) {
+            return Err(format!(
+                "{} was not written by the gate.\n  \
+                 Another tool owns this directory; installing would replace its hooks.\n  \
+                 Remove the foreign hooks first, then run `just gate-hooks` again.",
                 path.display()
             ));
         }
@@ -79,5 +104,33 @@ pub fn install() -> Result<(), String> {
         "[gate] commit gate installed: core.hooksPath=.githooks ({})",
         HOOKS.join(", ")
     );
+    report_rivals(&root);
     Ok(())
+}
+
+/// Report the tools that would fight with the gate for `core.hooksPath`.
+///
+/// This is advisory: the gate does not need those tools to be absent, but
+/// running both means two sets of hooks in the same directory and only one
+/// of them wins.
+pub fn report_rivals(root: &std::path::Path) {
+    let hooks_dir = root.join(".githooks");
+    for (name, reason) in RIVALS {
+        let leftovers = ["commit-msg", "pre-commit"]
+            .iter()
+            .filter_map(|hook| {
+                hooks_dir
+                    .join(format!("{hook}.old"))
+                    .exists()
+                    .then_some(*hook)
+            })
+            .collect::<Vec<_>>();
+        if !leftovers.is_empty() {
+            println!(
+                "[gate] warning: {name} left hooks behind ({}); {reason}.\n  \
+                 remove the leftovers and re-run `just gate-hooks`",
+                leftovers.join(", ")
+            );
+        }
+    }
 }
