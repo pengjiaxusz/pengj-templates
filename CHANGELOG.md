@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.61.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.60.0-beta.1...v0.61.0-beta.1) (2026-11-16)
+
+
+### Features
+
+* **core:** 安装钩子时自动记录可执行位 ([6ea0538](https://github.com/pengjiaxusz/pengj-templates/commit/6ea053856080a320e038a6dce516ea9a551d71c0))
+* **core:** 新增 Rust 提交门禁工具 ([d0a709c](https://github.com/pengjiaxusz/pengj-templates/commit/d0a709c234be1edd425d79530fa0a27bf19a5529))
+* **core:** 钩子安装增加防覆盖检查 ([8e51985](https://github.com/pengjiaxusz/pengj-templates/commit/8e519859722c8071d81f0a0c8ce8f8abae45b566))
+* **core:** 验证门禁仍然生效 ([808b9bd](https://github.com/pengjiaxusz/pengj-templates/commit/808b9bdbae749740410b04da09476459a381d75a))
+* **templates:** lefthook 层迁移为 gate 提交门禁 ([405a9df](https://github.com/pengjiaxusz/pengj-templates/commit/405a9df7ede209cc8f8fddaf95fe96d26370cfd0))
+
+
+### Bug Fixes
+
+* **core:** 记录钩子脚本的可执行位 ([ff6c1e7](https://github.com/pengjiaxusz/pengj-templates/commit/ff6c1e73e10104b41298d88b76571ec8c221a660))
+
 ## [0.60.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.59.0-beta.1...v0.60.0-beta.1) (2026-11-15)
 
 
