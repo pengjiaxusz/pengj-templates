@@ -1,0 +1,53 @@
+{"name":"zh-basic","accept":true,"msg":"feat(cli): 新增参数解析支持"}
+{"name":"zh-no-space","accept":false,"msg":"feat(cli):no space here"}
+{"name":"zh-dash-type","accept":false,"msg":"feat-x(cli): 新增参数解析支持"}
+{"name":"zh-upper-type","accept":false,"msg":"Feat(cli): 新增参数解析支持"}
+{"name":"zh-empty-scope","accept":true,"msg":"feat(): 新增参数解析支持"}
+{"name":"zh-no-scope","accept":true,"msg":"feat: 新增参数解析支持"}
+{"name":"zh-multi-scope","accept":true,"msg":"feat(core/cli): 新增参数解析支持"}
+{"name":"zh-full-stop","accept":false,"msg":"docs: 补充文档说明."}
+{"name":"zh-english-subject","accept":false,"msg":"feat(cli): add new flags"}
+{"name":"zh-empty-subject","accept":false,"msg":"feat(cli):"}
+{"name":"zh-only-colon-space","accept":false,"msg":"feat: "}
+{"name":"semver-bump","accept":true,"msg":"chore: 1.2.3"}
+{"name":"semver-scoped","accept":true,"msg":"chore(main): release v1.2.3"}
+{"name":"revert-prefix","accept":true,"msg":"revert: 撤销上一次改动"}
+{"name":"revert-quoted","accept":true,"msg":"Revert \"feat: xxx\""}
+{"name":"fixup","accept":true,"msg":"fixup! feat(cli): 新增参数解析支持"}
+{"name":"merge-branch","accept":true,"msg":"Merge branch 'main' into feat"}
+{"name":"merge-pr","accept":true,"msg":"Merge pull request #12 from foo/bar"}
+{"name":"breaking-long-footer","accept":false,"msg":"feat(cli): 新增参数解析支持\n\nBREAKING CHANGE: this is a very long footer line that definitely exceeds one hundred characters in total length for sure"}
+{"name":"breaking-short-footer","accept":true,"msg":"feat(cli): 新增参数解析支持\n\nBREAKING CHANGE: 短说明"}
+{"name":"body-with-comments","accept":true,"msg":"feat(cli): 新增参数解析支持\n\n# Please enter the commit message for your changes.\n# On branch main\n"}
+{"name":"long-header","accept":false,"msg":"feat(cli): 长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长"}
+{"name":"scope-unknown","accept":false,"msg":"feat(nope): 新增参数解析支持"}
+{"name":"scope-main","accept":true,"msg":"chore(main): 同步分层模板更新"}
+{"name":"type-unknown","accept":false,"msg":"feature(cli): 新增参数解析支持"}
+{"name":"breaking-marker","accept":true,"msg":"feat(cli)!: 新增参数解析支持"}
+{"name":"whitespace-header","accept":true,"msg":"feat(cli):  新增参数解析支持"}
+{"name":"trailing-space","accept":false,"msg":"feat(cli): 新增参数解析支持 "}
+{"name":"chinese-one-han","accept":false,"msg":"feat(cli): 新"}
+{"name":"quoted-literal","accept":true,"msg":"feat(cli): 新增 \"参数\" 解析支持"}
+{"name":"english-mode-would-fail","accept":false,"msg":"feat(cli): add new flags"}
+{"name":"footer-token","accept":true,"msg":"feat(cli): 新增参数解析支持\n\nCloses: #12"}
+{"name":"footer-long-token","accept":false,"msg":"feat(cli): 新增参数解析支持\n\nCloses: this is a very long footer line that definitely exceeds one hundred characters in total length for sure"}
+{"name":"footer-with-url","accept":true,"msg":"feat(cli): 新增参数解析支持\n\nCloses: https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+{"name":"body-only","accept":true,"msg":"feat(cli): 新增参数解析支持\n\n这是一段正文说明用来测试正文不会被错误地当成页脚的一部分因此不会触发长度限制规则"}
+{"name":"scope-with-comma","accept":true,"msg":"feat(core,cli): 新增参数解析支持"}
+{"name":"scope-with-slash-bad","accept":false,"msg":"feat(core/nope): 新增参数解析支持"}
+{"name":"double-colon","accept":true,"msg":"feat(cli): 新增: 参数解析支持"}
+{"name":"colon-no-space","accept":false,"msg":"feat(cli):新增参数解析支持"}
+{"name":"type-digit","accept":false,"msg":"123(cli): 新增参数解析支持"}
+{"name":"unicode-type","accept":false,"msg":"修复(cli): 新增参数解析支持"}
+{"name":"semver-with-prerelease","accept":true,"msg":"chore: 1.2.3-beta.1"}
+{"name":"semver-invalid","accept":false,"msg":"chore: 1.2"}
+{"name":"skip-ci","accept":true,"msg":"chore: 1.2.3 [skip ci]"}
+{"name":"reapply","accept":true,"msg":"Reapply \"feat: xxx\""}
+{"name":"amend","accept":true,"msg":"amend! feat(cli): 新增参数解析支持"}
+{"name":"squash","accept":true,"msg":"squash! feat(cli): 新增参数解析支持"}
+{"name":"merged-pr","accept":true,"msg":"Merged PR #12: 新增参数解析支持"}
+{"name":"gpg-line","accept":true,"msg":"feat(cli): 新增参数解析支持\n\ngpg: Signature made"}
+{"name":"trailing-blank-lines","accept":true,"msg":"feat(cli): 新增参数解析支持\n\n\n"}
+{"name":"leading-blank-line","accept":true,"msg":"\nfeat(cli): 新增参数解析支持"}
+{"name":"only-header-and-body","accept":true,"msg":"feat(cli): 新增参数解析支持\n\n正文第一行\n正文第二行"}
+{"name":"indented-footer","accept":true,"msg":"feat(cli): 新增参数解析支持\n\n  Closes: #12"}

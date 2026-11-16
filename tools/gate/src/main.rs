@@ -1,0 +1,282 @@
+//! The `gate` command-line entry point.
+//!
+//! The checks themselves live in the library so the integration tests can
+//! call them directly.
+
+use gate::config::Mode;
+use gate::{commit, config, fmt, git, hooks, lang_guard};
+use std::process::ExitCode;
+
+const HELP: &str = "\
+gate - commit gate for Rust repositories
+
+USAGE
+  gate [audit] [FLAGS] [FILES...]   code-language guard (default: whole repository)
+  gate fmt [FILES...]               rustfmt the given files and re-stage them
+  gate commit-msg FILE              validate a commit message
+  gate hook pre-commit              staged rustfmt + language guard
+  gate hook commit-msg FILE         commit message validation
+  gate hooks install                point core.hooksPath at .githooks
+  gate selftest                     run the built-in rule self-test
+
+FLAGS
+  --mode=english|chinese   override `.gate.toml` (env: PENGJ_CODE_LANG)
+  --max-ratio=N            string violation tolerance per file (default 0.01)
+  --max-ident-ratio=N      identifier violation tolerance per file (default 0)
+  --json                   machine-readable report
+  --list                   print every violation, not just the first few
+";
+
+struct Settings {
+    mode: Mode,
+    mode_source: String,
+    max_ratio: f64,
+    max_ident_ratio: f64,
+}
+
+fn env_value(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|value| !value.is_empty())
+}
+
+fn first_number(config: &config::Config, keys: &[&str]) -> Option<f64> {
+    keys.iter().find_map(|key| config.number(key))
+}
+
+fn checked_ratio(name: &str, value: f64) -> Result<f64, String> {
+    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        return Err(format!(
+            "invalid {name}={value} (expected a number in [0, 1])"
+        ));
+    }
+    Ok(value)
+}
+
+fn resolve(
+    mode_flag: Option<&str>,
+    ratio_flag: Option<f64>,
+    ident_flag: Option<f64>,
+) -> Result<Settings, String> {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let (config, path) = config::load(&cwd)?;
+
+    let (mode, mode_source) = if let Some(flag) = mode_flag {
+        let mode = Mode::parse(flag)
+            .ok_or_else(|| format!("invalid --mode={flag} (expected english|chinese)"))?;
+        (mode, "--mode".to_string())
+    } else if let Some(raw) = env_value("PENGJ_CODE_LANG") {
+        let mode = Mode::parse(&raw)
+            .ok_or_else(|| format!("invalid PENGJ_CODE_LANG={raw} (expected english|chinese)"))?;
+        (mode, "PENGJ_CODE_LANG".to_string())
+    } else if let Some(mode) = config.mode() {
+        let source = path
+            .as_ref()
+            .map(|path| format!("{} mode", path.display()))
+            .unwrap_or_else(|| "mode".to_string());
+        (mode, source)
+    } else {
+        return Err(format!(
+            "cannot determine the code language: pass --mode=english|chinese, set PENGJ_CODE_LANG, or add `mode = \"english\"` to {}",
+            config::CONFIG_FILE
+        ));
+    };
+
+    let max_ratio = match ratio_flag {
+        Some(value) => value,
+        None => match env_value("PENGJ_LANG_MAX_RATIO") {
+            Some(raw) => raw.parse().map_err(|_| {
+                format!("invalid PENGJ_LANG_MAX_RATIO={raw} (expected a number in [0, 1])")
+            })?,
+            None => first_number(&config, &["lang.max_ratio", "max_ratio"]).unwrap_or(0.01),
+        },
+    };
+    let max_ident_ratio = match ident_flag {
+        Some(value) => value,
+        None => match env_value("PENGJ_LANG_MAX_IDENT_RATIO") {
+            Some(raw) => raw.parse().map_err(|_| {
+                format!("invalid PENGJ_LANG_MAX_IDENT_RATIO={raw} (expected a number in [0, 1])")
+            })?,
+            None => {
+                first_number(&config, &["lang.max_ident_ratio", "max_ident_ratio"]).unwrap_or(0.0)
+            }
+        },
+    };
+
+    Ok(Settings {
+        mode,
+        mode_source,
+        max_ratio: checked_ratio("--max-ratio", max_ratio)?,
+        max_ident_ratio: checked_ratio("--max-ident-ratio", max_ident_ratio)?,
+    })
+}
+
+struct AuditArgs {
+    files: Vec<String>,
+    mode: Option<String>,
+    max_ratio: Option<f64>,
+    max_ident_ratio: Option<f64>,
+    json: bool,
+    list: bool,
+}
+
+fn parse_audit_args(args: &[String]) -> Result<AuditArgs, String> {
+    let mut parsed = AuditArgs {
+        files: Vec::new(),
+        mode: None,
+        max_ratio: None,
+        max_ident_ratio: None,
+        json: false,
+        list: false,
+    };
+    for arg in args {
+        if let Some(value) = arg.strip_prefix("--mode=") {
+            parsed.mode = Some(value.to_string());
+        } else if let Some(value) = arg.strip_prefix("--max-ratio=") {
+            parsed.max_ratio = Some(value.parse().map_err(|_| {
+                format!("invalid --max-ratio={value} (expected a number in [0, 1])")
+            })?);
+        } else if let Some(value) = arg.strip_prefix("--max-ident-ratio=") {
+            parsed.max_ident_ratio = Some(value.parse().map_err(|_| {
+                format!("invalid --max-ident-ratio={value} (expected a number in [0, 1])")
+            })?);
+        } else if arg == "--json" {
+            parsed.json = true;
+        } else if arg == "--list" {
+            parsed.list = true;
+        } else if arg.starts_with("--") {
+            return Err(format!("unknown flag: {arg}"));
+        } else {
+            parsed.files.push(arg.clone());
+        }
+    }
+    Ok(parsed)
+}
+
+fn options_for(
+    files: Vec<String>,
+    settings: &Settings,
+    json: bool,
+    list: bool,
+) -> lang_guard::AuditOptions {
+    lang_guard::AuditOptions {
+        files,
+        mode: settings.mode,
+        mode_source: settings.mode_source.clone(),
+        max_ratio: settings.max_ratio,
+        max_ident_ratio: settings.max_ident_ratio,
+        json,
+        list,
+    }
+}
+
+fn audit_command(args: &[String]) -> Result<u8, String> {
+    let parsed = parse_audit_args(args)?;
+    let settings = resolve(
+        parsed.mode.as_deref(),
+        parsed.max_ratio,
+        parsed.max_ident_ratio,
+    )?;
+    let options = options_for(parsed.files, &settings, parsed.json, parsed.list);
+    Ok(lang_guard::audit(&options) as u8)
+}
+
+fn hook_pre_commit() -> Result<u8, String> {
+    let files = git::staged_rust_files()?;
+    if files.is_empty() {
+        return Ok(0);
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let (config, _) = config::load(&cwd)?;
+
+    if !config.is_disabled("fmt") {
+        fmt::run(&files)?;
+    }
+    if config.is_disabled("lang-guard") {
+        return Ok(0);
+    }
+
+    let settings = resolve(None, None, None)?;
+    let options = options_for(files, &settings, false, false);
+    Ok(lang_guard::audit(&options) as u8)
+}
+
+fn self_test() -> u8 {
+    let cases = lang_guard::self_test_cases();
+    let mut failed = 0;
+    for (name, ok) in &cases {
+        println!("{} {name}", if *ok { "ok  " } else { "FAIL" });
+        if !ok {
+            failed += 1;
+        }
+    }
+    if failed > 0 {
+        eprintln!("[gate] self-test failed: {failed}/{}", cases.len());
+        1
+    } else {
+        println!("[gate] self-test passed: {} cases", cases.len());
+        0
+    }
+}
+
+fn run(args: &[String]) -> Result<u8, String> {
+    let Some(first) = args.first() else {
+        return audit_command(&[]);
+    };
+    let rest = &args[1..];
+
+    match first.as_str() {
+        "-h" | "--help" | "help" => {
+            println!("{HELP}");
+            Ok(0)
+        }
+        "audit" | "check" => audit_command(rest),
+        "selftest" | "--self-test" => Ok(self_test()),
+        "fmt" => {
+            let files = if rest.is_empty() {
+                git::staged_rust_files()?
+            } else {
+                rest.to_vec()
+            };
+            fmt::run(&files)?;
+            Ok(0)
+        }
+        "commit-msg" => {
+            let path = rest
+                .first()
+                .ok_or_else(|| "commit-msg needs a message file".to_string())?;
+            commit::validate_file(path)
+        }
+        "hook" => match rest.first().map(String::as_str) {
+            Some("pre-commit") => hook_pre_commit(),
+            Some("commit-msg") => {
+                let path = rest
+                    .get(1)
+                    .ok_or_else(|| "hook commit-msg needs a message file".to_string())?;
+                commit::validate_file(path)
+            }
+            _ => Err("unknown hook; expected pre-commit or commit-msg".to_string()),
+        },
+        "hooks" => match rest.first().map(String::as_str) {
+            Some("install") => {
+                hooks::install()?;
+                Ok(0)
+            }
+            _ => Err("unknown hooks command; expected `hooks install`".to_string()),
+        },
+        other if other.starts_with('-') => audit_command(args),
+        // Bare arguments keep working as file paths, the way the old
+        // `check-lang.mjs <files...>` invocation did.
+        _ => audit_command(args),
+    }
+}
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match run(&args) {
+        Ok(code) => ExitCode::from(code),
+        Err(message) => {
+            eprintln!("[gate] {message}");
+            ExitCode::from(2)
+        }
+    }
+}

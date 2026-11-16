@@ -26,10 +26,22 @@ default:
 # justfile for pengj-templates
 # 设置默认 shell 为 pwsh 7（本机默认）
 
-# 克隆后一键初始化：安装 pnpm 依赖（自动装 lefthook git 钩子）并验证编译
+# 克隆后一键初始化：构建 gate、安装 git 钩子并验证编译
 setup:
-    pnpm install
+    cargo build --manifest-path tools/gate/Cargo.toml
+    cargo run -q --manifest-path tools/gate/Cargo.toml -- hooks install
     cargo check --workspace
+
+# ---------- 提交门禁（tools/gate） ----------
+
+# 运行提交门禁：gate <子命令>
+# 子命令：audit（代码语言守卫）/ commit-msg <文件> / fmt / hooks install / selftest
+gate *ARGS:
+    cargo run -q --manifest-path tools/gate/Cargo.toml -- {{ARGS}}
+
+# 安装 git 钩子（core.hooksPath=.githooks）
+gate-hooks:
+    cargo run -q --manifest-path tools/gate/Cargo.toml -- hooks install
 
 # ---------- Rust 构建与检查 ----------
 

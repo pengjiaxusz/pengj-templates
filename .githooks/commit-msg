@@ -1,0 +1,19 @@
+#!/bin/sh
+# The commit-msg hook: validate the commit message against the conventional
+# commit rules configured in `.gate.toml`.
+#
+# Git passes the path to the message file as the first argument.
+
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+manifest="tools/gate/Cargo.toml"
+binary="tools/gate/target/debug/gate"
+
+if [ -x "$binary" ] && [ "$binary" -nt "$manifest" ]; then
+    exec "$binary" hook commit-msg "$1"
+fi
+
+exec cargo run --quiet --manifest-path "$manifest" -- hook commit-msg "$1"

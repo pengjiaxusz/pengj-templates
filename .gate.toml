@@ -1,0 +1,34 @@
+# .gate.toml — the commit gate's configuration.
+#
+# The gate is a Rust binary with no third-party dependencies, so every switch
+# it understands lives here instead of in the project manifest. The template
+# renders this file for each generated project; a project may edit the
+# `[project]` section to opt out of a check without the template having to
+# touch the project's own files.
+
+# The code language of the target project: `english` or `chinese`.
+# This repository writes its own CLI copy in Chinese on purpose (that copy
+# belongs to the `skill_lang=zh` axis, not to English-programming code), so
+# the code-language guard stays off here.
+mode = "chinese"
+
+[lang]
+# Per-file tolerance for string violations and identifier violations.
+max_ratio = 0.01
+max_ident_ratio = 0.0
+
+[commit]
+# The subject language: `zh` or `en`.
+subject_lang = "zh"
+# A Chinese subject must carry at least this many Han characters.
+subject_min_han = 2
+# The header may not exceed this many characters.
+max_header = 100
+# The allowed conventional-commit types.
+types = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"]
+# The allowed scopes. An empty list accepts any scope.
+scopes = ["agent", "app", "cli", "core", "mcp", "ci", "templates", "main"]
+
+[project]
+# Checks this project has opted out of. The template never edits this list.
+disabled = ["lang-guard"]
