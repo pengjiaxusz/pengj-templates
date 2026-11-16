@@ -1,0 +1,15 @@
+[package]
+name = "pengj-gate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "提交门禁：git hooks、约定式提交校验与代码语言守卫（无第三方依赖）"
+
+[lib]
+name = "pengj_gate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gate"
+path = "src/main.rs"

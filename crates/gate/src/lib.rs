@@ -7,7 +7,12 @@
 //!
 //! Switches live in `.gate.toml`, never in the manifest: the template renders
 //! that file for each project and the manifest stays free to change shape.
+//!
+//! The crate is both a library and a binary. The library lets the template
+//! CLI expose the same checks under `pengj-templates-cli gate ...`, so the
+//! gate travels with the tool a project already installs.
 
+pub mod cli;
 pub mod commit;
 pub mod config;
 pub mod fmt;

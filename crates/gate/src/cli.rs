@@ -1,13 +1,15 @@
-//! The `gate` command-line entry point.
+//! The `gate` command-line front end.
 //!
 //! The checks themselves live in the library so the integration tests can
-//! call them directly.
+//! call them directly. This module holds only the argument handling, which is
+//! shared by the standalone `gate` binary and by the `gate` subcommand of the
+//! template CLI — both must behave identically, so they share one parser.
 
-use gate::config::Mode;
-use gate::{commit, config, fmt, git, hooks, lang_guard};
-use std::process::ExitCode;
+use crate::config::Mode;
+use crate::{commit, config, fmt, git, hooks, lang_guard};
 
-const HELP: &str = "\
+/// The help text, shared by the binary and the CLI subcommand.
+pub const HELP: &str = "\
 gate - commit gate for Rust repositories
 
 USAGE
@@ -218,7 +220,11 @@ fn self_test() -> u8 {
     }
 }
 
-fn run(args: &[String]) -> Result<u8, String> {
+/// Run the gate with the given arguments and return the process exit code.
+///
+/// The standalone `gate` binary and the `gate` subcommand of the template CLI
+/// both call this, so the two entry points can never drift apart.
+pub fn run(args: &[String]) -> Result<u8, String> {
     let Some(first) = args.first() else {
         return audit_command(&[]);
     };
@@ -267,16 +273,5 @@ fn run(args: &[String]) -> Result<u8, String> {
         // Bare arguments keep working as file paths, the way the old
         // `check-lang.mjs <files...>` invocation did.
         _ => audit_command(args),
-    }
-}
-
-fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    match run(&args) {
-        Ok(code) => ExitCode::from(code),
-        Err(message) => {
-            eprintln!("[gate] {message}");
-            ExitCode::from(2)
-        }
     }
 }

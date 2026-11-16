@@ -6,7 +6,7 @@
 //! replaces. Keeping the corpus here means the behaviour stays locked even
 //! after the node toolchain is gone.
 
-use gate::{commit, config};
+use pengj_gate::{commit, config};
 use std::path::Path;
 
 const CORPUS: &str = include_str!("commit_corpus.jsonl");

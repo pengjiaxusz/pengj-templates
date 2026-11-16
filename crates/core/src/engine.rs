@@ -139,7 +139,10 @@ impl Templates {
     pub fn resolve_layers(&self, selected: &[String]) -> Result<Vec<String>> {
         let metas = self.layer_metas()?;
 
-        for id in selected {
+        // 历史层名先映射到现名（lefthook -> gate），再校验存在性
+        let selected: Vec<String> = selected.iter().map(|id| canonical_layer_id(id)).collect();
+
+        for id in &selected {
             if !metas.contains_key(id) {
                 return Err(CoreError::UnknownLayer(id.clone()));
             }
@@ -177,11 +180,28 @@ impl Templates {
         let mut order = Vec::new();
         let mut visiting = Vec::new();
         let mut visited = Vec::new();
-        for id in selected {
+        for id in &selected {
             visit(id, &metas, &mut order, &mut visiting, &mut visited)?;
         }
         Ok(order)
     }
+}
+
+/// 历史层名 -> 当前层名的别名表。
+///
+/// `lefthook` 层（Node 生态的 commitlint + lefthook + pnpm 钩子）已被
+/// `gate` 层取代——纯 Rust 实现、零第三方依赖。老项目的 manifest 里仍写着
+/// `lefthook`，更新时必须映射过来，否则层会被当成「已从模板中移除」而静默丢弃，
+/// 老项目的提交门禁就此消失。
+const LEGACY_LAYER_ALIASES: &[(&str, &str)] = &[("lefthook", "gate")];
+
+/// 把层名映射到当前模板里的层名（历史别名 -> 现名）。
+fn canonical_layer_id(id: &str) -> String {
+    LEGACY_LAYER_ALIASES
+        .iter()
+        .find(|(old, _)| *old == id)
+        .map(|(_, new)| (*new).to_string())
+        .unwrap_or_else(|| id.to_string())
 }
 
 /// 解析 layer.toml（字节 -> 结构体）
@@ -482,39 +502,6 @@ fn dummy_skill_ctx() -> RenderContext {
     RenderContext::new("project", vec!["agent".to_string()], options)
 }
 
-/// 需要做结构化 JSON 并集合并的文件。
-/// 典型用途如 `package.json`：
-/// - 生成时：各层按依赖顺序并集合并（后层覆盖同名依赖，用户自加项不冲突）
-/// - 更新/纳管时：依赖类字段的同名包**版本以模板为准**（含模板未定版的 `latest`；
-///   实际解析版本由项目 lockfile 锁定，升级走 `pnpm update --latest`）；
-///   模板拥有的钩子生命周期脚本（见 [`MERGE_JSON_TEMPLATE_OWNED_SCRIPTS`]）同样以模板为准，
-///   其余脚本与字段仍以用户为底、模板只补缺失，
-///   用户自己加的库与其余标量（name/version 等）同样原样保留
-const MERGE_JSON_FILES: &[&str] = &["package.json"];
-
-/// package.json 里「并集合并」的字段（依赖与脚本）
-const MERGE_JSON_UNION_KEYS: &[&str] = &[
-    "dependencies",
-    "devDependencies",
-    "peerDependencies",
-    "optionalDependencies",
-    "scripts",
-];
-
-/// 并集字段中的「依赖类」字段：更新/纳管时同名包版本以模板为准（脚本除外）。
-/// 用户显式钉住旧版本的需求让位于「依赖集合由模板统一维护」。
-const MERGE_JSON_DEP_KEYS: &[&str] = &[
-    "dependencies",
-    "devDependencies",
-    "peerDependencies",
-    "optionalDependencies",
-];
-
-/// 由模板拥有的生命周期脚本：更新/纳管时同名键必须跟随模板，而非保留用户旧值。
-/// 旧版 `prepare` 会吞掉 `lefthook install` 的失败，使 commit-msg 钩子缺失、
-/// 提交门禁静默失效；这类脚本属于模板基础设施，不是用户定制面。
-const MERGE_JSON_TEMPLATE_OWNED_SCRIPTS: &[&str] = &["prepare", "lefthook:install", "commitlint"];
-
 /// 模板渲染出的 VS Code 配置文件在项目内的相对路径。
 ///
 /// `update_project` 在同步普通文件之外，还会把其中的 fileNesting 等配置合并写入
@@ -522,17 +509,20 @@ const MERGE_JSON_TEMPLATE_OWNED_SCRIPTS: &[&str] = &["prepare", "lefthook:instal
 /// 的资源管理器嵌套显示。
 const VSCODE_SETTINGS_REL: &str = ".vscode/settings.json";
 
-/// 模板文件分三类收集：普通（后层覆盖）、拼接（.gitignore）、JSON 并集（package.json）
+/// 模板文件分两类收集：普通（后层覆盖）、拼接（.gitignore/.gitattributes）
 ///
 /// 字段保持私有（模块内读取）；结构体本身 `pub` 是因为 `sync_workspace_file` 的公开
-/// 签名需要引用它（供 CLI / Tauri 调用）。
+/// 签名需要引用它（供 CLI 调用）。
 pub struct FileMap {
     /// 普通文件：路径 -> 最终原始字节（未渲染，后层覆盖前层）
     normal: BTreeMap<PathBuf, Vec<u8>>,
     /// 拼接累加文件：路径 -> [(层名, 该层原始字节)]，保持依赖顺序
     concat: BTreeMap<PathBuf, Vec<(String, Vec<u8>)>>,
-    /// JSON 并集文件：路径 -> [(层名, 该层原始字节)]，保持依赖顺序
-    json: BTreeMap<PathBuf, Vec<(String, Vec<u8>)>>,
+    /// 需要保留可执行位的文件（钩子脚本）：路径集合
+    ///
+    /// 模板源文件在 git 里记录了可执行位，但 `std::fs::write` 不复制权限位，
+    /// 新生成的项目里钩子会是 0644——git 在 Unix 上会静默跳过它，门禁等于没装。
+    executable: BTreeSet<PathBuf>,
 }
 
 /// 按合并顺序收集模板文件，按类型分发到对应桶
@@ -545,7 +535,7 @@ impl Templates {
         let mut fm = FileMap {
             normal: BTreeMap::new(),
             concat: BTreeMap::new(),
-            json: BTreeMap::new(),
+            executable: BTreeSet::new(),
         };
         // 技能过滤：未选中的技能整目录跳过（选项缺失时包含全部）
         let skills = selected_skills(options);
@@ -573,6 +563,7 @@ impl Templates {
                     continue;
                 }
                 // 语言变体：与当前语言轴不符的整份跳过，命中则改回无标记路径
+                let source_rel = rel.clone();
                 let Some(rel) = resolve_language_variant(&rel, &doc_lang, &commit_lang) else {
                     continue;
                 };
@@ -589,12 +580,11 @@ impl Templates {
                         .entry(rel)
                         .or_default()
                         .push((layer_id.clone(), bytes));
-                } else if MERGE_JSON_FILES.contains(&rel_str) {
-                    fm.json
-                        .entry(rel)
-                        .or_default()
-                        .push((layer_id.clone(), bytes));
                 } else {
+                    // 源文件带可执行位（钩子脚本），写盘时要一并保留
+                    if is_executable(&base.join(&source_rel)) {
+                        fm.executable.insert(rel.clone());
+                    }
                     fm.normal.insert(rel, bytes);
                 }
             }
@@ -619,60 +609,13 @@ impl Templates {
     }
 }
 
-/// 把 `incoming` 并按规则并入 `base`（JSON 并集合并）。
-/// - 依赖类字段：生成与更新/纳管时同名包版本**一律以模板为准**
-/// - 脚本字段：更新/纳管时同名键保留用户的（脚本内容是用户定制面），缺失才补
-/// - 其余字段：仅当 `overwrite_other` 为真（生成时）或 base 缺该项时写入
-fn merge_json(base: &mut serde_json::Value, incoming: &serde_json::Value, overwrite_other: bool) {
-    let Some(obj) = incoming.as_object() else {
-        if overwrite_other {
-            *base = incoming.clone();
-        }
-        return;
-    };
-    for (k, v) in obj {
-        if MERGE_JSON_UNION_KEYS.contains(&k.as_str()) {
-            let base_map = base.get_mut(k).and_then(|x| x.as_object_mut());
-            match base_map {
-                Some(bm) => {
-                    if let Some(iv) = v.as_object() {
-                        let is_dep = MERGE_JSON_DEP_KEYS.contains(&k.as_str());
-                        for (ik, ivv) in iv {
-                            // 钩子安装脚本由模板拥有：即便用户已有旧值也必须换成模板版本，
-                            // 否则吞异常的旧 prepare 会一直留在下游项目里
-                            let template_owned = k == "scripts"
-                                && MERGE_JSON_TEMPLATE_OWNED_SCRIPTS.contains(&ik.as_str());
-                            if overwrite_other || is_dep || template_owned {
-                                // 生成：层间覆盖；更新/纳管：依赖版本与模板拥有的脚本跟随模板
-                                bm.insert(ik.clone(), ivv.clone());
-                            } else {
-                                // 更新语义：用户已有该键 → 保留用户值
-                                bm.entry(ik.clone()).or_insert(ivv.clone());
-                            }
-                        }
-                    }
-                }
-                None => {
-                    base[k] = v.clone();
-                }
-            }
-        } else if overwrite_other || base.get(k).is_none() {
-            base[k] = v.clone();
-        }
-    }
-}
-
-/// 渲染整个文件映射：普通文件直接渲染；`.gitignore` 拼接各层；`package.json` 做 JSON 并集合并
+/// 渲染整个文件映射：普通文件直接渲染；`.gitignore` / `.gitattributes` 按层拼接
 ///
 /// 注意：普通文件的受管块合并不在这里做——adopt/update 需要结合磁盘状态区分
 /// 「替换既有块」「追加进 legacy 文件」「TOML 结构化合并」并上报 needs_review，
 /// 由两个入口各自调用 [`merge_managed_block`] / TOML 合并完成；generate 面向空目录，
 /// 直接写渲染结果即可。
-fn render_file_map(
-    fm: &FileMap,
-    ctx: &RenderContext,
-    project_dir: &Path,
-) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
+fn render_file_map(fm: &FileMap, ctx: &RenderContext) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
     let mut out: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
 
     for (rel, bytes) in &fm.normal {
@@ -694,45 +637,43 @@ fn render_file_map(
                 continue;
             }
             if !inner.is_empty() {
-                inner.push_str("\n\n");
+                inner.push_str(
+                    "
+
+",
+                );
             }
             if is_en {
-                inner.push_str(&format!("# --- {} layer ---\n\n{}", layer_id, body));
+                inner.push_str(&format!(
+                    "# --- {} layer ---
+
+{}",
+                    layer_id, body
+                ));
             } else {
-                inner.push_str(&format!("# --- {} 层 ---\n\n{}", layer_id, body));
+                inner.push_str(&format!(
+                    "# --- {} 层 ---
+
+{}",
+                    layer_id, body
+                ));
             }
         }
         let wrapped = if inner.is_empty() {
-            "# PENGJ_TEMPLATE_START\n# PENGJ_TEMPLATE_END\n".to_string()
+            "# PENGJ_TEMPLATE_START
+# PENGJ_TEMPLATE_END
+"
+            .to_string()
         } else {
             format!(
-                "# PENGJ_TEMPLATE_START\n{}\n# PENGJ_TEMPLATE_END\n",
+                "# PENGJ_TEMPLATE_START
+{}
+# PENGJ_TEMPLATE_END
+",
                 inner.trim()
             )
         };
         out.insert(rel.clone(), wrapped.into_bytes());
-    }
-
-    for (rel, parts) in &fm.json {
-        let path = project_dir.join(rel);
-        // 文件已存在（更新）则以其为底，保留用户字段；否则（生成）以空为底、模板全量写出
-        let overwrite_other = !path.exists();
-        let mut base = if path.exists() {
-            std::fs::read_to_string(&path)
-                .ok()
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or_else(|| serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
-        for (_, bytes) in parts {
-            let rendered = render_bytes(bytes, ctx)?;
-            let incoming: serde_json::Value = serde_json::from_slice(&rendered)?;
-            merge_json(&mut base, &incoming, overwrite_other);
-        }
-        let mut s = serde_json::to_string_pretty(&base)?;
-        s.push('\n');
-        out.insert(rel.clone(), s.into_bytes());
     }
 
     Ok(out)
@@ -880,6 +821,58 @@ fn write_file(path: &Path, content: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// 源文件是否带可执行位（Unix）。
+#[cfg(unix)]
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path)
+        .map(|meta| meta.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+/// Windows 没有可执行位，git 通过索引里的模式位记录它。
+#[cfg(not(unix))]
+fn is_executable(_path: &Path) -> bool {
+    false
+}
+
+/// 给写盘后的文件补上可执行位。
+///
+/// 模板源文件在 git 里以 100755 记录，`std::fs::write` 不会复制权限位，
+/// 新生成的项目里钩子脚本会是 0644——git 在 Unix 上会静默跳过它，
+/// 提交门禁等于没装。补位之后，`gate hooks install` 只需再把模式位
+/// 写进索引即可。
+#[cfg(unix)]
+fn set_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = std::fs::metadata(path)?.permissions();
+    if permissions.mode() & 0o111 == 0 {
+        permissions.set_mode(permissions.mode() | 0o755);
+        std::fs::set_permissions(path, permissions)?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn set_executable(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
+/// 给钩子脚本补上可执行位。
+///
+/// 写盘流程统一在最后统一补位：文件可能因冲突跳过而没有被重写，
+/// 但只要它还在磁盘上就该保持可执行——git 在 Unix 上靠这个位决定
+/// 跑不跑这个钩子。
+fn apply_executable_bits(fm: &FileMap, project_dir: &Path) -> Result<()> {
+    for rel in &fm.executable {
+        let path = project_dir.join(rel);
+        if path.is_file() {
+            set_executable(&path)?;
+        }
+    }
+    Ok(())
+}
+
 fn validate_project_name(name: &str) -> Result<()> {
     if name.trim().is_empty() {
         return Err(CoreError::InvalidProjectName("项目名不能为空".to_string()));
@@ -943,7 +936,7 @@ pub fn generate(
 
     let ctx = RenderContext::new(project_name, ordered.clone(), options.clone());
     let fm = templates.build_file_map(&ordered, &options)?;
-    let bytes_map = render_file_map(&fm, &ctx, &target)?;
+    let bytes_map = render_file_map(&fm, &ctx)?;
     let mut manifest = ProjectManifest {
         tool: "pengj-templates".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -962,6 +955,7 @@ pub fn generate(
         manifest.files.insert(rel_str.clone(), sha256_hex(bytes));
         written.push(rel_str);
     }
+    apply_executable_bits(&fm, &target)?;
 
     manifest.save(&target)?;
 
@@ -974,209 +968,6 @@ pub fn generate(
 
 // ---------- 存量纳管 (Adopt) ----------
 
-/// `commitlint.config.js` 接线到 `commitlint.base.js` 的结果
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CommitlintWireOutcome {
-    /// 本次完成自动接线（config 文件已改写）
-    Wired,
-    /// config 已引用 base，无需处理
-    AlreadyWired,
-    /// 项目没有 commitlint.config.js，无需接线
-    NoConfig,
-    /// 无法安全改写的形态（非 ESM、`export default` 后不是对象字面量等），
-    /// 需要人工接线
-    ManualRequired,
-}
-
-/// 把既有 `commitlint.config.js` 自动接线到 `commitlint.base.js`。
-///
-/// 仅保守处理可安全改写的 ESM 对象字面量形态（首个 `export default` 后紧跟 `{`）：
-/// - 顶部补 `import base from './commitlint.base.js';`
-/// - 原 `export default` 改名为 `const pengjUserConfig =`
-/// - 末尾追加 `export default { ...base, ...pengjUserConfig, rules: { ...base.rules,
-///   ...pengjUserConfig.rules } }` —— base 规则铺底、项目专属规则同名覆盖，
-///   此后模板对 base 的更新才能真正生效
-/// - 接线的同时做**去重**：与 base 等价（规范化比较）的 rules 条目及其他成员
-///   （如相同的 `extends`）从用户配置中删除，只保留真正的项目差异
-///
-/// 其余形态（CJS `module.exports`、工厂函数等）一律不动文件，返回
-/// [`CommitlintWireOutcome::ManualRequired`] 由调用方给出手动指引。
-fn try_wire_commitlint_base(project_dir: &Path) -> Result<CommitlintWireOutcome> {
-    let path = project_dir.join("commitlint.config.js");
-    if !path.is_file() {
-        return Ok(CommitlintWireOutcome::NoConfig);
-    }
-    let text = String::from_utf8_lossy(&std::fs::read(&path)?).into_owned();
-    if text.contains("commitlint.base") {
-        return Ok(CommitlintWireOutcome::AlreadyWired);
-    }
-    let Some(idx) = text.find("export default") else {
-        return Ok(CommitlintWireOutcome::ManualRequired);
-    };
-    // `export default` 后必须直接跟对象字面量（跳过空白），否则改写不安全
-    let rest = text[idx + "export default".len()..]
-        .trim_start()
-        .chars()
-        .next();
-    if rest != Some('{') {
-        return Ok(CommitlintWireOutcome::ManualRequired);
-    }
-
-    let mut out = String::with_capacity(text.len() + 256);
-    out.push_str("import base from './commitlint.base.js';\n");
-    if !text.starts_with(['\n', '\r']) {
-        out.push('\n');
-    }
-    out.push_str(&text.replacen("export default", "const pengjUserConfig =", 1));
-    if !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out.push_str(
-        "\nexport default {\n  ...base,\n  ...pengjUserConfig,\n  rules: {\n    ...base.rules,\n    ...pengjUserConfig.rules,\n  },\n};\n",
-    );
-
-    // 去重：无法安全比较时保持原样（保守）
-    let out = dedupe_wired_config(project_dir, &out).unwrap_or(out);
-
-    std::fs::write(&path, out)?;
-    Ok(CommitlintWireOutcome::Wired)
-}
-
-/// 定位第一个平衡花括号对象 `{...}` 的 `(起始下标, 结束下标（含花括号）)`，
-/// 字符串字面量整体消费。未找到配对时返回 `None`。
-fn first_braced_object_span(text: &str) -> Option<(usize, usize)> {
-    let b = text.as_bytes();
-    let mut i = 0usize;
-    while i < b.len() {
-        if b[i] == b'{' {
-            let first_open = i;
-            let mut depth: usize = 0;
-            let mut escaped = false;
-            let mut in_string: Option<char> = None;
-            while i < b.len() {
-                let c = b[i] as char;
-                if let Some(q) = in_string {
-                    if escaped {
-                        escaped = false;
-                    } else if c == '\\' {
-                        escaped = true;
-                    } else if c == q {
-                        in_string = None;
-                    }
-                } else {
-                    match c {
-                        '"' | '\'' => in_string = Some(c),
-                        '{' => depth += 1,
-                        '}' => {
-                            depth -= 1;
-                            if depth == 0 {
-                                return Some((first_open, i + 1));
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                i += 1;
-            }
-            return None;
-        }
-        i += 1;
-    }
-    None
-}
-
-/// 接线去重：把 `wired` 文本中与 base.js 等价的用户成员/规则条目删除。
-/// 任一步无法安全解析时返回 `None`（调用方保持原文本不改动）。
-fn dedupe_wired_config(project_dir: &Path, wired: &str) -> Option<String> {
-    let base_text = std::fs::read_to_string(project_dir.join("commitlint.base.js")).ok()?;
-    let (base_open, base_close) = first_braced_object_span(&base_text)?;
-    let base_inner = base_text.get(base_open + 1..base_close - 1)?;
-    // base 对象的成员名 -> 规范化全文（如 extends），以及 rules 条目名 -> 规范化值
-    let mut base_member_norm: Vec<(String, String)> = Vec::new();
-    let mut base_rules_norm: Vec<(String, String)> = Vec::new();
-    for m in split_object_members(base_inner)? {
-        if m.name == "rules" {
-            let (open, close) = first_braced_object_span(&m.source)?;
-            let rules_inner = m.source.get(open + 1..close - 1)?;
-            for r in split_object_members(rules_inner)? {
-                // 条目规范化只取值部分（去掉 `key:` 前缀），键名单独存
-                let (_, value) = r.source.split_once(':')?;
-                let norm_value = normalize_js_literal(value)?;
-                base_rules_norm.push((r.name.clone(), norm_value));
-            }
-        } else {
-            base_member_norm.push((m.name.clone(), m.normalized.clone()));
-        }
-    }
-
-    // 用户侧 pengjUserConfig 对象
-    let marker_pos = wired.find("const pengjUserConfig")?;
-    let (obj_open, obj_close) = first_braced_object_span(&wired[marker_pos..])?;
-    let obj_open = marker_pos + obj_open;
-    let obj_close = marker_pos + obj_close;
-    let user_inner = wired.get(obj_open + 1..obj_close - 1)?;
-    let members = split_object_members(user_inner)?;
-
-    let mut kept_sources: Vec<String> = Vec::new();
-    let mut changed = false;
-    for m in &members {
-        if m.name == "rules" {
-            // rules：条目级去重——与 base 同名且等价的条目删除，其余保留作覆盖
-            let (open, close) = first_braced_object_span(&m.source)?;
-            let rules_inner = m.source.get(open + 1..close - 1)?;
-            let entries = split_object_members(rules_inner)?;
-            let kept: Vec<&JsObjectEntry> = entries
-                .iter()
-                .filter(|e| {
-                    let Some((_, value)) = e.source.split_once(':') else {
-                        return true;
-                    };
-                    match normalize_js_literal(value) {
-                        Some(nv) => !base_rules_norm
-                            .iter()
-                            .any(|(n, v)| *n == e.name && *v == nv),
-                        None => true,
-                    }
-                })
-                .collect();
-            if kept.len() != entries.len() {
-                changed = true;
-            }
-            let rebuilt_rules = if kept.is_empty() {
-                "rules: {}".to_string()
-            } else {
-                format!(
-                    "rules: {{\n    {}\n  }}",
-                    kept.iter()
-                        .map(|e| e.source.clone())
-                        .collect::<Vec<_>>()
-                        .join(",\n    ")
-                )
-            };
-            kept_sources.push(rebuilt_rules);
-        } else if base_member_norm
-            .iter()
-            .any(|(n, v)| *n == m.name && *v == m.normalized)
-        {
-            // 其他成员与 base 等价（如相同的 extends）：整员去重
-            changed = true;
-        } else {
-            kept_sources.push(m.source.clone());
-        }
-    }
-    if !changed {
-        return None;
-    }
-
-    let rebuilt = format!(
-        "{}const pengjUserConfig = {{\n  {}\n}}{}",
-        &wired[..marker_pos],
-        kept_sources.join(",\n  "),
-        &wired[obj_close..]
-    );
-    Some(rebuilt)
-}
-
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AdoptReport {
     pub project_name: String,
@@ -1187,8 +978,6 @@ pub struct AdoptReport {
     pub conflicted: Vec<ConflictInfo>,
     /// 模板内容被追加/并入既有 legacy 文件、建议人工复核去重的路径
     pub needs_review: Vec<String>,
-    /// 需要用户手动完成的接线步骤（如既有 commitlint.config.js 接入 base）
-    pub manual_steps: Vec<String>,
 }
 
 /// 纳管存量项目：为已有目录初始化 `.pengj-templates.json` manifest
@@ -1254,7 +1043,7 @@ pub fn adopt_project(
 
     let ctx = RenderContext::new(&project_name, ordered.clone(), options.clone());
     let fm = templates.build_file_map(&ordered, &options)?;
-    let bytes_map = render_file_map(&fm, &ctx, project_dir)?;
+    let bytes_map = render_file_map(&fm, &ctx)?;
     let ignores = templates.collect_update_ignores(&ordered)?;
 
     let mut created = Vec::new();
@@ -1328,22 +1117,6 @@ pub fn adopt_project(
             let cur = std::fs::read(&target).unwrap_or_default();
             let rendered_has_block =
                 crate::block::extract_managed_block(&String::from_utf8_lossy(bytes)).is_some();
-
-            // JSON 并集文件（如 package.json）：bytes 已由 render_file_map 以磁盘为底、
-            // 用户优先语义合并完成，这里直接写回，不让合并结果滞留到首次 update
-            if fm.json.contains_key(rel) {
-                if target.is_file() {
-                    if bytes != &cur {
-                        write_file(&target, bytes)?;
-                    }
-                } else {
-                    write_file(&target, bytes)?;
-                    created.push(rel_str.clone());
-                }
-                manifest_files.insert(rel_str.clone(), sha256_hex(bytes));
-                adopted.push(rel_str);
-                continue;
-            }
 
             // 含受管块的文本文件（fm.normal 或累加文件 fm.concat 单一托管块）：
             // 结合磁盘状态做合并注入，块外用户内容原样保留
@@ -1443,29 +1216,7 @@ pub fn adopt_project(
         }
     }
 
-    // commitlint 自动接线：base 落地后（本轮新建或既有），把未接线的既有
-    // commitlint.config.js 自动改写为继承 base；无法安全改写的形态保留手动指引
-    let mut manual_steps = Vec::new();
-    if project_dir.join("commitlint.base.js").is_file() {
-        match try_wire_commitlint_base(project_dir)? {
-            CommitlintWireOutcome::Wired => {
-                needs_review.push(
-                    "commitlint.config.js：已自动接入 commitlint.base.js（base 规则铺底、项目规则同名覆盖，等价重复项已去除），请复核规则优先级"
-                        .to_string(),
-                );
-            }
-            CommitlintWireOutcome::ManualRequired => {
-                manual_steps.push(
-                    "检测到既有 commitlint.config.js 未继承 commitlint.base.js：\
-                     请在其顶部加 `import base from './commitlint.base.js';`，\
-                     并改为 `export default { ...base, rules: { ...base.rules, /* 项目专属规则 */ } }`。\
-                     接入后模板对 commitlint.base.js 的更新才会生效。"
-                        .to_string(),
-                );
-            }
-            CommitlintWireOutcome::AlreadyWired | CommitlintWireOutcome::NoConfig => {}
-        }
-    }
+    apply_executable_bits(&fm, project_dir)?;
 
     let manifest = ProjectManifest {
         tool: "pengj-templates".to_string(),
@@ -1485,7 +1236,6 @@ pub fn adopt_project(
         adopted,
         conflicted,
         needs_review,
-        manual_steps,
     })
 }
 
@@ -1605,12 +1355,17 @@ pub fn update_project_with_options(
     options: &UpdateOptions,
 ) -> Result<UpdateReport> {
     let mut manifest = ProjectManifest::load(project_dir)?;
-    // 过滤掉已从模板中移除/废弃的层，保留当前模板仍支持的层
+    // 过滤掉已从模板中移除/废弃的层，保留当前模板仍支持的层。
+    // 历史层名先映射到现名：`lefthook` 已被 `gate` 取代，老项目若直接按
+    // 名字过滤会被当成「已移除的层」丢掉，提交门禁就此消失。
     let metas = templates.layer_metas()?;
+    let mut seen_layers: BTreeSet<String> = BTreeSet::new();
     let valid_layers: Vec<String> = manifest
         .layers
         .into_iter()
+        .map(|l| canonical_layer_id(&l))
         .filter(|l| metas.contains_key(l))
+        .filter(|l| seen_layers.insert(l.clone()))
         .collect();
     let ordered = templates.resolve_layers(&valid_layers)?;
     let mut dropped_skills = Vec::new();
@@ -1640,7 +1395,7 @@ pub fn update_project_with_options(
         manifest.options.clone(),
     );
     let fm = templates.build_file_map(&ordered, &manifest.options)?;
-    let bytes_map = render_file_map(&fm, &ctx, project_dir)?;
+    let bytes_map = render_file_map(&fm, &ctx)?;
     let ignores = templates.collect_update_ignores(&ordered)?;
 
     let mut updated = Vec::new();
@@ -1649,8 +1404,6 @@ pub fn update_project_with_options(
     let mut needs_review = Vec::new();
     let mut unchanged = 0usize;
     let mut new_files: BTreeMap<String, String> = BTreeMap::new();
-    // package.json 等 JSON 并集文件走独立合并分支，不参与普通「哈希/冲突」判定
-    let json_merge_keys: BTreeSet<&Path> = fm.json.keys().map(|p| p.as_path()).collect();
 
     for (rel, bytes) in &bytes_map {
         // 黑名单文件：仅首次生成时写入，之后归用户所有，模板不再接管
@@ -1661,20 +1414,6 @@ pub fn update_project_with_options(
         let new_sha = sha256_hex(bytes);
 
         let target = project_dir.join(rel);
-
-        // JSON 并集文件：合并结果按构造保留了用户字段（同名键用户优先），直接写回，
-        // 不再冲突跳过
-        if json_merge_keys.contains(rel.as_path()) {
-            let target_bytes = std::fs::read(&target).unwrap_or_default();
-            if target_bytes == *bytes {
-                unchanged += 1;
-            } else {
-                write_file(&target, bytes)?;
-                updated.push(rel_str.clone());
-            }
-            new_files.insert(rel_str, new_sha);
-            continue;
-        }
 
         // `.vscode/settings.json`：增量合并（与 `.code-workspace` 同一语义），不走
         // SHA 冲突判定——模板的 fileNesting / rust-analyzer.clippy 并入用户文件，
@@ -1899,6 +1638,8 @@ pub fn update_project_with_options(
         }
     }
 
+    apply_executable_bits(&fm, project_dir)?;
+
     // 处理上游模板已删除/废弃的文件：
     // - 规范化路径比对（统一斜杠风格）
     // - 本地未修改（sha 与 manifest 记录一致）或已不在磁盘 -> 物理删除文件并清理空父目录，从 manifest 剔除，记入 removed
@@ -1958,18 +1699,6 @@ pub fn update_project_with_options(
                 updated.push(name.to_string_lossy().into_owned());
             }
         }
-    }
-
-    // commitlint 自动接线兜底：模板提供 base 而项目 config 尚未接线时补上
-    //（adopt 已接线的会命中 AlreadyWired，保持幂等）
-    if bytes_map.contains_key(Path::new("commitlint.base.js"))
-        && try_wire_commitlint_base(project_dir)? == CommitlintWireOutcome::Wired
-    {
-        updated.push("commitlint.config.js".to_string());
-        needs_review.push(
-            "commitlint.config.js：已自动接入 commitlint.base.js（base 规则铺底、项目规则同名覆盖，等价重复项已去除），请复核规则优先级"
-                .to_string(),
-        );
     }
 
     manifest.layers = ordered.clone();
@@ -2122,11 +1851,13 @@ pub fn audit_project(
 ) -> Result<AuditReport> {
     let manifest = ProjectManifest::load(project_dir)?;
     let metas = templates.layer_metas()?;
+    let mut seen_layers: BTreeSet<String> = BTreeSet::new();
     let valid_layers: Vec<String> = manifest
         .layers
         .iter()
-        .filter(|l| metas.contains_key(*l))
-        .cloned()
+        .map(|l| canonical_layer_id(l))
+        .filter(|l| metas.contains_key(l))
+        .filter(|l| seen_layers.insert(l.clone()))
         .collect();
     let ordered = templates.resolve_layers(&valid_layers)?;
     let mut options = manifest.options.clone();
@@ -2147,12 +1878,11 @@ pub fn audit_project(
     }
     let ctx = RenderContext::new(&manifest.project_name, ordered.clone(), options.clone());
     let fm = templates.build_file_map(&ordered, &options)?;
-    let bytes_map = render_file_map(&fm, &ctx, project_dir)?;
+    let bytes_map = render_file_map(&fm, &ctx)?;
     let ignores = templates.collect_update_ignores(&ordered)?;
 
     let mut items = Vec::new();
     let mut has_violations = false;
-    let json_merge_keys: BTreeSet<&Path> = fm.json.keys().map(|p| p.as_path()).collect();
 
     for (rel, tpl_bytes) in &bytes_map {
         if ignores.contains(rel) {
@@ -2203,16 +1933,6 @@ pub fn audit_project(
             items.push(AuditItem {
                 path: rel_str,
                 status: AuditFileStatus::InSync,
-                diff: None,
-            });
-            continue;
-        }
-
-        // 2. JSON 并集文件（如 package.json）
-        if json_merge_keys.contains(rel.as_path()) {
-            items.push(AuditItem {
-                path: rel_str,
-                status: AuditFileStatus::ProjectCustomized,
                 diff: None,
             });
             continue;
@@ -2342,7 +2062,7 @@ pub fn audit_project(
             }
         }
 
-        // 5. 无受管块的普通文件（如 scripts/sync-branch.ps1, commitlint.config.js 等）
+        // 5. 无受管块的普通文件（如 scripts/sync-branch.ps1, .gate.toml 等）
         if let Some(m_sha) = manifest_sha {
             if disk_sha == *m_sha && tpl_sha != *m_sha {
                 items.push(AuditItem {
@@ -2429,7 +2149,7 @@ pub fn audit_project(
 
 /// 扫描 `dir` 下一级（非递归）所有 `*.code-workspace` 文件，按文件名排序返回。
 ///
-/// 供 CLI / GUI 在展示或批量处理工作区文件时复用。
+/// 供 CLI / MCP 在展示或批量处理工作区文件时复用。
 pub fn list_workspace_files(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -2859,168 +2579,6 @@ fn reindent_block(text: &str, key_start: usize, value_start: usize, replacement:
     out
 }
 
-/// 规范化 JS 对象字面量片段用于等价比较：去注释、单引号统一为双引号、
-/// 去尾随逗号、压缩字符串外空白。含模板字符串等无法安全处理的构造时返回 `None`
-/// （调用方应保守跳过去重）。
-fn normalize_js_literal(text: &str) -> Option<String> {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    let mut in_string: Option<char> = None; // None | Some('"') | Some('\'')
-    let mut escaped = false;
-    while let Some(c) = chars.next() {
-        if let Some(q) = in_string {
-            out.push(c);
-            if escaped {
-                escaped = false;
-            } else if c == '\\' {
-                escaped = true;
-            } else if c == q {
-                if q == '\'' {
-                    // 结束的单引号已统一写成双引号
-                    out.pop();
-                    out.push('"');
-                }
-                in_string = None;
-            }
-            continue;
-        }
-        match c {
-            '"' | '\'' => {
-                in_string = Some(c);
-                out.push('"');
-            }
-            '`' => return None,
-            '/' => match chars.peek() {
-                Some('/') => {
-                    while let Some(&n) = chars.peek() {
-                        if n == '\n' {
-                            break;
-                        }
-                        chars.next();
-                    }
-                }
-                Some('*') => {
-                    chars.next();
-                    while let Some(n) = chars.next() {
-                        if n == '*' && chars.peek() == Some(&'/') {
-                            chars.next();
-                            break;
-                        }
-                    }
-                }
-                _ => out.push('/'),
-            },
-            ',' => {
-                let next_significant = loop {
-                    match chars.peek().copied() {
-                        Some(' ' | '\t' | '\r' | '\n') => {
-                            chars.next();
-                        }
-                        other => break other,
-                    }
-                };
-                if next_significant != Some('}') && next_significant != Some(']') {
-                    out.push(',');
-                }
-            }
-            ' ' | '\t' | '\r' | '\n' => {}
-            _ => out.push(c),
-        }
-    }
-    // 引号统一后需保持成对结构：双引号数量为偶数才可信
-    if !out.matches('"').count().is_multiple_of(2) {
-        return None;
-    }
-    Some(out)
-}
-
-/// 对象字面量的一个顶层成员
-struct JsObjectEntry {
-    /// 成员名（去引号后的裸名）
-    name: String,
-    /// 成员在源文本中的原始切片（不含结尾逗号）
-    source: String,
-    /// 规范化形式（用于与模板侧比较是否等价）
-    normalized: String,
-}
-
-/// 拆分对象字面量花括号内的顶层成员；无法安全解析时返回 `None`。
-fn split_object_members(inner: &str) -> Option<Vec<JsObjectEntry>> {
-    let b = inner.as_bytes();
-    let mut spans: Vec<(usize, usize)> = Vec::new();
-    let mut depth: usize = 0;
-    let mut start: Option<usize> = None;
-    let mut in_string: Option<char> = None;
-    let mut escaped = false;
-    let mut i = 0usize;
-    while i < b.len() {
-        let c = b[i] as char;
-        if let Some(q) = in_string {
-            if escaped {
-                escaped = false;
-            } else if c == '\\' {
-                escaped = true;
-            } else if c == q {
-                in_string = None;
-            }
-            i += 1;
-            continue;
-        }
-        match c {
-            '"' | '\'' => {
-                in_string = Some(c);
-                if start.is_none() {
-                    start = Some(i);
-                }
-                i += 1;
-            }
-            '{' | '[' => {
-                depth += 1;
-                i += 1;
-            }
-            '}' | ']' => {
-                depth = depth.saturating_sub(1);
-                i += 1;
-            }
-            ',' if depth == 0 => {
-                if let Some(s) = start.take() {
-                    spans.push((s, i));
-                }
-                i += 1;
-            }
-            _ => {
-                if !c.is_whitespace() && start.is_none() {
-                    start = Some(i);
-                }
-                i += 1;
-            }
-        }
-    }
-    if let Some(s) = start.take() {
-        spans.push((s, b.len()));
-    }
-
-    spans
-        .into_iter()
-        .map(|(s, e)| {
-            let raw = inner.get(s..e)?.trim_end();
-            let raw = raw.strip_suffix(',').unwrap_or(raw);
-            let norm = normalize_js_literal(raw)?;
-            // 成员名：`name:` 之前的键部分，去掉引号
-            let colon = norm.find(':')?;
-            let key_part = norm[..colon].trim();
-            if key_part.is_empty() {
-                return None;
-            }
-            Some(JsObjectEntry {
-                name: key_part.trim_matches('"').to_string(),
-                source: raw.to_string(),
-                normalized: norm,
-            })
-        })
-        .collect()
-}
-
 /// `.vscode/settings.json` 增量合并的结果分类（复用 `update_project` 的统计口径）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSyncOutcome {
@@ -3260,7 +2818,7 @@ mod tests {
         let mut fm = FileMap {
             normal: BTreeMap::new(),
             concat: BTreeMap::new(),
-            json: BTreeMap::new(),
+            executable: BTreeSet::new(),
         };
         fm.normal.insert(
             PathBuf::from(".vscode/settings.json"),
@@ -3451,7 +3009,7 @@ mod tests {
         let empty_fm = FileMap {
             normal: BTreeMap::new(),
             concat: BTreeMap::new(),
-            json: BTreeMap::new(),
+            executable: BTreeSet::new(),
         };
         let plain = tmp.join("plain.code-workspace");
         std::fs::write(&plain, r#"{ "folders": [{ "path": "." }] }"#).unwrap();
@@ -3567,7 +3125,7 @@ mod tests {
         let empty_fm = FileMap {
             normal: BTreeMap::new(),
             concat: BTreeMap::new(),
-            json: BTreeMap::new(),
+            executable: BTreeSet::new(),
         };
         let ctx = RenderContext::new("proj", vec!["vscode".to_string()], BTreeMap::new());
 
@@ -3583,7 +3141,7 @@ mod tests {
         let mut arr_fm = FileMap {
             normal: BTreeMap::new(),
             concat: BTreeMap::new(),
-            json: BTreeMap::new(),
+            executable: BTreeSet::new(),
         };
         arr_fm
             .normal
@@ -3832,7 +3390,7 @@ mod tests {
         let mut fm = FileMap {
             normal: BTreeMap::new(),
             concat: BTreeMap::new(),
-            json: BTreeMap::new(),
+            executable: BTreeSet::new(),
         };
         fm.normal.insert(
             PathBuf::from("AGENTS.md"),
@@ -3847,7 +3405,7 @@ mod tests {
         )
         .unwrap();
 
-        let out = render_file_map(&fm, &ctx, &proj).unwrap();
+        let out = render_file_map(&fm, &ctx).unwrap();
         let rendered = String::from_utf8(out[&PathBuf::from("AGENTS.md")].clone()).unwrap();
         assert_eq!(
             rendered,
@@ -3857,7 +3415,7 @@ mod tests {
         // 磁盘不存在该文件：同样是纯渲染结果
         let empty_proj = tmp.join("empty");
         std::fs::create_dir_all(&empty_proj).unwrap();
-        let out2 = render_file_map(&fm, &ctx, &empty_proj).unwrap();
+        let out2 = render_file_map(&fm, &ctx).unwrap();
         assert_eq!(
             out2[&PathBuf::from("AGENTS.md")].as_slice(),
             b"<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->"
@@ -4169,7 +3727,7 @@ description = \"x\"
         let fm = templates
             .build_file_map(&ordered, &BTreeMap::new())
             .unwrap();
-        let bytes_map = render_file_map(&fm, &ctx, &proj).unwrap();
+        let bytes_map = render_file_map(&fm, &ctx).unwrap();
         let concat_sha = sha256_hex(&bytes_map[&PathBuf::from(".gitignore")]);
         std::fs::write(
             proj.join(crate::manifest::MANIFEST_FILE),
@@ -4502,16 +4060,17 @@ description = \"x\"
     }
 
     /// 复刻 ChahuRenderDebugger 纳管场景：存量项目自带 .cargo/config.toml（同名
-    /// target 表）、带版本钉的 package.json、手写 commitlint.config.js 与自定义
-    /// AGENTS.md。adopt 必须产出合法 TOML（无重复表头）、保留用户版本钉与脚本、
-    /// 上报 needs_review 与 commitlint 接线指引；随后 update 幂等。
+    /// target 表）、自定义 AGENTS.md，以及旧的 Node 生态文件（package.json /
+    /// commitlint.config.js）。adopt 必须产出合法 TOML（无重复表头）、保留用户键、
+    /// 补齐 gate 层的门禁文件；旧的 Node 文件不再被模板接管、必须原样保留；
+    /// 随后 update 幂等。
     #[test]
     fn adopt_legacy_project_full_scenario_then_update_is_idempotent() {
         let tmp = std::env::temp_dir().join(format!("pengj-adopt-chahu-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
 
-        // ---- 模板三层：common / hooks（lefthook 类）/ rustx（cargo 配置）----
+        // ---- 模板三层：common / gate（提交门禁）/ rustx（cargo 配置）----
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
         std::fs::write(
@@ -4520,25 +4079,16 @@ description = \"x\"
         )
         .unwrap();
 
-        std::fs::create_dir_all(tpl.join("hooks")).unwrap();
+        std::fs::create_dir_all(tpl.join("gate").join(".githooks")).unwrap();
         std::fs::write(
-            tpl.join("hooks").join("layer.toml"),
-            "name = \"Hooks\"\ndescription = \"x\"\ndepends = [\"common\"]\nupdate_ignore = [\"commitlint.config.js\"]\n",
+            tpl.join("gate").join("layer.toml"),
+            "name = \"Gate\"\ndescription = \"x\"\ndepends = [\"common\"]\nupdate_ignore = [\".gate.toml\"]\n",
         )
         .unwrap();
+        std::fs::write(tpl.join("gate").join(".gate.toml"), "mode = \"chinese\"\n").unwrap();
         std::fs::write(
-            tpl.join("hooks").join("commitlint.base.js"),
-            "export default { extends: ['@commitlint/config-conventional'] };\n",
-        )
-        .unwrap();
-        std::fs::write(
-            tpl.join("hooks").join("commitlint.config.js"),
-            "import base from './commitlint.base.js';\nexport default { ...base };\n",
-        )
-        .unwrap();
-        std::fs::write(
-            tpl.join("hooks").join("package.json"),
-            "{\n  \"name\": \"{{ project_slug }}\",\n  \"version\": \"0.1.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"engines\": { \"node\": \">=20\" },\n  \"scripts\": {\n    \"prepare\": \"template-prepare\",\n    \"commitlint\": \"commitlint\"\n  },\n  \"devDependencies\": {\n    \"@commitlint/cli\": \"latest\",\n    \"@commitlint/config-conventional\": \"latest\",\n    \"lefthook\": \"latest\"\n  }\n}\n",
+            tpl.join("gate").join(".githooks").join("pre-commit"),
+            "#!/bin/sh\n# gate hook: the pre-commit stage.\nexec gate hook pre-commit\n",
         )
         .unwrap();
 
@@ -4574,46 +4124,44 @@ description = \"x\"
             "[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld\"\nrustflags = [\"-C\", \"target-cpu=x86-64-v3\"]\n",
         )
         .unwrap();
-        let user_pkg = "{\n  \"name\": \"legacy-app\",\n  \"version\": \"0.2.0\",\n  \"private\": true,\n  \"description\": \"my app\",\n  \"scripts\": {\n    \"prepare\": \"lefthook install\",\n    \"postinstall\": \"echo done\"\n  },\n  \"devDependencies\": {\n    \"@commitlint/cli\": \"^20.5.3\",\n    \"lefthook\": \"^2.1.10\",\n    \"user-only-lib\": \"^1.0.0\"\n  }\n}\n";
+        let user_pkg = "{\n  \"name\": \"legacy-app\",\n  \"version\": \"0.2.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"prepare\": \"lefthook install\"\n  },\n  \"devDependencies\": {\n    \"lefthook\": \"^2.1.10\"\n  }\n}\n";
         std::fs::write(proj.join("package.json"), user_pkg).unwrap();
-        std::fs::write(
-            proj.join("commitlint.config.js"),
-            "export default { extends: ['@commitlint/config-conventional'], rules: { 'scope-enum': [2, 'always', ['core']] } };\n",
-        )
-        .unwrap();
+        let user_commitlint = "export default { extends: ['@commitlint/config-conventional'] };\n";
+        std::fs::write(proj.join("commitlint.config.js"), user_commitlint).unwrap();
         std::fs::write(proj.join("AGENTS.md"), "# 项目自有规范\n- 规则 A\n").unwrap();
 
         let templates = Templates::new(&tpl);
         let layers = [
             "common".to_string(),
-            "hooks".to_string(),
+            "gate".to_string(),
             "rustx".to_string(),
             "agentdoc".to_string(),
         ];
         let report = adopt_project(&templates, &proj, &layers, BTreeMap::new(), false)
             .expect("adopt should succeed");
 
-        // -- commitlint 自动接线：config 被改写为继承 base，无需手动步骤 --
-        assert!(report.created.iter().any(|f| f == "commitlint.base.js"));
-        assert!(
-            report.manual_steps.is_empty(),
-            "ESM 对象字面量应自动接线，不应有手动步骤，实际: {:?}",
-            report.manual_steps
-        );
-        let wired_cfg = std::fs::read_to_string(proj.join("commitlint.config.js")).unwrap();
-        assert!(wired_cfg.contains("import base from './commitlint.base.js';"));
-        assert!(wired_cfg.contains("const pengjUserConfig ="));
-        assert!(wired_cfg.contains("...base.rules"));
+        // -- gate 层产出门禁配置与钩子脚本 --
+        assert!(report.created.iter().any(|f| f == ".gate.toml"));
         assert!(
             report
-                .needs_review
+                .created
                 .iter()
-                .any(|s| s.starts_with("commitlint.config.js")),
-            "自动接线应标记复核，实际: {:?}",
-            report.needs_review
+                .any(|f| f.replace('\\', "/") == ".githooks/pre-commit"),
+            "钩子脚本应被创建，实际: {:?}",
+            report.created
         );
-        // 用户原有规则保留在 pengjUserConfig 中
-        assert!(wired_cfg.contains("'scope-enum'"));
+
+        // -- 旧的 Node 生态文件不再被模板接管：必须原样保留 --
+        assert_eq!(
+            std::fs::read_to_string(proj.join("package.json")).unwrap(),
+            user_pkg,
+            "package.json 已不由模板管理，必须原样保留"
+        );
+        assert_eq!(
+            std::fs::read_to_string(proj.join("commitlint.config.js")).unwrap(),
+            user_commitlint,
+            "commitlint.config.js 已不由模板管理，必须原样保留"
+        );
 
         // -- TOML 结构化合并：合法、去重、保用户键 --
         let cfg_text = std::fs::read_to_string(proj.join(".cargo").join("config.toml")).unwrap();
@@ -4647,32 +4195,6 @@ description = \"x\"
             report.needs_review
         );
 
-        // -- package.json 模板优先并集 + 键序保持 --
-        let pkg_text = std::fs::read_to_string(proj.join("package.json")).unwrap();
-        assert!(
-            pkg_text.starts_with("{\n  \"name\": \"legacy-app\""),
-            "首键必须仍是用户的 name（键序保持），实际: {pkg_text}"
-        );
-        assert!(
-            pkg_text.contains("\"@commitlint/cli\": \"latest\""),
-            "同名依赖版本一律以模板为准（模板 latest 覆盖用户 ^20.5.3），实际: {pkg_text}"
-        );
-        assert!(pkg_text.contains("\"lefthook\": \"latest\""));
-        assert!(
-            pkg_text.contains("\"user-only-lib\": \"^1.0.0\""),
-            "用户独有依赖保留"
-        );
-        assert!(
-            pkg_text.contains("\"prepare\": \"template-prepare\""),
-            "模板拥有的钩子脚本跟随模板，用户的旧 prepare 必须被替换，实际:\n{pkg_text}"
-        );
-        assert!(
-            pkg_text.contains("\"commitlint\": \"commitlint\""),
-            "模板新脚本并入，实际:\n{pkg_text}"
-        );
-        assert!(pkg_text.contains("\"@commitlint/config-conventional\""));
-        assert!(pkg_text.contains("\"engines\""));
-
         // -- 文本受管块置顶插入 legacy AGENTS.md 并标记复核 --
         let agents = std::fs::read_to_string(proj.join("AGENTS.md")).unwrap();
         assert!(agents.starts_with("<!-- PENGJ_TEMPLATE_START -->"));
@@ -4702,159 +4224,105 @@ description = \"x\"
         );
         assert_eq!(
             std::fs::read_to_string(proj.join("package.json")).unwrap(),
-            pkg_text
+            user_pkg,
+            "update 也不得动已不归模板管理的 package.json"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// 老项目的 manifest 里写着 `lefthook` 层：模板已用 `gate` 层取代它，
+    /// 更新时必须把层名迁移过去，而不是当成「已移除的层」静默丢弃——
+    /// 否则老项目的提交门禁就此消失。
     #[test]
-    fn merge_json_update_dep_versions_follow_template_pins() {
-        // 更新/纳管语义：依赖类字段同名包版本一律以模板为准（含模板未定版的
-        // latest）；模板拥有的 prepare 脚本同样跟随模板
-        let mut base: serde_json::Value = serde_json::from_str(
-            r#"{"scripts":{"prepare":"user-prepare"},"devDependencies":{"lefthook":"^2.1.10","@commitlint/cli":"^20.5.3"}}"#,
-        )
-        .unwrap();
-        let incoming: serde_json::Value = serde_json::from_str(
-            r#"{"scripts":{"prepare":"tpl-prepare"},"devDependencies":{"lefthook":"latest","@commitlint/cli":"^21.2.2"}}"#,
-        )
-        .unwrap();
-
-        merge_json(&mut base, &incoming, false);
-        assert_eq!(
-            base["devDependencies"]["@commitlint/cli"], "^21.2.2",
-            "模板固定版本覆盖用户旧版本钉"
-        );
-        assert_eq!(
-            base["devDependencies"]["lefthook"], "latest",
-            "模板 latest 同样覆盖用户版本钉（解析版本由 lockfile 决定）"
-        );
-        assert_eq!(
-            base["scripts"]["prepare"], "tpl-prepare",
-            "模板拥有的钩子安装脚本跟随模板，避免旧 prepare 吞掉安装失败"
-        );
-    }
-
-    #[test]
-    fn try_wire_commitlint_base_dedupes_rules_and_members_matching_base() {
-        let tmp = std::env::temp_dir().join(format!("pengj-wire-dedupe-{}", std::process::id()));
+    fn legacy_lefthook_layer_maps_to_gate() {
+        let tmp = std::env::temp_dir().join(format!("pengj-legacy-layer-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("gate")).unwrap();
         std::fs::write(
-            tmp.join("commitlint.base.js"),
-            "export default {\n  extends: ['@commitlint/config-conventional'],\n  rules: {\n    'body-max-line-length': [0],\n    'type-enum': [2, 'always', ['feat', 'fix']],\n  },\n};\n",
+            tpl.join("gate").join("layer.toml"),
+            "name = \"Gate\"\ndescription = \"x\"\n",
         )
         .unwrap();
-        // 用户配置：body-max-line-length / type-enum 与 base 完全等价（仅格式不同），
-        // scope-enum 是项目差异；extends 也与 base 相同
-        std::fs::write(
-            tmp.join("commitlint.config.js"),
-            "export default {\n  extends: [\"@commitlint/config-conventional\"],\n  rules: {\n    'body-max-line-length': [0],\n    'scope-enum': [2, 'always', ['core']],\n    \"type-enum\": [\n      2,\n      'always',\n      ['feat', 'fix'],\n    ],\n  },\n};\n",
-        )
-        .unwrap();
+        std::fs::write(tpl.join("gate").join(".gate.toml"), "mode = \"english\"\n").unwrap();
 
-        assert_eq!(
-            try_wire_commitlint_base(&tmp).unwrap(),
-            CommitlintWireOutcome::Wired
-        );
+        let templates = Templates::new(&tpl);
 
-        let wired = std::fs::read_to_string(tmp.join("commitlint.config.js")).unwrap();
-        assert!(wired.contains("import base from './commitlint.base.js';"));
-        assert!(wired.contains("const pengjUserConfig ="));
-        // 项目差异保留
-        assert!(wired.contains("'scope-enum'"));
-        // 等价条目已从用户配置中删除（全文只应出现在 base 引用与展开处，不再有字面量）
+        // 直接用历史层名解析：应映射到 gate，而不是报「未知层」
+        let ordered = templates
+            .resolve_layers(&["lefthook".to_string()])
+            .expect("lefthook 应映射到 gate");
+        assert_eq!(ordered, vec!["gate".to_string()]);
+
+        // 老项目的 manifest 写着 lefthook，update 后应变成 gate 且门禁文件被补齐
+        let proj = tmp.join("legacy");
+        std::fs::create_dir_all(&proj).unwrap();
+        let manifest = ProjectManifest {
+            tool: "pengj-templates".to_string(),
+            version: "0.0.0".to_string(),
+            project_name: "legacy".to_string(),
+            layers: vec!["lefthook".to_string()],
+            options: BTreeMap::new(),
+            generated_at: "2026-01-01T00:00:00Z".to_string(),
+            files: BTreeMap::new(),
+        };
+        manifest.save(&proj).unwrap();
+
+        let upd = update_project(&templates, &proj).expect("update 应成功");
         assert!(
-            !wired.contains("'body-max-line-length'"),
-            "等价 rules 条目应被去重，实际:\n{wired}"
+            upd.created.iter().any(|f| f == ".gate.toml"),
+            "门禁配置应被补齐，实际: {:?}",
+            upd.created
         );
+        let after = ProjectManifest::load(&proj).unwrap();
+        assert_eq!(after.layers, vec!["gate".to_string()], "层名应迁移到 gate");
+        assert!(proj.join(".gate.toml").is_file(), "门禁配置应落盘");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 钩子脚本必须带可执行位：git 在 Unix 上靠它决定跑不跑这个钩子，
+    /// 缺位就等于门禁没装，而且不会有任何报错。
+    #[cfg(unix)]
+    #[test]
+    fn generate_keeps_executable_bit_for_hook_scripts() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = std::env::temp_dir().join(format!("pengj-exec-bit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("gate").join(".githooks")).unwrap();
+        std::fs::write(
+            tpl.join("gate").join("layer.toml"),
+            "name = \"Gate\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        let hook = tpl.join("gate").join(".githooks").join("pre-commit");
+        std::fs::write(&hook, "#!/bin/sh\n# gate hook: the pre-commit stage.\n").unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let templates = Templates::new(&tpl);
+        let out_dir = tmp.join("out");
+        std::fs::create_dir_all(&out_dir).unwrap();
+        generate(
+            &templates,
+            "demo",
+            &["gate".to_string()],
+            BTreeMap::new(),
+            &out_dir,
+        )
+        .unwrap();
+
+        let generated = out_dir.join("demo").join(".githooks").join("pre-commit");
+        let mode = std::fs::metadata(&generated).unwrap().permissions().mode();
         assert!(
-            !wired.contains("@commitlint/config-conventional"),
-            "等价 extends 应被去重，实际:\n{wired}"
-        );
-        // 展开结构完整，仍是合法导出
-        assert!(wired.contains("...base.rules"));
-        assert!(wired.trim_end().ends_with("};"));
-
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
-    fn try_wire_commitlint_base_transforms_esm_object_config() {
-        let tmp = std::env::temp_dir().join(format!("pengj-wire-esm-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("commitlint.base.js"), "export default {};\n").unwrap();
-        std::fs::write(
-            tmp.join("commitlint.config.js"),
-            "export default {\n  extends: ['@commitlint/config-conventional'],\n  rules: { 'scope-enum': [2, 'always', ['core']] },\n};\n",
-        )
-        .unwrap();
-
-        assert_eq!(
-            try_wire_commitlint_base(&tmp).unwrap(),
-            CommitlintWireOutcome::Wired
-        );
-        // 二次调用幂等：已引用 base
-        assert_eq!(
-            try_wire_commitlint_base(&tmp).unwrap(),
-            CommitlintWireOutcome::AlreadyWired
-        );
-
-        let wired = std::fs::read_to_string(tmp.join("commitlint.config.js")).unwrap();
-        assert!(wired.starts_with("import base from './commitlint.base.js';"));
-        assert!(wired.contains("const pengjUserConfig ="));
-        assert!(wired.contains("'scope-enum'"), "用户规则保留");
-        assert!(wired.contains("...base.rules"));
-        assert!(wired.trim_end().ends_with("};"));
-        // 改写结果仍是合法 JS 导出结构：base 铺底在前、用户配置展开在后
-        let export_pos = wired.rfind("export default").unwrap();
-        let tail = &wired[export_pos..];
-        assert!(tail.find("...base,").unwrap() < tail.find("...pengjUserConfig,").unwrap());
-
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
-    fn try_wire_commitlint_base_requires_manual_for_cjs_or_non_literal() {
-        let tmp = std::env::temp_dir().join(format!("pengj-wire-cjs-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("commitlint.base.js"), "export default {};\n").unwrap();
-
-        // CJS module.exports：不动文件，报 ManualRequired
-        std::fs::write(
-            tmp.join("commitlint.config.js"),
-            "module.exports = { rules: {} };\n",
-        )
-        .unwrap();
-        assert_eq!(
-            try_wire_commitlint_base(&tmp).unwrap(),
-            CommitlintWireOutcome::ManualRequired
-        );
-        assert_eq!(
-            std::fs::read_to_string(tmp.join("commitlint.config.js")).unwrap(),
-            "module.exports = { rules: {} };\n",
-            "无法改写时不得动用户文件"
-        );
-
-        // export default 后不是对象字面量（工厂函数）：同样保守跳过
-        std::fs::write(
-            tmp.join("commitlint.config.js"),
-            "export default makeConfig();\n",
-        )
-        .unwrap();
-        assert_eq!(
-            try_wire_commitlint_base(&tmp).unwrap(),
-            CommitlintWireOutcome::ManualRequired
-        );
-
-        // 无 config 文件：NoConfig
-        std::fs::remove_file(tmp.join("commitlint.config.js")).unwrap();
-        assert_eq!(
-            try_wire_commitlint_base(&tmp).unwrap(),
-            CommitlintWireOutcome::NoConfig
+            mode & 0o111 != 0,
+            "生成的钩子脚本必须可执行，实际模式: {mode:o}"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
@@ -4955,66 +4423,6 @@ description = \"x\"
         assert!(!proj.join(".vscode").join("settings.json").exists());
 
         let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    #[test]
-    fn merge_json_update_keeps_user_values_and_fills_missing_only() {
-        let mut base: serde_json::Value = serde_json::from_str(
-            "{\"aaa\":\"keep\",\"scripts\":{\"build\":\"user-build\",\"prepare\":\"user-prepare\"},\"devDependencies\":{\"lefthook\":\"^2.1.10\"}}",
-        )
-        .unwrap();
-        let incoming: serde_json::Value = serde_json::from_str(
-            "{\"bbb\":\"tpl\",\"scripts\":{\"prepare\":\"tpl-prepare\",\"test\":\"tpl-test\"},\"devDependencies\":{\"lefthook\":\"latest\",\"@commitlint/cli\":\"latest\"}}",
-        )
-        .unwrap();
-
-        // 更新语义（overwrite_other=false）：模板拥有的脚本跟随模板，
-        // 其余脚本同名键用户优先、缺失才补；依赖类字段同名包版本一律以模板为准
-        merge_json(&mut base, &incoming, false);
-        assert_eq!(base["aaa"], "keep");
-        assert_eq!(base["bbb"], "tpl");
-        assert_eq!(base["scripts"]["prepare"], "tpl-prepare");
-        assert_eq!(base["scripts"]["build"], "user-build");
-        assert_eq!(base["scripts"]["test"], "tpl-test");
-        assert_eq!(
-            base["devDependencies"]["lefthook"], "latest",
-            "依赖版本跟随模板"
-        );
-        assert_eq!(
-            base["devDependencies"]["@commitlint/cli"], "latest",
-            "用户缺失的依赖补齐"
-        );
-
-        // 生成语义（overwrite_other=true，层间合并）：后来层覆盖
-        let mut fresh = serde_json::json!({});
-        merge_json(&mut fresh, &incoming, true);
-        assert_eq!(fresh["scripts"]["prepare"], "tpl-prepare");
-    }
-
-    #[test]
-    fn merge_json_update_refreshes_hook_scripts_but_keeps_custom_scripts() {
-        // 回归：下游项目里的旧 prepare 会吞掉 lefthook 安装失败，只补缺失键修不好它；
-        // 用户自己加的脚本不受影响
-        let mut base: serde_json::Value = serde_json::from_str(
-            r#"{"scripts":{"prepare":"legacy-prepare","lefthook:install":"lefthook install","commitlint":"commitlint","deploy":"deploy --prod"}}"#,
-        )
-        .unwrap();
-        let incoming: serde_json::Value = serde_json::from_str(
-            r#"{"scripts":{"prepare":"node scripts/install-hooks.mjs","lefthook:install":"node scripts/install-hooks.mjs","commitlint":"commitlint"}}"#,
-        )
-        .unwrap();
-
-        merge_json(&mut base, &incoming, false);
-        assert_eq!(base["scripts"]["prepare"], "node scripts/install-hooks.mjs");
-        assert_eq!(
-            base["scripts"]["lefthook:install"],
-            "node scripts/install-hooks.mjs"
-        );
-        assert_eq!(base["scripts"]["commitlint"], "commitlint");
-        assert_eq!(
-            base["scripts"]["deploy"], "deploy --prod",
-            "用户自定义脚本不应被模板覆盖"
-        );
     }
 
     #[test]
@@ -5224,11 +4632,11 @@ description = \"x\"
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
-    /// lefthook 层负责代码语言守卫：脚本随层生成、钩子按层挂载、规范条目随
-    /// `chinese_programming` 与 `skill_lang` 渲染；脚本本身与语言轴无关（en/zh 字节一致），
-    /// 因为它读取 manifest 自行判定方向。
+    /// gate 层负责代码语言守卫：`.gate.toml` 按 `chinese_programming` / `commit_zh`
+    /// 渲染出配置与提交规则，`.githooks/*` 挂上钩子，AGENTS.md 的规范条目随层出现；
+    /// 钩子脚本本身与语言轴无关（只跟随 skill_lang 的注释语言）。
     #[test]
-    fn lefthook_layer_ships_code_language_guard() {
+    fn gate_layer_ships_code_language_guard() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
@@ -5240,63 +4648,80 @@ description = \"x\"
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
 
-        let layers: Vec<String> = ["agent", "lefthook", "rust-workspace"]
+        let layers: Vec<String> = ["agent", "gate", "rust-workspace"]
             .iter()
             .map(|s| (*s).to_string())
             .collect();
         let mut zh_opts = BTreeMap::new();
         zh_opts.insert("chinese_programming".to_string(), serde_json::json!(false));
         zh_opts.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        zh_opts.insert("commit_zh".to_string(), serde_json::json!(true));
         generate(&templates, "guard_zh", &layers, zh_opts, &tmp).unwrap();
 
         let mut en_opts = BTreeMap::new();
         en_opts.insert("chinese_programming".to_string(), serde_json::json!(true));
         en_opts.insert("skill_lang".to_string(), serde_json::json!("en"));
+        en_opts.insert("commit_zh".to_string(), serde_json::json!(false));
         generate(&templates, "guard_en", &layers, en_opts, &tmp).unwrap();
 
         let zh_root = tmp.join("guard_zh");
         let en_root = tmp.join("guard_en");
 
-        let zh_script = std::fs::read_to_string(zh_root.join("scripts/check-lang.mjs")).unwrap();
-        let en_script = std::fs::read_to_string(en_root.join("scripts/check-lang.mjs")).unwrap();
-        assert_eq!(zh_script, en_script, "语言守卫脚本不应随语言轴变化");
-        assert!(zh_script.contains("lang-allow:"));
-        assert!(zh_script.contains("lang-ok:"));
-        assert!(zh_script.contains("--self-test"));
-        assert!(zh_script.contains("chinese_programming"));
+        // -- .gate.toml：代码语言与提交主题语言两条轴都按选项渲染 --
+        let zh_config = std::fs::read_to_string(zh_root.join(".gate.toml")).unwrap();
+        assert!(
+            zh_config.contains("mode = \"english\""),
+            "chinese_programming=false 应渲染成 english，实际:\n{zh_config}"
+        );
+        assert!(
+            zh_config.contains("commit.subject_lang = \"zh\""),
+            "commit_zh=true 应渲染成 zh，实际:\n{zh_config}"
+        );
+        assert!(zh_config.contains("commit.types = ["));
+        assert!(zh_config.contains("commit.scopes = []"));
 
-        let hooks = std::fs::read_to_string(zh_root.join("lefthook.yml")).unwrap();
-        assert!(hooks.contains("lang-guard"));
-        assert!(hooks.contains("node scripts/check-lang.mjs {staged_files}"));
-        assert!(hooks.contains("rustfmt"), "rust 层应保留 rustfmt 命令");
+        let en_config = std::fs::read_to_string(en_root.join(".gate.toml")).unwrap();
+        assert!(
+            en_config.contains("mode = \"chinese\""),
+            "chinese_programming=true 应渲染成 chinese，实际:\n{en_config}"
+        );
+        assert!(
+            en_config.contains("commit.subject_lang = \"en\""),
+            "commit_zh=false 应渲染成 en，实际:\n{en_config}"
+        );
+        assert!(
+            !contains_cjk(&en_config),
+            "英文项目的 .gate.toml 不得含汉字，实际:\n{en_config}"
+        );
 
-        // 非 Rust 项目不挂语言守卫：没有 .rs 可扫，钩子只是噪声。
-        generate(
-            &templates,
-            "guard_non_rust",
-            &["agent".to_string(), "lefthook".to_string()],
-            BTreeMap::new(),
-            &tmp,
-        )
-        .unwrap();
-        let non_rust_hooks =
-            std::fs::read_to_string(tmp.join("guard_non_rust").join("lefthook.yml")).unwrap();
-        assert!(!non_rust_hooks.contains("lang-guard"));
-        assert!(!non_rust_hooks.contains("pre-commit"));
+        // -- 钩子脚本：随层生成，带 gate 标记 --
+        let zh_hook =
+            std::fs::read_to_string(zh_root.join(".githooks").join("pre-commit")).unwrap();
+        let en_hook =
+            std::fs::read_to_string(en_root.join(".githooks").join("pre-commit")).unwrap();
+        assert!(zh_hook.contains("gate hook"), "钩子必须带 gate 标记");
+        assert!(zh_hook.contains("hook pre-commit"));
+        assert!(en_hook.contains("gate hook"));
+        assert!(
+            !contains_cjk(&en_hook),
+            "英文项目的钩子不得含汉字，实际:\n{en_hook}"
+        );
+        let zh_msg_hook =
+            std::fs::read_to_string(zh_root.join(".githooks").join("commit-msg")).unwrap();
+        assert!(zh_msg_hook.contains("hook commit-msg"));
 
-        let pkg = std::fs::read_to_string(zh_root.join("package.json")).unwrap();
-        assert!(pkg.contains("\"lang:check\": \"node scripts/check-lang.mjs\""));
-
+        // -- 规范条目随层出现 --
         let zh_agents = std::fs::read_to_string(zh_root.join("AGENTS.md")).unwrap();
         assert!(zh_agents.contains("代码语言守卫"));
         assert!(!zh_agents.contains("Code-language guard"));
+        assert!(zh_agents.contains("just gate-check"));
 
         let en_agents = std::fs::read_to_string(en_root.join("AGENTS.md")).unwrap();
         assert!(en_agents.contains("Code-language guard"));
         // 中文编程本身就会在示例里给出中文标识符（如 `HttpRequest快照`），这里只校验文案语言。
         assert!(!en_agents.contains("代码语言守卫"));
 
-        // 没有 lefthook 层的项目不该出现这条规范（也就没有脚本可跑）
+        // 没有 gate 层的项目不该出现这条规范（也就没有门禁可跑）
         let mut bare_opts = BTreeMap::new();
         bare_opts.insert("skill_lang".to_string(), serde_json::json!("zh"));
         generate(
@@ -5310,6 +4735,8 @@ description = \"x\"
         let bare_agents =
             std::fs::read_to_string(tmp.join("guard_bare").join("AGENTS.md")).unwrap();
         assert!(!bare_agents.contains("代码语言守卫"));
+        assert!(!tmp.join("guard_bare").join(".gate.toml").exists());
+        assert!(!tmp.join("guard_bare").join(".githooks").exists());
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -5811,8 +5238,8 @@ body
     }
 
     /// `skill_lang` 是全部模板层「面向人的文案」语言轴：`en` 时生成的所有文本文件
-    /// （just/commitlint/Cargo/技能/AGENTS 等）都不得出现汉字；`zh` 时保持既有中文文案。
-    /// `commit_zh` 独立控制 commitlint 的 `subject-language` 规则值。
+    /// （just/gate/Cargo/技能/AGENTS 等）都不得出现汉字；`zh` 时保持既有中文文案。
+    /// `commit_zh` 独立控制门禁的提交主题语言规则值（`.gate.toml` 的 `commit.subject_lang`）。
     #[test]
     fn skill_lang_drives_every_generated_file_language() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -5832,7 +5259,7 @@ body
             "just",
             "bque",
             "vscode",
-            "lefthook",
+            "gate",
             "rust-workspace",
         ]
         .iter()
@@ -5846,30 +5273,17 @@ body
             generate(&templates, name, &layers, options, &tmp).unwrap();
         }
 
-        let zh_lint =
-            std::fs::read_to_string(tmp.join("lang_zh").join("commitlint.base.js")).unwrap();
-        assert!(zh_lint.contains("提交标题必须使用中文撰写"));
-        // 语言变体：中文项目里不得残留英文校验分支（死代码）
-        assert!(
-            !zh_lint.contains("Commit subject must be in English"),
-            "zh 项目的 commitlint 不应包含英文校验分支"
-        );
+        let zh_lint = std::fs::read_to_string(tmp.join("lang_zh").join(".gate.toml")).unwrap();
+        assert!(contains_cjk(&zh_lint), "zh 项目应保留中文文案");
         let zh_just = std::fs::read_to_string(tmp.join("lang_zh").join("just/bque.just")).unwrap();
         assert!(contains_cjk(&zh_just), "zh 项目应保留中文注释");
 
-        let en_lint =
-            std::fs::read_to_string(tmp.join("lang_en").join("commitlint.base.js")).unwrap();
-        assert!(en_lint.contains("Commit subject must be in English"));
-        assert!(!contains_cjk(&en_lint), "英文项目 commitlint 不得含汉字");
-        // 语言变体：英文项目里不得残留中文校验分支（死代码），也不得落下变体文件本身
-        assert!(
-            !en_lint.contains("提交标题必须使用中文撰写"),
-            "en 项目的 commitlint 不应包含中文校验分支"
-        );
-        assert!(
-            !tmp.join("lang_en").join("commitlint.base.en.js").exists(),
-            "语言变体文件名不应出现在产物里"
-        );
+        let en_lint = std::fs::read_to_string(tmp.join("lang_en").join(".gate.toml")).unwrap();
+        assert!(!contains_cjk(&en_lint), "英文项目的门禁配置不得含汉字");
+        let en_hooks =
+            std::fs::read_to_string(tmp.join("lang_en").join(".githooks").join("pre-commit"))
+                .unwrap();
+        assert!(!contains_cjk(&en_hooks), "英文项目的钩子不得含汉字");
 
         let mut files = Vec::new();
         collect_files(&tmp.join("lang_en"), &mut files);

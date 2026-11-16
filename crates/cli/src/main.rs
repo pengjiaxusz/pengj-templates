@@ -44,7 +44,7 @@ enum Command {
     Create {
         /// 项目名
         name: String,
-        /// 选择的层，逗号分隔，如 rust,lefthook
+        /// 选择的层，逗号分隔，如 rust,gate
         #[arg(short, long, value_delimiter = ',')]
         layers: Vec<String>,
         /// Rust edition（仅 rust 层生效；允许 2015/2018/2021/2024）
@@ -65,7 +65,7 @@ enum Command {
         /// 项目文案语言：zh 中文 / en 英文（技能文档及各层注释、报错、日志）
         #[arg(long, default_value = "zh")]
         skill_lang: String,
-        /// 提交信息是否用中文（决定 commitlint 规则与提交规范文档；默认开，传 --no-commit-zh 关闭）
+        /// 提交信息是否用中文（决定门禁的提交主题语言规则与提交规范文档；默认开，传 --no-commit-zh 关闭）
         #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
         commit_zh: bool,
         /// 阶段性完工与收尾时是否要求自动提交并推送（仅 agent 层生效；默认关，传 --commit-and-push 开启）
@@ -122,7 +122,7 @@ enum Command {
         /// 目标项目目录（默认当前目录）
         #[arg(short, long, default_value = ".")]
         dir: PathBuf,
-        /// 选择的层，逗号分隔，如 common,lefthook,agent,rust-workspace
+        /// 选择的层，逗号分隔，如 common,gate,agent,rust-workspace
         #[arg(short, long, value_delimiter = ',')]
         layers: Vec<String>,
         /// 强制覆盖已有 manifest
@@ -146,7 +146,7 @@ enum Command {
         /// 项目文案语言：zh 中文 / en 英文（技能文档及各层注释、报错、日志）
         #[arg(long, default_value = "zh")]
         skill_lang: String,
-        /// 提交信息是否用中文（决定 commitlint 规则与提交规范文档；默认开，传 --no-commit-zh 关闭）
+        /// 提交信息是否用中文（决定门禁的提交主题语言规则与提交规范文档；默认开，传 --no-commit-zh 关闭）
         #[arg(long = "no-commit-zh", action = clap::ArgAction::SetFalse, default_value_t = true)]
         commit_zh: bool,
         /// 阶段性完工与收尾时是否要求自动提交并推送（默认关，传 --commit-and-push 开启）
@@ -160,6 +160,16 @@ enum Command {
     Mcp {
         #[command(subcommand)]
         cmd: McpCommand,
+    },
+    /// 提交门禁：约定式提交校验、代码语言守卫与 git 钩子安装
+    ///
+    /// 参数原样透传给 gate：
+    /// `audit`（默认）、`fmt`、`commit-msg <文件>`、`hook pre-commit|commit-msg`、
+    /// `hooks install`、`selftest`。
+    Gate {
+        /// 透传给 gate 的参数
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 }
 
@@ -233,6 +243,15 @@ fn main() -> anyhow::Result<()> {
     // mcp 子命令作用于机器上的客户端配置，不依赖模板目录，提前分发
     if let Command::Mcp { cmd } = &cli.command {
         return cmd_mcp(cmd.clone());
+    }
+    // gate 子命令作用于当前仓库的门禁检查，同样不依赖模板目录，提前分发
+    if let Command::Gate { args } = &cli.command {
+        let code =
+            pengj_gate::cli::run(args).map_err(|message| anyhow::anyhow!("[gate] {message}"))?;
+        if code != 0 {
+            std::process::exit(i32::from(code));
+        }
+        return Ok(());
     }
     let templates = load_templates(&cli.templates)?;
     match cli.command {
@@ -347,6 +366,7 @@ fn main() -> anyhow::Result<()> {
             skills.as_deref(),
         ),
         Command::Mcp { .. } => unreachable!("mcp 子命令已在加载模板前分发"),
+        Command::Gate { .. } => unreachable!("gate 子命令已在加载模板前分发"),
     }
 }
 
@@ -672,7 +692,7 @@ fn cmd_adopt(
     skills: Option<&[String]>,
 ) -> anyhow::Result<()> {
     if layers.is_empty() {
-        anyhow::bail!("必须指定至少一个层，如 --layers common,lefthook,agent");
+        anyhow::bail!("必须指定至少一个层，如 --layers common,gate,agent");
     }
     let mut selected_skills: Vec<String> = Vec::new();
     if let Some(s_list) = skills {
@@ -737,9 +757,6 @@ fn cmd_adopt(
     }
     for f in &report.needs_review {
         println!("  [待复核] {f}");
-    }
-    for s in &report.manual_steps {
-        println!("  [手动步骤] {s}");
     }
     Ok(())
 }
