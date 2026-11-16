@@ -7,7 +7,6 @@
     "just",
     "rust-workspace",
     "agent",
-    "lefthook",
     "bque"
   ],
   "options": {
@@ -63,11 +62,8 @@
     ".gitattributes": "9b5d7a8f69f9a26f47aad417245d19bac459dd2ea87a806a7aa405de521a35c0",
     ".gitignore": "10fc518efad9b43b5cff3dea30046f7f86a78b9aa771837d3768792ee50b0438",
     "AGENTS.md": "b09436fb2946b5f35dd99c3fdf252bc13b2e97bf8a03d03b31a9e278762e7006",
-    "commitlint.base.js": "0d81be3222e681a569c4b9c0a39a2cc93c68190252bdbd652d15e187a2f0de42",
     "just\\bque.just": "cf01148f49e980d5df19c46e7c616cc3812cd3a52b613779da1f4aa918b3f487",
     "just\\rust-workspace.just": "5aae64c139f55f40f3cc65705d436ee549fb650d84038ef885f7d4d07f5fb87c",
-    "justfile": "73a694e438e196c461ea5da13f6c46fbd0b064111aebf2797fd4ed57147d08cd",
-    "package.json": "b76a34e2e144880a016450d702e6630097a60d53ae9cb7f9e71c49247994681c",
-    "scripts\\install-hooks.mjs": "617941adf71bde9644d6ff833ffe373298f77025497eb2c12f5c895d6b8c491f"
+    "justfile": "73a694e438e196c461ea5da13f6c46fbd0b064111aebf2797fd4ed57147d08cd"
   }
 }

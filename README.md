@@ -140,6 +140,21 @@ templates/        # 层模板（common/ rust/ frontend/ ...），编译期嵌入
 ## 开发
 
 ```bash
+just setup            # 克隆后一键初始化：构建 gate、安装 git 钩子并验证编译
 just check            # Rust 全部编译检查
-just frontend-build   # 前端构建
+just frontend-build   # 前端构建（自动先构建组件库 cha-set）
 ```
+
+### 本仓库的环境构成
+
+本仓库**没有 pnpm 工作区根**——`package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` 都不在仓库根目录，前端是 `crates/app` 下的独立包。
+
+| 目录 | 用途 | 依赖安装 |
+|---|---|---|
+| `crates/app` | Tauri GUI 的 React 前端 | `pnpm --dir crates/app install` |
+| `submodules/cha-set` | 组件库（git submodule，自带工作区） | `pnpm --dir submodules/cha-set install` |
+| `tools/gate` | 提交门禁（独立 Rust crate，不在 workspace 里） | 无（零第三方依赖） |
+
+组件库 `cha-set` 的 `dist` 是构建产物、不入版本库，所以编译前端前必须先构建它：`just cha-set-build`（`frontend-build` 会自动先跑）。`crates/app` 通过 `link:` 协议引用它，保持软链，因此组件库改动后无需重装依赖，只需重新构建。
+
+提交门禁由 `tools/gate` 承担（Rust 实现，无 node 依赖）：`just gate-hooks` 安装 git 钩子，规则见 `.gate.toml`。

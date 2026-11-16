@@ -1,0 +1,6 @@
+# pnpm 设置：放行 esbuild 的构建脚本（它要装平台二进制），否则 pnpm install 会拦截报错。
+#
+# 这个文件不含 packages 字段，因此 crates/app 不是 pnpm 工作区，只是一个普通包。
+# pnpm 11 起构建脚本的放行名单只认 pnpm-workspace.yaml，不再读 package.json 的 pnpm 字段。
+allowBuilds:
+  esbuild: true

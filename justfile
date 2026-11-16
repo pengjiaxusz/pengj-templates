@@ -27,6 +27,7 @@ default:
 # 设置默认 shell 为 pwsh 7（本机默认）
 
 # 克隆后一键初始化：构建 gate、安装 git 钩子并验证编译
+# 前端依赖不在这里装（仓库已无 pnpm 工作区根，前端是 crates/app 独立包），需要时用 `just frontend-install`。
 setup:
     cargo build --manifest-path tools/gate/Cargo.toml
     cargo run -q --manifest-path tools/gate/Cargo.toml -- hooks install
@@ -75,12 +76,17 @@ build FLAGS="":
 
 # ---------- 前端 ----------
 
+# 构建组件库 cha-set（dist 不入版本库，必须先构建才能编译前端）
+cha-set-build:
+    pnpm --dir submodules/cha-set install --frozen-lockfile
+    pnpm --dir submodules/cha-set --filter @chahu/cha-set build
+
 # 安装前端依赖
 frontend-install:
     pnpm --dir crates/app install
 
 # 前端构建（tsc + vite，受 bque 排队管控）
-frontend-build:
+frontend-build: cha-set-build
     @bque run -- pnpm --dir crates/app build
 
 # 前端 dev server（浏览器调试用，纯前端无 Tauri 环境）

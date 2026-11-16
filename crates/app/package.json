@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.60.0-beta.1",
   "type": "module",
+  "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -10,7 +14,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@chahu/cha-set": "workspace:*",
+    "@chahu/cha-set": "link:../../submodules/cha-set/packages/react",
     "@fontsource-variable/geist": "^5.3.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",

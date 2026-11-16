@@ -51,11 +51,10 @@ jobs:
               - 'crates/app/src/**'
               - 'crates/app/index.html'
               - 'crates/app/package.json'
+              - 'crates/app/pnpm-lock.yaml'
+              - 'crates/app/pnpm-workspace.yaml'
               - 'crates/app/vite.config.*'
               - 'crates/app/tsconfig*.json'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
 
   rust:
     needs: changes
@@ -104,13 +103,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # 前端依赖 submodules/cha-set（git submodule），必须一起拉下来。
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
+          cache-dependency-path: crates/app/pnpm-lock.yaml
+      # cha-set 的 dist 不入版本库（构建产物），必须先构建，
+      # 否则 crates/app 的 tsc 找不到 @chahu/cha-set 的类型声明。
+      - name: 构建组件库 cha-set
+        working-directory: submodules/cha-set
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @chahu/cha-set build
       - name: 安装前端依赖
-        run: pnpm install --frozen-lockfile
+        run: pnpm --dir crates/app install --frozen-lockfile
       - name: 类型检查 + 前端构建
         run: pnpm --dir crates/app build

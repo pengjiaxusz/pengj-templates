@@ -89,6 +89,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
+          # 前端依赖 submodules/cha-set（git submodule），必须一起拉下来。
+          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - name: 添加 Rust 目标
         run: rustup target add ${{ matrix.rust_target }}
@@ -109,8 +111,16 @@ jobs:
           # pnpm 11 需 Node >= 22.13
           node-version: 24
           cache: pnpm
+          cache-dependency-path: crates/app/pnpm-lock.yaml
+      # cha-set 的 dist 不入版本库（构建产物），必须先构建，
+      # 否则 crates/app 的 tsc 找不到 @chahu/cha-set 的类型声明。
+      - name: 构建组件库 cha-set
+        working-directory: submodules/cha-set
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @chahu/cha-set build
       - name: 安装前端依赖
-        run: pnpm install
+        run: pnpm --dir crates/app install --frozen-lockfile
       # Windows 的 MSI/NSIS 只接受 x.y.z 纯数字版本号，
       # 若 tag 是 pre-release（如 0.6.0-beta.1），剥离后缀避免打包报错；不影响产物文件名/release 名。
       - name: Windows 剥离版本号 pre-release 后缀
