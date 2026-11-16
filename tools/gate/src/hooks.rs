@@ -56,13 +56,21 @@ pub fn install() -> Result<(), String> {
         ));
     }
 
+    // Record the executable bit in the index. A fresh clone on Linux runs the
+    // hooks straight from the working tree, and without the bit git skips
+    // them silently, which turns the gate off without any error.
     for hook in HOOKS {
         let relative = format!(".githooks/{hook}");
         if let Some(mode) = crate::git::hook_mode(&relative) {
             if !mode.starts_with("1007") {
-                eprintln!(
-                    "[gate] warning: {relative} is recorded as {mode}; a Linux clone would skip it.\n  fix with: git update-index --chmod=+x {relative}"
-                );
+                crate::git::run(&["update-index", "--chmod=+x", &relative])?;
+                let updated = crate::git::hook_mode(&relative).unwrap_or_default();
+                if !updated.starts_with("1007") {
+                    return Err(format!(
+                        "{relative} is recorded as {updated}; a Linux clone would skip it.\n  fix with: git update-index --chmod=+x {relative}"
+                    ));
+                }
+                println!("[gate] recorded the executable bit for {relative}");
             }
         }
     }
