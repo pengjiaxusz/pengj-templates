@@ -128,8 +128,7 @@ git status; git --no-pager diff --stat; git --no-pager diff --cached --stat
 # 2. 构建与静态检查（按改动面选择，改 Rust/模板/配置必跑）
 cargo fmt --check 2>$null; cargo clippy --workspace --all-targets -- -D warnings 2>$null
 # 3. 架构文档一致性判断（见下方“领域完整性检查”）
-# 4. 前端改动时：pnpm --dir crates/app build
-# 5. 模板改动时：cargo run -q -p pengj-templates-cli -- create <tmp> --layers agent --skills git-workflow,write-docs --output <临时目录> 校验渲染
+# 4. 模板改动时：cargo run -q -p pengj-templates-cli -- create <tmp> --layers agent --skills git-workflow,write-docs --output <临时目录> 校验渲染
 ```
 
 ### 3. 领域完整性检查
@@ -138,8 +137,8 @@ cargo fmt --check 2>$null; cargo clippy --workspace --all-targets -- -D warnings
 | --- | --- | --- |
 | 1 | 是否触及架构（新增/调整模块边界、数据流、生命周期、系统拓扑、跨层契约、核心不变式）？ | `docs/architecture/README.md` 索引与对应 `docs/architecture/<domain>.md` 是否已同步；必要时按 `docs/architecture/README.md` 的编写规范更新文档 |
 | 2 | 是否改动模板层/引擎核心契约（`crates/core` 合并渲染、manifest、层依赖、受管块/TOML 合并）？ | `AGENTS.md` / `templates/README.md` / 层 `layer.toml` 说明是否同步；是否跑通端到端 `create`/`update` 验证 |
-| 3 | 是否新增对外接口/参数（CLI args、GUI invoke、生成选项 `options`、技能列表）？ | `README.md` / `--help` / GUI 文案是否完全自解释；`commitlint.config.js` scope 白名单是否更新 |
-| 4 | 是否改动构建/依赖/工具链（Cargo/pnpm/lefthook/CI）？ | `cargo check --workspace` / `cargo test --workspace` / `pnpm --dir crates/app build` / `just ci` 是否通过 |
+| 3 | 是否新增对外接口/参数（CLI args、生成选项 `options`、技能列表）？ | `README.md` / `--help` 是否完全自解释；`.gate.toml` 的 `commit.scopes` 白名单是否更新 |
+| 4 | 是否改动构建/依赖/工具链（Cargo / 提交门禁 / CI）？ | `cargo check --workspace` / `cargo test --workspace` / `just ci` 是否通过 |
 
 判定表速查：
 
@@ -147,7 +146,7 @@ cargo fmt --check 2>$null; cargo clippy --workspace --all-targets -- -D warnings
 | --- | --- |
 | `crates/core/**`、`templates/**/layer.toml`、`crates/core/src/render.rs`/`toml_merge.rs`/`engine.rs` | 架构文档 + 模板文档 + 端到端验证 |
 | `templates/agent/**`、`.agents/skills/**`、技能 `SKILL.md` / `AGENTS.md` | 技能双语分支与托管块完整性；架构技能关联时检查架构索引是否登记 |
-| `crates/cli/**`、`crates/app/src-tauri/**`、`crates/app/src/**` | 对外接口文档与构建验证 |
+| `crates/cli/**`、`crates/gate/**` | 对外接口文档与构建验证 |
 | `docs/architecture/**` | 索引 `docs/architecture/README.md` 路由是否可达（渐进式披露不堆细节） |
 | 纯测试、纯格式化、单函数修 bug 且不改行为/契约 | 无（快速路径） |
 

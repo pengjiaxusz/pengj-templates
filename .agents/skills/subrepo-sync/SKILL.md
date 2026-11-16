@@ -92,7 +92,7 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 ### 1. 托管子仓库登记
 | 子仓库名称 | 相对路径 | 依赖模式 (Submodule / FetchContent / 本地) | 上游跟踪分支 |
 | :--- | :--- | :--- | :--- |
-| `cha-set` | `submodules/cha-set` | Git Submodule | `origin/main` |
+| （本仓库当前无托管子仓库） | — | — | — |
 
 ### 2. 宿主架构红线
 - **单真相源驱动**：严禁在依赖缓存目录中直接修改或分叉；所有通用组件与契约必须源自 upstream。
@@ -102,7 +102,6 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 ```powershell
 # 静态与编译检查
 # cargo check --workspace
-# pnpm build
 
 # 自动化测试与卫生门禁
 # cargo test --workspace

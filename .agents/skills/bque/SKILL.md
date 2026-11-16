@@ -112,9 +112,7 @@ bque clean
 | 任务 | 入口 | 排队方式 |
 | :--- | :--- | :--- |
 | Rust 编译检查 / clippy / 单测 / 基准 | `just check` / `just clippy` / `just test` / `just bench` | `bque run` / `bque bench` |
-| 前端构建（tsc + vite） | `just frontend-build` | `bque run -- pnpm --dir crates/app build` |
-| Tauri 安装包 | `just tauri-build` | `bque run -- pnpm --dir crates/app tauri build` |
-| 全量 CI | `just ci` | 五步依次取锁（`fmt check clippy test frontend-build`） |
+| 全量 CI | `just ci` | 四步依次取锁（`fmt check clippy test`） |
 
 - `just create` / `just update` / `just mcp` / `just layers` 是轻量 CLI 命令，属旁路直跑，不排队。
 - 模板层改动后跑 `cargo run -q -p pengj-templates-cli -- create ... --output target/e2e` 端到端验证；`audit` 巡检半接入与 justfile 托管块。
