@@ -8,16 +8,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "prepare": "node scripts/install-hooks.mjs",
-    "lefthook:install": "node scripts/install-hooks.mjs",
-    "commitlint": "commitlint",
+    "prepare": "cargo run -q --manifest-path tools/gate/Cargo.toml -- hooks install",
+    "gate:install": "cargo run -q --manifest-path tools/gate/Cargo.toml -- hooks install",
+    "gate:audit": "cargo run -q --manifest-path tools/gate/Cargo.toml -- audit",
     "mcp:doctor": "node .agents/skills/mcp-bootstrap/scripts/ensure-mcp.mjs doctor",
     "mcp:install": "node .agents/skills/mcp-bootstrap/scripts/ensure-mcp.mjs install",
     "mcp:sync": "node .agents/skills/mcp-bootstrap/scripts/ensure-mcp.mjs sync --write"
-  },
-  "devDependencies": {
-    "@commitlint/cli": "latest",
-    "@commitlint/config-conventional": "latest",
-    "lefthook": "latest"
   }
 }

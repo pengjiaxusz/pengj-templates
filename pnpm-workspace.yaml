@@ -4,7 +4,7 @@ packages:
   - submodules/cha-set/spec
   - submodules/cha-set/packages/*
 
-# 放行 lefthook 的构建脚本（下载平台二进制）— pnpm 11 使用 allowBuilds
+# 放行构建脚本（下载平台二进制）— pnpm 11 使用 allowBuilds
 allowBuilds:
-  lefthook: true
   esbuild: true
+  lefthook: set this to true or false
