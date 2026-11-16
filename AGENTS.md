@@ -21,9 +21,9 @@
 - type：`feat fix docs style refactor perf test build ci chore revert`。
 - **回复前提交门禁（硬性拦截，禁止堆积）**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（检查、拆分、提交并 git push）作为最后一个工具调用步骤**。严禁在工作区留存已验证修改直接结束回复；严禁在多轮对话中拖延堆积或等待用户催促 `/commit`；在 `/plan` 等规划模式下生成 `walkthrough.md` 后，必须紧随其后执行提交与推送，不可中途停顿。
 - 提交前跑「提交前完整性检查」（构建验证 / 文档同步 / 格式与命名）；无关改动拆分多次提交；**提交后立即 push**。
-- 提交由 lefthook + commitlint 校验，格式不符会被拦截。
+- 提交由 `tools/gate` 校验（Rust 实现，无 node 依赖），格式不符会被拦截；规则见 `.gate.toml`。
 
-> EN: Conventional commits, Chinese subject. Type/scope whitelisted (see commitlint.config.js). Pre-response commit gate: whenever files are modified and verified in a turn, commit & push must be the final tool-calling step before outputting the final reply to user. Split unrelated changes; push immediately after commit; hooks enforce format.
+> EN: Conventional commits, Chinese subject. Type/scope whitelisted (see `.gate.toml`). Pre-response commit gate: whenever files are modified and verified in a turn, commit & push must be the final tool-calling step before outputting the final reply to user. Split unrelated changes; push immediately after commit; hooks enforce format.
 
 ## Rust 规范 / Rust (crates/core, crates/cli, crates/mcp, src-tauri)
 

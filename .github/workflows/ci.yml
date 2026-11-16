@@ -43,6 +43,7 @@ jobs:
               - 'crates/mcp/**'
               - 'crates/app/src-tauri/**'
               - 'templates/**'
+              - 'tools/gate/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - '.github/workflows/*.yml'
@@ -92,6 +93,10 @@ jobs:
         run: cargo build --workspace
       - name: 测试
         run: cargo test --workspace
+      # 提交门禁是独立 crate（tools/gate），不在 workspace 里，需要单独测。
+      # 它的语料来自真实 commitlint 的裁决，测试保证门禁不会比它替换掉的工具更松。
+      - name: 测试提交门禁
+        run: cargo test --manifest-path tools/gate/Cargo.toml
 
   frontend:
     needs: changes
