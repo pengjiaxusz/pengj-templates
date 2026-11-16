@@ -22,15 +22,13 @@ concurrency:
 
 jobs:
   # 先判定本次提交改了什么，只跑对应模块的检查：
-  #   rust      → 引擎/CLI/Tauri/模板/构建配置
-  #   frontend  → Tauri GUI 的 React 前端
+  #   rust → 引擎/CLI/模板/构建配置
   # 两者都没改（例如只动了 release-please 配置）→ 本 job 直接通过，下面两个 job 跳过。
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
-      frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -41,20 +39,11 @@ jobs:
               - 'crates/core/**'
               - 'crates/cli/**'
               - 'crates/mcp/**'
-              - 'crates/app/src-tauri/**'
               - 'templates/**'
-              - 'tools/gate/**'
+              - 'crates/gate/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - '.github/workflows/*.yml'
-            frontend:
-              - 'crates/app/src/**'
-              - 'crates/app/index.html'
-              - 'crates/app/package.json'
-              - 'crates/app/pnpm-lock.yaml'
-              - 'crates/app/pnpm-workspace.yaml'
-              - 'crates/app/vite.config.*'
-              - 'crates/app/tsconfig*.json'
 
   rust:
     needs: changes
@@ -65,18 +54,6 @@ jobs:
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
-      # Tauri v2 的 Linux 系统依赖（crates/app 编译需要 GTK/WebKit 等）
-      - name: 安装 Tauri Linux 依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl wget file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -90,37 +67,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: 构建
         run: cargo build --workspace
+      # 提交门禁（crates/gate）已是 workspace member，随 --workspace 一起测。
+      # 它的语料来自真实 commitlint 的裁决，测试保证门禁不会比它替换掉的工具更松。
       - name: 测试
         run: cargo test --workspace
-      # 提交门禁是独立 crate（tools/gate），不在 workspace 里，需要单独测。
-      # 它的语料来自真实 commitlint 的裁决，测试保证门禁不会比它替换掉的工具更松。
-      - name: 测试提交门禁
-        run: cargo test --manifest-path tools/gate/Cargo.toml
-
-  frontend:
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      # 前端依赖 submodules/cha-set（git submodule），必须一起拉下来。
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: crates/app/pnpm-lock.yaml
-      # cha-set 的 dist 不入版本库（构建产物），必须先构建，
-      # 否则 crates/app 的 tsc 找不到 @chahu/cha-set 的类型声明。
-      - name: 构建组件库 cha-set
-        working-directory: submodules/cha-set
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --filter @chahu/cha-set build
-      - name: 安装前端依赖
-        run: pnpm --dir crates/app install --frozen-lockfile
-      - name: 类型检查 + 前端构建
-        run: pnpm --dir crates/app build

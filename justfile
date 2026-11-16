@@ -13,6 +13,7 @@ import 'just/bque.just'
 
 
 
+
 # 列出所有可用任务
 default:
     @just --list
@@ -27,22 +28,21 @@ default:
 # 设置默认 shell 为 pwsh 7（本机默认）
 
 # 克隆后一键初始化：构建 gate、安装 git 钩子并验证编译
-# 前端依赖不在这里装（仓库已无 pnpm 工作区根，前端是 crates/app 独立包），需要时用 `just frontend-install`。
 setup:
-    cargo build --manifest-path tools/gate/Cargo.toml
-    cargo run -q --manifest-path tools/gate/Cargo.toml -- hooks install
+    cargo build -p pengj-gate
+    cargo run -q -p pengj-templates-cli -- gate hooks install
     cargo check --workspace
 
-# ---------- 提交门禁（tools/gate） ----------
+# ---------- 提交门禁（crates/gate） ----------
 
 # 运行提交门禁：gate <子命令>
 # 子命令：audit（代码语言守卫）/ commit-msg <文件> / fmt / hooks install / selftest
 gate *ARGS:
-    cargo run -q --manifest-path tools/gate/Cargo.toml -- {{ARGS}}
+    cargo run -q -p pengj-templates-cli -- gate {{ARGS}}
 
 # 安装 git 钩子（core.hooksPath=.githooks）
 gate-hooks:
-    cargo run -q --manifest-path tools/gate/Cargo.toml -- hooks install
+    cargo run -q -p pengj-templates-cli -- gate hooks install
 
 # ---------- Rust 构建与检查 ----------
 
@@ -74,42 +74,13 @@ bench *ARGS:
 build FLAGS="":
     @bque run -- cargo build {{FLAGS}}
 
-# ---------- 前端 ----------
-
-# 构建组件库 cha-set（dist 不入版本库，必须先构建才能编译前端）
-cha-set-build:
-    pnpm --dir submodules/cha-set install --frozen-lockfile
-    pnpm --dir submodules/cha-set --filter @chahu/cha-set build
-
-# 安装前端依赖
-frontend-install:
-    pnpm --dir crates/app install
-
-# 前端构建（tsc + vite，受 bque 排队管控）
-frontend-build: cha-set-build
-    @bque run -- pnpm --dir crates/app build
-
-# 前端 dev server（浏览器调试用，纯前端无 Tauri 环境）
-frontend-dev:
-    pnpm --dir crates/app dev
-
-# ---------- Tauri GUI ----------
-
-# 启动 GUI 开发模式（热更新）
-dev:
-    pnpm --dir crates/app tauri dev
-
-# 打包 GUI 安装包
-tauri-build:
-    @bque run -- pnpm --dir crates/app tauri build
-
 # ---------- CLI ----------
 
 # 列出可用层
 layers:
     cargo run -q -p pengj-templates-cli -- list-layers
 
-# 生成新项目（例：just create my-app  或  just create my-app frontend,rust  或  just create my-app rust "D:\out"）
+# 生成新项目（例：just create my-app  或  just create my-app common,gate,agent  或  just create my-app rust-workspace "D:\out"）
 create NAME LAYERS="rust" OUTPUT=".":
     cargo run -q -p pengj-templates-cli -- create {{NAME}} --layers {{LAYERS}} --output {{OUTPUT}}
 
@@ -123,5 +94,5 @@ mcp *ARGS:
 
 # ---------- 综合 ----------
 
-# CI 全量校验：格式化检查 + 编译 + clippy + 测试 + 前端构建
-ci: fmt-check check clippy test frontend-build
+# CI 全量校验：格式化检查 + 编译 + clippy + 测试
+ci: fmt-check check clippy test

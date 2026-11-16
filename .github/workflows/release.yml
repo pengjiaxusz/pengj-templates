@@ -34,9 +34,9 @@ jobs:
           config-file: .github/release-please-config.json
           manifest-file: .github/release-please-manifest.json
 
-  # Tauri GUI + CLI 全平台矩阵构建：Windows/Linux/macOS × x64/arm64
-  # 产物命名统一带「系统-架构」，Release 页一眼可辨；便携版含 GUI + CLI。
-  build-gui:
+  # CLI 全平台矩阵构建：Windows/Linux/macOS × x64/arm64
+  # 产物统一命名为「系统-架构」，Release 页一眼可辨；便携版只含 CLI。
+  build-cli:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     strategy:
@@ -48,38 +48,31 @@ jobs:
             os: windows
             arch: x86_64
             rust_target: x86_64-pc-windows-msvc
-            bundles: msi,nsis
           - id: windows-arm64
             runner: windows-11-arm
             os: windows
             arch: arm64
             rust_target: aarch64-pc-windows-msvc
-            bundles: msi,nsis
           - id: linux-x64
             runner: ubuntu-latest
             os: linux
             arch: x86_64
             rust_target: x86_64-unknown-linux-gnu
-            bundles: deb,appimage
           - id: linux-arm64
             runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
             rust_target: aarch64-unknown-linux-gnu
-            bundles: deb,appimage
           - id: macos-arm64
             runner: macos-latest
             os: macos
             arch: arm64
             rust_target: aarch64-apple-darwin
-            bundles: dmg
           - id: macos-x64
-            # Apple Silicon runner 上交叉编译 x86_64（Tauri 原生支持 --target）
             runner: macos-latest
             os: macos
             arch: x86_64
             rust_target: x86_64-apple-darwin
-            bundles: dmg
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     env:
@@ -89,8 +82,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
-          # 前端依赖 submodules/cha-set（git submodule），必须一起拉下来。
-          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - name: 添加 Rust 目标
         run: rustup target add ${{ matrix.rust_target }}
@@ -98,55 +89,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      # ===== 系统依赖 =====
-      - name: 安装 Tauri Linux 依赖
-        if: matrix.os == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-      # ===== 前端依赖 =====
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          # pnpm 11 需 Node >= 22.13
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: crates/app/pnpm-lock.yaml
-      # cha-set 的 dist 不入版本库（构建产物），必须先构建，
-      # 否则 crates/app 的 tsc 找不到 @chahu/cha-set 的类型声明。
-      - name: 构建组件库 cha-set
-        working-directory: submodules/cha-set
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --filter @chahu/cha-set build
-      - name: 安装前端依赖
-        run: pnpm --dir crates/app install --frozen-lockfile
-      # Windows 的 MSI/NSIS 只接受 x.y.z 纯数字版本号，
-      # 若 tag 是 pre-release（如 0.6.0-beta.1），剥离后缀避免打包报错；不影响产物文件名/release 名。
-      - name: Windows 剥离版本号 pre-release 后缀
-        if: matrix.os == 'windows'
-        run: |
-          node -e "
-            const fs=require('fs');
-            const p='crates/app/src-tauri/tauri.conf.json';
-            const c=JSON.parse(fs.readFileSync(p,'utf8'));
-            c.version=c.version.replace(/-[^.]+(?:\.[0-9]+)?$/,'');
-            fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n');
-            console.log('Windows 打包版本号:', c.version);
-          "
-      - name: 构建 Tauri GUI
-        run: pnpm --dir crates/app tauri build --target ${{ matrix.rust_target }} --bundles ${{ matrix.bundles }}
-      # ===== 构建 CLI（供便携版）=====
       - name: 构建 CLI
         run: cargo build --release -p pengj-templates-cli --target ${{ matrix.rust_target }}
-      # ===== 重命名所有产物为「系统-架构」显式命名 =====
-      - name: 重命名 GUI / CLI 产物
+      # ===== 重命名产物为「系统-架构」显式命名 =====
+      - name: 重命名 CLI 产物
         shell: bash
         run: |
           set -e
           VER=$(echo "${{ needs.release-please.outputs.tag_name }}" | sed 's/^v//')
           R="$GITHUB_WORKSPACE/target/${{ matrix.rust_target }}/release"
-          B="$R/bundle"
           echo "VER=$VER" >> "$GITHUB_ENV"
           echo "REL_DIR=$R" >> "$GITHUB_ENV"
           # 可执行文件扩展名（Windows 带 .exe）
@@ -156,31 +107,7 @@ jobs:
           if [ -f "$R/pengj${EXT}" ]; then
             mv -f "$R/pengj${EXT}" "$R/pengj-templates-cli${EXT}"
           fi
-          # 安装包重命名（原始名形如 pengj-templates_0.x.x_x64-setup.exe）
-          case "${{ matrix.os }}" in
-            windows)
-              find "$B/msi"    -name '*.msi'   -exec bash -c '
-                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_windows-${{ matrix.arch }}.msi"; done
-              ' _ {} +
-              find "$B/nsis"   -name '*-setup.exe' -exec bash -c '
-                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_windows-${{ matrix.arch }}-setup.exe"; done
-              ' _ {} +
-              ;;
-            linux)
-              find "$B/deb"    -name '*.deb' -exec bash -c '
-                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_linux-${{ matrix.arch }}.deb"; done
-              ' _ {} +
-              find "$B/appimage" -name '*.AppImage' -exec bash -c '
-                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_linux-${{ matrix.arch }}.AppImage"; done
-              ' _ {} +
-              ;;
-            macos)
-              find "$B/dmg"    -name '*.dmg' -exec bash -c '
-                for f; do mv -f "$f" "'"$GITHUB_WORKSPACE"'/pengj-templates_'"$VER"'_macos-${{ matrix.arch }}.dmg"; done
-              ' _ {} +
-              ;;
-          esac
-      # ===== 便携版 zip（GUI + CLI）=====
+      # ===== 便携版 zip（仅 CLI）=====
       # Windows 用 PowerShell；Linux/macOS 用 bash zip
       - name: 打包便携版（Windows）
         if: matrix.os == 'windows'
@@ -190,7 +117,7 @@ jobs:
           # bash 与 pwsh 的 GITHUB_WORKSPACE 路径风格不同，必须用 WS 自行拼接
           $R = "$env:GITHUB_WORKSPACE\target\${{ matrix.rust_target }}\release"
           $PKG = "pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.zip"
-          Compress-Archive -Path "$R\pengj-templates.exe","$R\pengj-templates-cli.exe" -DestinationPath "$env:GITHUB_WORKSPACE\$PKG" -Force
+          Compress-Archive -Path "$R\pengj-templates-cli.exe" -DestinationPath "$env:GITHUB_WORKSPACE\$PKG" -Force
           "PKG=$PKG" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: 打包便携版（Unix）
         if: matrix.os != 'windows'
@@ -200,23 +127,8 @@ jobs:
           R="$REL_DIR"
           PKG="pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.zip"
           echo "PKG=$PKG" >> "$GITHUB_ENV"
-          case "${{ matrix.os }}" in
-            linux)
-              (cd "$R" && zip -q "$GITHUB_WORKSPACE/$PKG" pengj-templates pengj-templates-cli)
-              ;;
-            macos)
-              APP=$(find "$R/bundle" -type d -name '*.app' 2>/dev/null | head -n1)
-              if [ -n "$APP" ]; then
-                # 以 .app 名打包到 zip
-                APPNAME=$(basename "$APP")
-                (cd "$(dirname "$APP")" && zip -q -r "$GITHUB_WORKSPACE/$PKG" "$APPNAME"; cd "$R" && zip -q "$GITHUB_WORKSPACE/$PKG" pengj-templates-cli)
-              else
-                echo "::warning::未找到 macOS .app，便携包仅含 CLI"
-                (cd "$R" && zip "$GITHUB_WORKSPACE/$PKG" pengj-templates-cli)
-              fi
-              ;;
-          esac
-      # ===== 上传安装包 + 便携版到 Release =====
+          (cd "$R" && zip -q "$GITHUB_WORKSPACE/$PKG" pengj-templates-cli)
+      # ===== 上传便携版到 Release =====
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:

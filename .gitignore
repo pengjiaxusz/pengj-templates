@@ -1,11 +1,6 @@
 /target
-/node_modules
 /.omo
 /.workbuddy
-
-# tools/gate is a standalone package, so its build directory does not match
-# the /target rule above.
-/tools/gate/target
 
 # PENGJ_TEMPLATE_START
 # --- common 层 ---
