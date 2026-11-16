@@ -55,7 +55,7 @@ Format: `type(scope): subject`
   - ✅ Correct: `feat(cli): 新增参数支持`
 - **Type/Scope in English**:
   - Types: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-  - Scope: from the project's `commitlint.config.js` scope-enum whitelist when present.
+  - Scope: from the project's `.gate.toml` `commit.scopes` whitelist when it is not empty.
 - **Entry points**: host-provided `/commit` commands and hand-written `git commit` must obey the same rule; rewrite auto-generated English subjects before committing.
 {% else %}
 - **Subject in English** (imperative, short, no trailing period; strictly forbidden to contain non-English/CJK characters).
@@ -63,7 +63,7 @@ Format: `type(scope): subject`
   - ✅ Correct: `feat(cli): add new flags`
 - **Type/Scope in English**:
   - Types: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-  - Scope: from the project's `commitlint.config.js` scope-enum whitelist when present.
+  - Scope: from the project's `.gate.toml` `commit.scopes` whitelist when it is not empty.
 - **Entry points**: host-provided `/commit` commands and hand-written `git commit` must obey the same rule; rewrite auto-generated Chinese subjects before committing.
 {% endif %}
 
@@ -149,7 +149,7 @@ git --no-pager diff --cached --stat
   - ✅ 必须：`feat(cli): 新增参数支持`
 - **type/scope 用英文**：
   - 常用 type：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-  - scope 参考项目 `commitlint.config.js` 的 scope-enum 白名单，无合适则省略。
+  - scope 参考项目 `.gate.toml` 的 `commit.scopes` 白名单（空列表表示不限），无合适则省略。
 - **提交入口**：宿主提供的 `/commit` 命令与手写 `git commit` 同样适用；此类命令生成的英文标题必须先改写为中文再提交。
 {% else %}
 - **标题用英文短句**（祈使式），不加句号（硬性要求：必须纯英文，严禁包含汉字）。
@@ -157,7 +157,7 @@ git --no-pager diff --cached --stat
   - ✅ 必须：`feat(cli): add new flags`
 - **type/scope 用英文**：
   - 常用 type：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-  - scope 参考项目 `commitlint.config.js` 的 scope-enum 白名单，无合适则省略。
+  - scope 参考项目 `.gate.toml` 的 `commit.scopes` 白名单（空列表表示不限），无合适则省略。
 - **提交入口**：宿主提供的 `/commit` 命令与手写 `git commit` 同样适用；此类命令生成的中文标题必须先改写为英文再提交。
 {% endif %}
 

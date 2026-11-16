@@ -1,0 +1,44 @@
+#!/bin/sh
+# gate hook: the pre-commit stage.
+#
+# {% if options["skill_lang"] | default("zh") == "en" %}Two checks run before a commit lands:
+#   1. the staged Rust files are formatted with rustfmt;
+#   2. the code language guard checks the staged files against `.gate.toml`.{% else %}提交落地前会跑两项检查：
+#   1. 用 rustfmt 格式化暂存区里的 Rust 文件；
+#   2. 代码语言守卫按 `.gate.toml` 检查暂存的文件。{% endif %}
+#
+# {% if options["skill_lang"] | default("zh") == "en" %}The gate is a standalone Rust binary with no third-party dependencies. This hook resolves it in this order:
+#   1. $PENGJ_GATE          — an explicit path to the binary;
+#   2. `gate`               — a standalone install on PATH;
+#   3. `pengj-templates-cli` — the CLI carries the gate as a subcommand;
+#   4. `crates/gate`        — a vendored copy inside the project workspace.{% else %}门禁是一个零第三方依赖的独立 Rust 二进制。本钩子按以下顺序定位它：
+#   1. $PENGJ_GATE          —— 显式指定的二进制路径；
+#   2. `gate`               —— PATH 上的独立安装；
+#   3. `pengj-templates-cli` —— CLI 自带 gate 子命令；
+#   4. `crates/gate`        —— 项目工作区里内置的一份。{% endif %}
+
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+if [ -n "${PENGJ_GATE:-}" ]; then
+    exec "${PENGJ_GATE}" hook pre-commit
+fi
+
+if command -v gate >/dev/null 2>&1; then
+    exec gate hook pre-commit
+fi
+
+if command -v pengj-templates-cli >/dev/null 2>&1; then
+    exec pengj-templates-cli gate hook pre-commit
+fi
+
+if [ -f "crates/gate/Cargo.toml" ]; then
+    exec cargo run --quiet --manifest-path "crates/gate/Cargo.toml" -- hook pre-commit
+fi
+
+echo "[gate] the gate binary was not found." >&2
+echo "[gate] point PENGJ_GATE at it, or install it with:" >&2
+echo "[gate]   cargo install --git <repository-url> --bin gate" >&2
+exit 2

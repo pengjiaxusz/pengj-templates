@@ -1,0 +1,40 @@
+#!/bin/sh
+# gate hook: the commit-msg stage.
+#
+# {% if options["skill_lang"] | default("zh") == "en" %}Validate the commit message against the conventional commit rules configured in `.gate.toml`. Git passes the path to the message file as the first argument.{% else %}按 `.gate.toml` 里配置的约定式提交规则校验提交信息。git 会把信息文件路径作为第一个参数传进来。{% endif %}
+#
+# {% if options["skill_lang"] | default("zh") == "en" %}The gate is a standalone Rust binary with no third-party dependencies. This hook resolves it in this order:
+#   1. $PENGJ_GATE          — an explicit path to the binary;
+#   2. `gate`               — a standalone install on PATH;
+#   3. `pengj-templates-cli` — the CLI carries the gate as a subcommand;
+#   4. `crates/gate`        — a vendored copy inside the project workspace.{% else %}门禁是一个零第三方依赖的独立 Rust 二进制。本钩子按以下顺序定位它：
+#   1. $PENGJ_GATE          —— 显式指定的二进制路径；
+#   2. `gate`               —— PATH 上的独立安装；
+#   3. `pengj-templates-cli` —— CLI 自带 gate 子命令；
+#   4. `crates/gate`        —— 项目工作区里内置的一份。{% endif %}
+
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+if [ -n "${PENGJ_GATE:-}" ]; then
+    exec "${PENGJ_GATE}" hook commit-msg "$1"
+fi
+
+if command -v gate >/dev/null 2>&1; then
+    exec gate hook commit-msg "$1"
+fi
+
+if command -v pengj-templates-cli >/dev/null 2>&1; then
+    exec pengj-templates-cli gate hook commit-msg "$1"
+fi
+
+if [ -f "crates/gate/Cargo.toml" ]; then
+    exec cargo run --quiet --manifest-path "crates/gate/Cargo.toml" -- hook commit-msg "$1"
+fi
+
+echo "[gate] the gate binary was not found." >&2
+echo "[gate] point PENGJ_GATE at it, or install it with:" >&2
+echo "[gate]   cargo install --git <repository-url> --bin gate" >&2
+exit 2

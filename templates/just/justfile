@@ -12,6 +12,9 @@ set allow-duplicate-recipes := true
 {% if "bque" in layers %}
 import 'just/bque.just'
 {% endif %}
+{% if "gate" in layers %}
+import 'just/gate.just'
+{% endif %}
 {% if options["just_recipes"] is defined %}
 {% if options["just_recipes"] == "rust" %}
 import 'just/rust.just'

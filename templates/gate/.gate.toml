@@ -1,0 +1,23 @@
+# .gate.toml — {% if options["skill_lang"] | default("zh") == "en" %}the commit gate's configuration{% else %}提交门禁的配置{% endif %}
+#
+# {% if options["skill_lang"] | default("zh") == "en" %}The gate is a standalone Rust binary with no third-party dependencies, so every switch it understands lives here instead of in the project manifest. The template renders this file at generation time; the project owns it afterwards and may edit it freely.{% else %}门禁是一个零第三方依赖的独立 Rust 二进制，它认识的每一个开关都写在这里，而不是项目清单里。模板在生成时渲染本文件；生成之后归项目所有，可自由修改。{% endif %}
+#
+# {% if options["skill_lang"] | default("zh") == "en" %}The accepted syntax is a flat TOML subset: `key = value` plus `section.key = value` for grouped settings. Unknown keys are ignored so an older binary keeps working against a newer config, but a malformed value is a hard error — a typo must never silently disable a check.{% else %}可接受的语法是扁平 TOML 子集：`key = value`，分组配置写成 `section.key = value`。未知键会被忽略，这样旧二进制面对新配置仍能工作；但值类型写错是硬错误——一个笔误绝不能悄悄关掉某项检查。{% endif %}
+
+# {% if options["skill_lang"] | default("zh") == "en" %}The code language of the project: `english` or `chinese`. It drives the code language guard, which rejects Chinese comments in English code and English comments in Chinese code.{% else %}项目的代码语言：`english` 或 `chinese`。它驱动代码语言守卫：英文代码里出现中文注释、或中文代码里出现英文注释，都会被拦下。{% endif %}
+{% if options["chinese_programming"] | default(false) %}mode = "chinese"{% else %}mode = "english"{% endif %}
+
+# {% if options["skill_lang"] | default("zh") == "en" %}Per-file tolerance for string violations and identifier violations. `0` forbids them outright.{% else %}单个文件里字符串违规与标识符违规的容忍比例。`0` 表示完全禁止。{% endif %}
+lang.max_ratio = 0.01
+lang.max_ident_ratio = 0.0
+
+# {% if options["skill_lang"] | default("zh") == "en" %}The subject language of a commit message: `zh` or `en`.{% else %}提交信息主题的语言：`zh` 或 `en`。{% endif %}
+{% if options["commit_zh"] | default(false) %}commit.subject_lang = "zh"{% else %}commit.subject_lang = "en"{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}A Chinese subject must carry at least this many Han characters.{% else %}中文主题至少要包含这么多个汉字。{% endif %}
+commit.subject_min_han = 2
+# {% if options["skill_lang"] | default("zh") == "en" %}The header may not exceed this many characters.{% else %}标题行不得超过这么多个字符。{% endif %}
+commit.max_header = 100
+# {% if options["skill_lang"] | default("zh") == "en" %}The allowed conventional-commit types.{% else %}允许的约定式提交类型。{% endif %}
+commit.types = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"]
+# {% if options["skill_lang"] | default("zh") == "en" %}The allowed scopes. An empty list accepts any scope; fill it in to pin the project to its own crate names.{% else %}允许的 scope 白名单。空列表表示接受任意 scope；可以填入本项目的 crate 名把它收紧。{% endif %}
+commit.scopes = []

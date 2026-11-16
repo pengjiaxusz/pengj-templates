@@ -143,7 +143,7 @@ After drafting, verify:
 - All agent-layer content (this `SKILL.md` + `AGENTS.md`) must be bilingual via `{% raw %}{% if options["skill_lang"] == "en" %}{% endraw %}` ... `{% raw %}{% else %}{% endraw %}` ... `{% raw %}{% endif %}{% endraw %}` branches (zh is default); frontmatter `description` must also branch.
 - **Only documentation is bilingual — code is not.** Scripts under `.agents/skills/*/scripts/` are always English: identifiers, structured field names (`type` / `source` / `entry` …), comments, and log output. They are shared infrastructure executed by agents, CI and other tools, so Chinese identifiers break encoding, diffing and shell/tooling hand-off. Translate the intent into `SKILL.md` instead of localizing the script.
 - Four independent language axes: `chinese_programming` (identifiers in the *target project's* code), `skill_lang` (documentation language), `commit_zh` (commit message language), and skill scripts (always English, no option).
-- Copy the structure of the `commit` skill for new skills; when adding a language, extend the `skill_lang` validation in CLI / GUI / core.
+- Copy the structure of the `commit` skill for new skills; when adding a language, extend the `skill_lang` validation in CLI / core.
 - `SKILL.md` = managed framework block (`PENGJ_TEMPLATE_START/END`, replaced in place on `update`) + project-specific area **outside** the block (never overwritten). Document-style customization and commit-gate definitions live outside the block; executable gate form is project-defined.
 - Never edit managed blocks or `.agents/skills/*/scripts/` directly — both belong to `pengj-templates`. Put project-specific config outside the block; check alignment anytime with `cargo run -p pengj-templates-cli -- audit --dir . --diff`.
 
@@ -281,7 +281,7 @@ description: 能力的简要描述。当 [具体触发条件] 时使用。
 - agent 层全部内容（本 `SKILL.md` 与 `AGENTS.md`）必须中英双语，通过 `{% raw %}{% if options["skill_lang"] == "en" %}{% endraw %}` … `{% raw %}{% else %}{% endraw %}` … `{% raw %}{% endif %}{% endraw %}` 分支实现（zh 为默认）；frontmatter 的 `description` 也要双语分支（供 UI 勾选列表展示）。
 - **只有文档双语，代码不双语**：`.agents/skills/*/scripts/` 下的脚本一律英文——标识符、结构化字段名（`type` / `source` / `entry` 等）、注释、日志输出都用英文。脚本是被 agent、CI 与其他工具执行的共享基础设施，中文标识符会在编码、diff、shell 传参与工具链交接上出问题；中文含义写进 `SKILL.md`，不要本地化脚本。
 - 四条语言轴互相独立：`chinese_programming`（**目标项目**代码里的标识符）、`skill_lang`（文档语言）、`commit_zh`（提交信息语言）、技能脚本语言（恒为英文、无选项）。
-- 新增技能照抄 `commit` 技能的双语模板结构；新增语言时同步扩展 `skill_lang` 校验（CLI / GUI / core）。
+- 新增技能照抄 `commit` 技能的双语模板结构；新增语言时同步扩展 `skill_lang` 校验（CLI / core）。
 - `SKILL.md` = 托管框架块（`PENGJ_TEMPLATE_START/END`，`update` 时原位替换）+ 块外项目专属区（归用户、永不覆盖）。文档型定制与提交前检查的定义都写在块外；可执行门禁的形式与位置由项目自定，框架不预设。
 - 托管块与 `.agents/skills/*/scripts/` 脚本归 `pengj-templates` 所有，严禁直接篡改；项目专属配置写在块外，随时用 `cargo run -p pengj-templates-cli -- audit --dir . --diff` 巡检对齐。
 {% endif %}
