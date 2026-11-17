@@ -193,7 +193,7 @@ fn git_path(path: &Path) -> String {
 fn dispatcher_script(hook: &str) -> String {
     format!(
         r#"#!/bin/sh
-# pengj-templates global hook dispatcher — generated, do not edit.
+# pengj-templates global hook dispatcher - generated, do not edit.
 #
 # git finds this file through the global core.hooksPath. It forwards to the
 # repository's own tracked hook under .githooks/, so the policy stays
@@ -257,7 +257,7 @@ pub fn install_global() -> Result<(), String> {
 
     println!(
         "[gate] global commit gate installed: core.hooksPath={target}\n  \
-         every repository now forwards to its own .githooks/ — fresh clones are guarded with no extra step.\n  \
+         every repository now forwards to its own .githooks/ - fresh clones are guarded with no extra step.\n  \
          remove it with: pengj-templates-cli gate hooks uninstall --global"
     );
     Ok(())
@@ -276,7 +276,7 @@ pub fn uninstall_global() -> Result<(), String> {
             crate::git::run(&["config", "--global", "--unset", "core.hooksPath"])?;
             println!("[gate] removed the global core.hooksPath setting");
         } else {
-            println!("[gate] the global core.hooksPath is `{current}`, not ours — left untouched");
+            println!("[gate] the global core.hooksPath is `{current}`, not ours - left untouched");
         }
     } else {
         println!("[gate] no global core.hooksPath is set");
