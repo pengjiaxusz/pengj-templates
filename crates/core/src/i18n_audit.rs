@@ -103,7 +103,7 @@ pub fn is_machine_owned(path: &str) -> bool {
     if p.ends_with(".json") {
         return true;
     }
-    if p.starts_with(".agents/skills/") && p.contains("/scripts/") {
+    if p.starts_with(".agents/skills/") && (p.contains("/scripts/") || p.ends_with(".sh")) {
         return true;
     }
     matches!(
@@ -247,6 +247,7 @@ mod tests {
             ".vscode/settings.json",
             ".pengj-templates.json",
             "Cargo.toml",
+            ".agents/skills/wizard/template.sh",
             "rust-toolchain.toml",
             "src/main.rs",
         ] {
