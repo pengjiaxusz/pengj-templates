@@ -130,7 +130,7 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
     - 切到某预发布号：正常提交时在其描述加 `Release-As: 0.5.0-beta.1`、`0.5.0-rc.1`、`0.5.0-preview.1` 等；
     - 之后它会在同阶段自动 +1（`beta.1`→`beta.2`），GitHub Release 会自动标为 **Prerelease**；
     - 要回到正式版，再提交 `Release-As: 0.5.0` 即可。
-  - **本项目自身的版本号走稳定 semver**：`Cargo.toml` 与 `release-please-manifest.json` 都不再带 `-beta.N` 后缀（当前 `0.61.0`）。需要预发布时仍可用上面的 `Release-As:` 显式切到预发布号，不影响默认行为。
+  - **本项目自身的版本号走稳定 semver**：发布的版本号不带 `-beta.N` 后缀。manifest 固定指向上一个已发布 tag，保证 release-please 永远能定位到上次发布；发布稳定版只需在代码/模板/配置类提交的描述里加 `Release-As: <版本>`；需要预发布时用同一个 footer 显式切换即可。
   - 版本号方案（release-please 规则）：`feat`→minor、`fix`→patch、`BREAKING CHANGE`→major（`0.x` 阶段因 `bump-minor-pre-major=true`，BREAKING 只升 minor 而不跳 major；`feat` 在 `0.x` 也仍升 minor）。
 
 `rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。
@@ -168,6 +168,8 @@ just setup            # 克隆后一键初始化：构建 CLI、安装 git 钩�
 just check            # Rust 全部编译检查
 just ci               # 格式化检查 + 编译 + clippy + 测试
 ```
+
+> Linux 上仓库的 `.cargo/config.toml` 把 `linux-gnu` 目标的链接器写死为 `lld`，而 runner 镜像默认不带它——先装上（`apt install lld`），否则编译会以 `linker 'lld' not found` 中止。
 
 ### 本仓库的环境构成
 

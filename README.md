@@ -132,7 +132,7 @@ Key points:
     - to switch to a pre-release number, add `Release-As: 0.5.0-beta.1`, `Release-As: 0.5.0-rc.1`, `Release-As: 0.5.0-preview.1`, … to the description of a normal commit;
     - afterwards it increments within the same stage (`beta.1` → `beta.2`), and the GitHub Release is marked as a **Prerelease**;
     - to go back to a stable release, commit `Release-As: 0.5.0`.
-  - **This project's own version follows stable semver**: neither `Cargo.toml` nor `release-please-manifest.json` carries a `-beta.N` suffix anymore (currently `0.61.0`). If you do need a pre-release, the `Release-As:` footer above still switches to one explicitly without changing the default behaviour.
+  - **This project's own version follows stable semver**: released versions carry no `-beta.N` suffix. The manifest is pinned to the last released tag so release-please can always locate the previous release; a stable release is cut by putting `Release-As: <version>` in the description of a code / template / config commit. The same footer switches to a pre-release explicitly whenever you want one.
   - Versioning rules (release-please): `feat` → minor, `fix` → patch, `BREAKING CHANGE` → major (during `0.x`, `bump-minor-pre-major=true` means a BREAKING change only bumps the minor instead of jumping to major; `feat` also only bumps the minor during `0.x`).
 
 `src/main.rs` of the `rust` layer is on the `update_ignore` blacklist: it is written on the first generation only and belongs to the user afterwards, so template updates skip it (no overwrite, no conflict, no deletion report). If the template holds other "seed files that later belong to the user", list them in the `update_ignore` of the corresponding `layer.toml`.
@@ -170,6 +170,8 @@ just setup            # one-shot bootstrap after cloning: build the CLI, install
 just check            # full Rust compile check
 just ci               # format check + compile + clippy + tests
 ```
+
+> On Linux the repository's `.cargo/config.toml` pins the `linux-gnu` linker to `lld`, which the stock runner image does not ship — install it first (`apt install lld`), otherwise the build stops with `linker 'lld' not found`.
 
 ### What this repository is made of
 
