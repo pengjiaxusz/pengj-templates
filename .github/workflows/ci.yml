@@ -57,6 +57,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      # 仓库根的 .cargo/config.toml 把 linux-gnu 目标的链接器写死为 lld，
+      # 而 GitHub 的 ubuntu runner 镜像不带 lld，缺了会直接报
+      # `linker 'lld' not found`（连 build script 都编不过）。
+      - name: 安装 lld（Linux 链接器）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lld
       # Rust 编译缓存（含失败缓存，修复 commit 也能吃到）
       - uses: Swatinem/rust-cache@v2
         with:
