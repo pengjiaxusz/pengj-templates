@@ -1558,7 +1558,12 @@ pub fn update_project_with_options(
                 }
                 IgnoredDocRefresh::Unchanged => {
                     unchanged += 1;
-                    new_files.insert(rel_str.clone(), ledger_sha());
+                    // 说明块已对齐，但用户可能刚手改过值区（比如清理旧说明的残留），
+                    // 账本按磁盘实际内容记：忽略文件不做冲突判定，账本失真只会误导后人。
+                    let sha = std::fs::read(project_dir.join(rel))
+                        .map(|b| sha256_hex(&b))
+                        .unwrap_or_else(|_| ledger_sha());
+                    new_files.insert(rel_str.clone(), sha);
                 }
                 IgnoredDocRefresh::Replaced(written) => {
                     new_files.insert(rel_str.clone(), sha256_hex(&written));
