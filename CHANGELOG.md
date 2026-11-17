@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.2](https://github.com/pengjiaxusz/pengj-templates/compare/v0.65.1...v0.65.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* **core:** update 补写缺失的 update_ignore 文件 ([32ab832](https://github.com/pengjiaxusz/pengj-templates/commit/32ab832ab70dd8e3533091b808eab342d222e007))
+
 ## [0.65.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.65.0...v0.65.1) (2026-11-17)
 
 
