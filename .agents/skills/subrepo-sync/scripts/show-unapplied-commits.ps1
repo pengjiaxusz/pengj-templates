@@ -306,7 +306,7 @@ if ($Update) {
         Write-Host "✅ Sub-repository successfully updated to: $updatedCommit" -ForegroundColor Green
     Write-Host ""
         Write-Host "Recommended Next Steps:" -ForegroundColor Cyan
-        Write-Host "  1. Run host compilation and type checks (e.g. cargo check, just build)"
+        Write-Host "  1. Run host compilation and type checks (e.g. cargo check, pnpm build, just build)"
         Write-Host "  2. Adapt affected business components and design tokens based on clustering report"
         Write-Host "  3. Run automated tests and regression verification gates"
         Write-Host "  4. Create a conventional commit, e.g.: chore(deps): update $subrepoName to $newCommitShort and adapt callers"
