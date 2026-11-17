@@ -87,7 +87,7 @@ impl ScopePolicy {
         match self {
             ScopePolicy::Any => String::new(),
             ScopePolicy::None => {
-                "no scope is allowed (omit `(...)` or set commit.scopes = [\"*\"] in .gate.toml)"
+                "no scope is allowed (omit `(...)` or set commit.scopes = [\"*\"] in .pengj-templates/gate.toml)"
                     .to_string()
             }
             ScopePolicy::Whitelist(items) => {
@@ -623,7 +623,7 @@ pub fn validate_file(path: &str) -> Result<u8, String> {
         .to_string();
     eprintln!("  header: {header}");
     eprintln!(
-        "\n[gate] the rule set lives in .gate.toml under [commit]; the convention is documented in the git-workflow skill."
+        "\n[gate] the rule set lives in .pengj-templates/gate.toml under [commit]; the convention is documented in the git-workflow skill."
     );
     Ok(1)
 }

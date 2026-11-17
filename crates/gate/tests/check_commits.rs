@@ -32,7 +32,11 @@ impl Repo {
     }
 
     fn write_config(&self, body: &str) {
-        std::fs::write(self.dir.join(".gate.toml"), body).expect("write .gate.toml");
+        let path = self.dir.join(".pengj-templates/gate.toml");
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create .pengj-templates");
+        }
+        std::fs::write(path, body).expect("write .pengj-templates/gate.toml");
     }
 
     fn git(&self, args: &[&str]) -> String {
@@ -70,7 +74,7 @@ impl Drop for Repo {
 }
 
 fn gate_toml_exists(dir: &Path) -> bool {
-    dir.join(".gate.toml").is_file()
+    dir.join(".pengj-templates/gate.toml").is_file()
 }
 
 #[test]

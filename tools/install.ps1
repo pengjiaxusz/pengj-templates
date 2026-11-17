@@ -198,13 +198,13 @@ if ($oldVersion) {
 # 9. The commit gate is activated per project.
 #
 # Git keeps hook activation in .git/config, which does not travel with a
-# clone. The project's own environment check (scripts/doctor.ps1 -Fix) is the
+# clone. The project's own environment check (.pengj-templates/scripts/doctor.ps1 -Fix) is the
 # single activation entry point: it works with or without this CLI and only
 # touches repositories that ship .githooks/.
 Write-Host ""
 Write-Host (T "提交门禁随此二进制一起发布，按项目分别激活:" "The commit gate ships inside this binary, activated per project:") -ForegroundColor Cyan
 Write-Host (T "  just doctor --fix                    # 在已生成的项目内" "  just doctor --fix                    # inside a generated project") -ForegroundColor Gray
-Write-Host (T "  pwsh -File scripts/doctor.ps1 -Fix   # 没有 just 时" "  pwsh -File scripts/doctor.ps1 -Fix   # without just") -ForegroundColor Gray
+Write-Host (T "  pwsh -File .pengj-templates/scripts/doctor.ps1 -Fix   # 没有 just 时" "  pwsh -File .pengj-templates/scripts/doctor.ps1 -Fix   # without just") -ForegroundColor Gray
 Write-Host (T "  pengj-templates-cli gate check       # 直接运行代码语言守卫" "  pengj-templates-cli gate check       # run the code language guard directly") -ForegroundColor Gray
 Write-Host ""
 Write-Host (T "当前会话及新开的终端窗口均可直接使用。" "Ready to use in the current session and in new terminal windows.") -ForegroundColor Green

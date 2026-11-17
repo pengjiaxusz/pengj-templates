@@ -1,6 +1,6 @@
 # PENGJ_TEMPLATE_START
 {%- if options["skill_lang"] | default("zh") == "en" %}
-# .gate.toml — the commit gate's configuration
+# .pengj-templates/gate.toml — the commit gate's configuration
 #
 # [template-managed block] `update` replaces only what sits between START and END; the
 # values below the block belong to this project and are never overwritten. Delete the
@@ -31,7 +31,7 @@
 # exactly the rot this block exists to avoid. `commit.scopes = ["*"]` ships permissive;
 # tighten it to a crate-name list once the project settles.
 {%- else %}
-# .gate.toml —— 提交门禁的配置
+# .pengj-templates/gate.toml —— 提交门禁的配置
 #
 # 【本块由模板托管】update 只替换 START/END 之间的说明，块以下的配置值归项目所有，
 # 永不被覆盖。若你把本块整段删掉，update 会重新置顶插入一份并提示你复核残留的旧说明。

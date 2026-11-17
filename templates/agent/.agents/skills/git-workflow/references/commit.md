@@ -40,7 +40,7 @@ git config --get core.hooksPath   # expected: .githooks
 If it is empty or points elsewhere, run:
 
 ```bash
-just doctor --fix        # or: sh scripts/doctor.sh --fix
+just doctor --fix        # or: sh .pengj-templates/scripts/doctor.sh --fix
 ```
 
 The doctor checks the toolchain and activates the hooks without installing anything. If `core.hooksPath` belongs to another tool, it reports the conflict and leaves it alone.
@@ -75,7 +75,7 @@ Format: `type(scope): subject`
   - ✅ Correct: `feat(cli): 新增参数支持`
 - **Type/Scope in English**:
   - Types: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-  - Scope: from the project's `.gate.toml` `commit.scopes` whitelist when it is not empty.
+  - Scope: from the project's `.pengj-templates/gate.toml` `commit.scopes` whitelist when it is not empty.
 - **Entry points**: host-provided `/commit` commands and hand-written `git commit` must obey the same rule; rewrite auto-generated English subjects before committing.
 {% else %}
 - **Subject in English** (imperative, short, no trailing period; strictly forbidden to contain non-English/CJK characters).
@@ -83,7 +83,7 @@ Format: `type(scope): subject`
   - ✅ Correct: `feat(cli): add new flags`
 - **Type/Scope in English**:
   - Types: `feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-  - Scope: from the project's `.gate.toml` `commit.scopes` whitelist when it is not empty.
+  - Scope: from the project's `.pengj-templates/gate.toml` `commit.scopes` whitelist when it is not empty.
 - **Entry points**: host-provided `/commit` commands and hand-written `git commit` must obey the same rule; rewrite auto-generated Chinese subjects before committing.
 {% endif %}
 
@@ -156,7 +156,7 @@ git config --get core.hooksPath   # 期望输出：.githooks
 为空或指向别处时执行：
 
 ```bash
-just doctor --fix        # 或：sh scripts/doctor.sh --fix
+just doctor --fix        # 或：sh .pengj-templates/scripts/doctor.sh --fix
 ```
 
 doctor 会检查工具链并在不安装任何东西的前提下激活钩子；若 `core.hooksPath` 属于别的工具，只报告冲突、不覆盖。
@@ -189,7 +189,7 @@ doctor 会检查工具链并在不安装任何东西的前提下激活钩子；�
   - ✅ 必须：`feat(cli): 新增参数支持`
 - **type/scope 用英文**：
   - 常用 type：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-  - scope 参考项目 `.gate.toml` 的 `commit.scopes` 白名单（空列表表示不限），无合适则省略。
+  - scope 参考项目 `.pengj-templates/gate.toml` 的 `commit.scopes` 白名单（空列表表示不限），无合适则省略。
 - **提交入口**：宿主提供的 `/commit` 命令与手写 `git commit` 同样适用；此类命令生成的英文标题必须先改写为中文再提交。
 {% else %}
 - **标题用英文短句**（祈使式），不加句号（硬性要求：必须纯英文，严禁包含汉字）。
@@ -197,7 +197,7 @@ doctor 会检查工具链并在不安装任何东西的前提下激活钩子；�
   - ✅ 必须：`feat(cli): add new flags`
 - **type/scope 用英文**：
   - 常用 type：`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`
-  - scope 参考项目 `.gate.toml` 的 `commit.scopes` 白名单（空列表表示不限），无合适则省略。
+  - scope 参考项目 `.pengj-templates/gate.toml` 的 `commit.scopes` 白名单（空列表表示不限），无合适则省略。
 - **提交入口**：宿主提供的 `/commit` 命令与手写 `git commit` 同样适用；此类命令生成的中文标题必须先改写为英文再提交。
 {% endif %}
 

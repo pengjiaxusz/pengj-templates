@@ -408,7 +408,7 @@ fn ensure_baseline_skills(
 
 /// 排队层与排队技能联动：启用 `bque` 层时把 `bque` 技能并入已持久化的选项。
 ///
-/// 层负责产出 `just/bque.just` 配方与 AGENTS.md 红线，技能负责告诉 Agent 何时必须排队，
+/// 层负责产出 `.pengj-templates/just/bque.just` 配方与 AGENTS.md 红线，技能负责告诉 Agent 何时必须排队，
 /// 两者缺一即为「半接入」。显式空技能列表视为用户明确不要技能，此处不注入。
 /// 返回是否真的补入了技能，供报告展示。
 fn ensure_queue_skill(
@@ -1099,7 +1099,7 @@ pub struct AdoptReport {
     pub needs_review: Vec<String>,
 }
 
-/// 纳管存量项目：为已有目录初始化 `.pengj-templates.json` manifest
+/// 纳管存量项目：为已有目录初始化 `.pengj-templates/manifest.json` manifest
 ///
 /// 逻辑：
 /// 1. 若项目根目录已存在 manifest，且没有指定 force，则返回错误。
@@ -1114,7 +1114,7 @@ pub struct AdoptReport {
 ///      - 记录合并后（或模板渲染）哈希作为初始基线，计入 `adopted`。
 ///    - 若本地文件不存在：
 ///      - 写入新文件，记录新哈希，计入 `created`。
-/// 4. 将层列表、持久化选项和文件哈希基线写入 `.pengj-templates.json`。
+/// 4. 将层列表、持久化选项和文件哈希基线写入 `.pengj-templates/manifest.json`。
 pub fn adopt_project(
     templates: &Templates,
     project_dir: &Path,
@@ -2240,7 +2240,7 @@ pub fn audit_project(
             }
         }
 
-        // 5. 无受管块的普通文件（如 scripts/sync-branch.ps1, .gate.toml 等）
+        // 5. 无受管块的普通文件（如 scripts/sync-branch.ps1, .pengj-templates/gate.toml 等）
         if let Some(m_sha) = manifest_sha {
             if disk_sha == *m_sha && tpl_sha != *m_sha {
                 items.push(AuditItem {
@@ -2856,6 +2856,20 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 
 #[cfg(test)]
 mod tests {
+    /// 测试用写盘：模板产物现在收在 `.pengj-templates/` 子目录里，落盘前先建父目录。
+    fn write_test_file(path: impl AsRef<Path>, content: impl AsRef<[u8]>) -> std::io::Result<()> {
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, content)
+    }
+
+    /// manifest 的键是 OS 原生分隔符的相对路径；测试按正斜杠书写，比较前先归一。
+    fn manifest_key(path: &str) -> String {
+        path.replace('/', std::path::MAIN_SEPARATOR_STR)
+    }
+
     use super::*;
 
     #[test]
@@ -2983,10 +2997,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         // 子目录中的工作区文件不参与（非递归）
         std::fs::create_dir_all(dir.join("sub")).unwrap();
-        std::fs::write(dir.join("sub").join("inner.code-workspace"), "{}").unwrap();
-        std::fs::write(dir.join("b.code-workspace"), "{}").unwrap();
-        std::fs::write(dir.join("a.CODE-WORKSPACE"), "{}").unwrap();
-        std::fs::write(dir.join("not-ws.json"), "{}").unwrap();
+        write_test_file(dir.join("sub").join("inner.code-workspace"), "{}").unwrap();
+        write_test_file(dir.join("b.code-workspace"), "{}").unwrap();
+        write_test_file(dir.join("a.CODE-WORKSPACE"), "{}").unwrap();
+        write_test_file(dir.join("not-ws.json"), "{}").unwrap();
 
         let names: Vec<String> = list_workspace_files(&dir)
             .into_iter()
@@ -3033,7 +3047,7 @@ mod tests {
         let (fm, ctx) = ws_test_fixture();
 
         let ws = tmp.join("proj.code-workspace");
-        std::fs::write(
+        write_test_file(
             &ws,
             r#"{
   "folders": [{ "path": "." }],
@@ -3099,7 +3113,7 @@ mod tests {
         // 模仿真实 VS Code 工程的 JSONC：尾随逗号 + 注释
         let ws = tmp.join("app.code-workspace");
         let original = "// 根级注释\n{\n  \"folders\": [\n    { \"path\": \".\" },\n  ],\n  \"settings\": {\n    \"editor.fontSize\": 14,\n    \"explorer.fileNesting.patterns\": {\n      \"README.md\": \"keep-me\",\n    },\n  },\n}\n";
-        std::fs::write(&ws, original).unwrap();
+        write_test_file(&ws, original).unwrap();
 
         assert!(sync_workspace_file(&ws, &ctx, &fm, &proj).unwrap());
         let merged = std::fs::read_to_string(&ws).unwrap();
@@ -3142,7 +3156,7 @@ mod tests {
 
         // 4 空格缩进风格的文档
         let ws = tmp.join("app.code-workspace");
-        std::fs::write(
+        write_test_file(
             &ws,
             "{\n    \"folders\": [\n        { \"path\": \".\" }\n    ],\n    \"settings\": {\n        \"editor.fontSize\": 14\n    }\n}\n",
         )
@@ -3181,12 +3195,12 @@ mod tests {
 
         // 无效 JSON：跳过且不 panic
         let broken = tmp.join("broken.code-workspace");
-        std::fs::write(&broken, "{ not json").unwrap();
+        write_test_file(&broken, "{ not json").unwrap();
         assert!(!sync_workspace_file(&broken, &ctx, &fm, &proj).unwrap());
 
         // 顶层 settings 非对象：跳过
         let bad_settings = tmp.join("bad.code-workspace");
-        std::fs::write(&bad_settings, r#"{ "folders": [], "settings": "nope" }"#).unwrap();
+        write_test_file(&bad_settings, r#"{ "folders": [], "settings": "nope" }"#).unwrap();
         assert!(!sync_workspace_file(&bad_settings, &ctx, &fm, &proj).unwrap());
 
         // 无模板来源（fm 无 .vscode/settings.json）且磁盘无 settings：跳过
@@ -3196,7 +3210,7 @@ mod tests {
             executable: BTreeSet::new(),
         };
         let plain = tmp.join("plain.code-workspace");
-        std::fs::write(&plain, r#"{ "folders": [{ "path": "." }] }"#).unwrap();
+        write_test_file(&plain, r#"{ "folders": [{ "path": "." }] }"#).unwrap();
         assert!(!sync_workspace_file(&plain, &ctx, &empty_fm, &proj).unwrap());
 
         let _ = std::fs::remove_dir_all(&tmp);
@@ -3212,7 +3226,7 @@ mod tests {
         let (fm, ctx) = ws_test_fixture();
 
         let settings = proj.join(".vscode").join("settings.json");
-        std::fs::write(
+        write_test_file(
             &settings,
             r#"{
   "editor.fontSize": 14,
@@ -3331,7 +3345,7 @@ mod tests {
             .normal
             .insert(PathBuf::from(".vscode/settings.json"), b"[1, 2]".to_vec());
         std::fs::create_dir_all(proj.join(".vscode")).unwrap();
-        std::fs::write(&settings, r#"{ "editor.fontSize": 14 }"#).unwrap();
+        write_test_file(&settings, r#"{ "editor.fontSize": 14 }"#).unwrap();
         assert_eq!(
             sync_settings_file(&settings, &ctx, &arr_fm, &proj).unwrap(),
             SettingsSyncOutcome::Unchanged
@@ -3356,18 +3370,18 @@ mod tests {
         // 模板：common + vscode（settings.json 带 fileNesting）
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
         std::fs::create_dir_all(tpl.join("vscode").join(".vscode")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("vscode").join("layer.toml"),
             "name = \"VS Code\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("vscode").join(".vscode").join("settings.json"),
             r#"{
   "explorer.fileNesting.enabled": true,
@@ -3379,7 +3393,7 @@ mod tests {
         // 项目：磁盘 settings 已有用户自定义，manifest 已记录 vscode 层
         let proj = tmp.join("proj");
         std::fs::create_dir_all(proj.join(".vscode")).unwrap();
-        std::fs::write(
+        write_test_file(
             proj.join(".vscode").join("settings.json"),
             r#"{
   "editor.fontSize": 14,
@@ -3388,7 +3402,7 @@ mod tests {
 }"#,
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             proj.join(crate::manifest::MANIFEST_FILE),
             serde_json::json!({
                 "tool": "pengj-templates",
@@ -3463,22 +3477,22 @@ mod tests {
         // layer A
         let layer_a = tpl.join("layer_a");
         std::fs::create_dir_all(&layer_a).unwrap();
-        std::fs::write(
+        write_test_file(
             layer_a.join("layer.toml"),
             "name = \"Layer A\"\ndescription = \"A\"\ndepends = []\n",
         )
         .unwrap();
-        std::fs::write(layer_a.join(".gitattributes"), "* text=auto eol=lf\n").unwrap();
+        write_test_file(layer_a.join(".gitattributes"), "* text=auto eol=lf\n").unwrap();
 
         // layer B
         let layer_b = tpl.join("layer_b");
         std::fs::create_dir_all(&layer_b).unwrap();
-        std::fs::write(
+        write_test_file(
             layer_b.join("layer.toml"),
             "name = \"Layer B\"\ndescription = \"B\"\ndepends = [\"layer_a\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             layer_b.join(".gitattributes"),
             "*.rs text eol=lf diff=rust\n",
         )
@@ -3544,7 +3558,7 @@ mod tests {
         let skill_dir = tmp.join(".agents").join("skills").join("my-skill");
         std::fs::create_dir_all(&skill_dir).unwrap();
         let disk = "---\nname: my-skill\ndescription: old description\n---\n\n<!-- PENGJ_TEMPLATE_START -->\nold managed body\n<!-- PENGJ_TEMPLATE_END -->\n\n## Custom Section\n- custom user note\n";
-        std::fs::write(skill_dir.join("SKILL.md"), disk).unwrap();
+        write_test_file(skill_dir.join("SKILL.md"), disk).unwrap();
 
         let tmpl = b"---\nname: my-skill\ndescription: new bilingual description\n---\n\n<!-- PENGJ_TEMPLATE_START -->\nnew managed body\n<!-- PENGJ_TEMPLATE_END -->\n";
         let rel = Path::new(".agents/skills/my-skill/SKILL.md");
@@ -3583,7 +3597,7 @@ mod tests {
         let ctx = RenderContext::new("proj", vec!["agent".to_string()], BTreeMap::new());
 
         // 磁盘已存在旧版本文件：渲染结果仍是纯模板，不受磁盘影响
-        std::fs::write(
+        write_test_file(
             proj.join("AGENTS.md"),
             "# Header\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n\n## Custom\n- user content\n",
         )
@@ -3617,18 +3631,18 @@ mod tests {
         // 模板：common + agent 层（AGENTS.md 含受管块，块内为模板托管内容）
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
         std::fs::create_dir_all(tpl.join("agent")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("layer.toml"),
             "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("AGENTS.md"),
             "# {{ project_name }} 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n",
         )
@@ -3639,12 +3653,12 @@ mod tests {
         let v1_template = "# proj 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n";
         let proj = tmp.join("proj");
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::write(
+        write_test_file(
             proj.join("AGENTS.md"),
             "# proj 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n\n## 项目专属\n- 用户规则\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             proj.join(crate::manifest::MANIFEST_FILE),
             serde_json::json!({
                 "tool": "pengj-templates",
@@ -3682,14 +3696,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"
 description = \"x\"
 ",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("README.md"),
             "hello
 ",
@@ -3731,18 +3745,18 @@ description = \"x\"
         // 模板：agent 层 AGENTS.md 含受管块（v2 内容）
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
         std::fs::create_dir_all(tpl.join("agent")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("layer.toml"),
             "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("AGENTS.md"),
             "# {{ project_name }} 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n",
         )
@@ -3753,12 +3767,12 @@ description = \"x\"
         let v1_template = "# proj 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n";
         let proj = tmp.join("proj");
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::write(
+        write_test_file(
             proj.join("AGENTS.md"),
             "# proj 编码规范\n\n## 项目专属\n- 用户规则\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             proj.join(crate::manifest::MANIFEST_FILE),
             serde_json::json!({
                 "tool": "pengj-templates",
@@ -3815,18 +3829,18 @@ description = \"x\"
         // 模板：agent 层 AGENTS.md 含受管块
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
         std::fs::create_dir_all(tpl.join("agent")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("layer.toml"),
             "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("AGENTS.md"),
             "# {{ project_name }} 编码规范\n\n<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n",
         )
@@ -3836,7 +3850,7 @@ description = \"x\"
         let disk = "# proj 编码规范\n\n## 项目专属\n- 用户规则\n";
         let proj = tmp.join("proj");
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::write(proj.join("AGENTS.md"), disk).unwrap();
+        write_test_file(proj.join("AGENTS.md"), disk).unwrap();
 
         // 旧版 adopt 记录的「合并哈希」= sha(磁盘 + 追加的受管块)
         let templates = Templates::new(&tpl);
@@ -3844,7 +3858,7 @@ description = \"x\"
             disk,
             "<!-- PENGJ_TEMPLATE_START -->\nmanaged v2\n<!-- PENGJ_TEMPLATE_END -->\n",
         );
-        std::fs::write(
+        write_test_file(
             proj.join(crate::manifest::MANIFEST_FILE),
             serde_json::json!({
                 "tool": "pengj-templates",
@@ -3887,12 +3901,12 @@ description = \"x\"
 
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join(".gitignore"),
             "# PENGJ_TEMPLATE_START\n/node_modules\n# PENGJ_TEMPLATE_END\n",
         )
@@ -3902,7 +3916,7 @@ description = \"x\"
         let user_gitignore = "/target/\n/debug/\n/my-custom-ignore/\n";
         let proj = tmp.join("proj");
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::write(proj.join(".gitignore"), user_gitignore).unwrap();
+        write_test_file(proj.join(".gitignore"), user_gitignore).unwrap();
 
         // 渲染 concat，把模板哈希写进 manifest（模拟旧版 adopt 的基线）
         let templates = Templates::new(&tpl);
@@ -3913,7 +3927,7 @@ description = \"x\"
             .unwrap();
         let bytes_map = render_file_map(&fm, &ctx).unwrap();
         let concat_sha = sha256_hex(&bytes_map[&PathBuf::from(".gitignore")]);
-        std::fs::write(
+        write_test_file(
             proj.join(crate::manifest::MANIFEST_FILE),
             serde_json::json!({
                 "tool": "pengj-templates",
@@ -3951,18 +3965,18 @@ description = \"x\"
         // 模板：agent 层 AGENTS.md 含受管块
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
         std::fs::create_dir_all(tpl.join("agent")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("layer.toml"),
             "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("AGENTS.md"),
             "<!-- PENGJ_TEMPLATE_START -->\nmanaged v1\n<!-- PENGJ_TEMPLATE_END -->\n",
         )
@@ -3971,7 +3985,7 @@ description = \"x\"
         // 存量项目：AGENTS.md 是 legacy 文件，没有受管块标记
         let proj = tmp.join("legacy-app");
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::write(
+        write_test_file(
             proj.join("AGENTS.md"),
             "# 项目规范\n\n## 用户自定义规则\n- 规则 A\n- 规则 B\n",
         )
@@ -4016,17 +4030,17 @@ description = \"x\"
         let tpl = tmp.join("templates");
         let common = tpl.join("common");
         std::fs::create_dir_all(&common).unwrap();
-        std::fs::write(
+        write_test_file(
             common.join("layer.toml"),
             "name = \"Common\"\ndescription = \"Common\"\n",
         )
         .unwrap();
-        std::fs::write(common.join(".gitignore"), "target/\n").unwrap();
+        write_test_file(common.join(".gitignore"), "target/\n").unwrap();
 
         let existing_project = tmp.join("my-existing-app");
         std::fs::create_dir_all(&existing_project).unwrap();
-        std::fs::write(existing_project.join("README.md"), "# Existing").unwrap();
-        std::fs::write(
+        write_test_file(existing_project.join("README.md"), "# Existing").unwrap();
+        write_test_file(
             existing_project.join(".gitignore"),
             "target/\nlocal_custom/\n",
         )
@@ -4043,7 +4057,9 @@ description = \"x\"
         .expect("adopt should succeed");
 
         assert_eq!(report.project_name, "my-existing-app");
-        assert!(existing_project.join(".pengj-templates.json").exists());
+        assert!(existing_project
+            .join(".pengj-templates/manifest.json")
+            .exists());
         let manifest = ProjectManifest::load(&existing_project).unwrap();
         assert_eq!(manifest.layers, vec!["common".to_string()]);
         assert!(manifest.files.contains_key(".gitignore"));
@@ -4063,13 +4079,13 @@ description = \"x\"
         // 模板：agent 层带一个含受管块的 commit 技能
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
         std::fs::create_dir_all(tpl.join("agent")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("layer.toml"),
             "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
@@ -4080,7 +4096,7 @@ description = \"x\"
             .join("skills")
             .join("commit");
         std::fs::create_dir_all(&tpl_skill).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl_skill.join("SKILL.md"),
             "---\nname: commit\ndescription: x\n---\n\n<!-- PENGJ_TEMPLATE_START -->\n模板流程 v1\n<!-- PENGJ_TEMPLATE_END -->\n",
         )
@@ -4092,7 +4108,7 @@ description = \"x\"
         std::fs::create_dir_all(&user_skill).unwrap();
         let user_content =
             "---\nname: commit\ndescription: 我自己的提交规范\n---\n\n# 我的流程\n- 领域三问\n";
-        std::fs::write(user_skill.join("SKILL.md"), user_content).unwrap();
+        write_test_file(user_skill.join("SKILL.md"), user_content).unwrap();
 
         let templates = Templates::new(&tpl);
         let report = adopt_project(
@@ -4178,13 +4194,13 @@ description = \"x\"
 
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
         std::fs::create_dir_all(tpl.join("agent")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("layer.toml"),
             "name = \"Agent\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
@@ -4195,7 +4211,7 @@ description = \"x\"
             .join("skills")
             .join("caveman");
         std::fs::create_dir_all(&tpl_skill).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl_skill.join("SKILL.md"),
             "---\nname: caveman\ndescription: x\n---\n\n<!-- PENGJ_TEMPLATE_START -->\n模板 v1\n<!-- PENGJ_TEMPLATE_END -->\n",
         )
@@ -4205,7 +4221,7 @@ description = \"x\"
         let proj = tmp.join("legacy-app");
         let user_skill = proj.join(".agents").join("skills").join("caveman");
         std::fs::create_dir_all(&user_skill).unwrap();
-        std::fs::write(
+        write_test_file(
             user_skill.join("SKILL.md"),
             "---\nname: caveman\ndescription: x\n---\n\n<!-- PENGJ_TEMPLATE_START -->\n旧版 v0\n<!-- PENGJ_TEMPLATE_END -->\n\n## 用户备注\n- 保留\n",
         )
@@ -4257,44 +4273,48 @@ description = \"x\"
         // ---- 模板三层：common / gate（提交门禁）/ rustx（cargo 配置）----
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
 
         std::fs::create_dir_all(tpl.join("gate").join(".githooks")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("gate").join("layer.toml"),
-            "name = \"Gate\"\ndescription = \"x\"\ndepends = [\"common\"]\nupdate_ignore = [\".gate.toml\"]\n",
+            "name = \"Gate\"\ndescription = \"x\"\ndepends = [\"common\"]\nupdate_ignore = [\".pengj-templates/gate.toml\"]\n",
         )
         .unwrap();
-        std::fs::write(tpl.join("gate").join(".gate.toml"), "mode = \"chinese\"\n").unwrap();
-        std::fs::write(
+        write_test_file(
+            tpl.join("gate").join(".pengj-templates/gate.toml"),
+            "mode = \"chinese\"\n",
+        )
+        .unwrap();
+        write_test_file(
             tpl.join("gate").join(".githooks").join("pre-commit"),
             "#!/bin/sh\n# gate hook: the pre-commit stage.\nexec gate hook pre-commit\n",
         )
         .unwrap();
 
         std::fs::create_dir_all(tpl.join("rustx").join(".cargo")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("rustx").join("layer.toml"),
             "name = \"RustX\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("rustx").join(".cargo").join("config.toml"),
             "# PENGJ_TEMPLATE_START\n[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld\"\n\n[target.x86_64-unknown-linux-gnu]\nlinker = \"lld\"\n# PENGJ_TEMPLATE_END\n",
         )
         .unwrap();
 
         std::fs::create_dir_all(tpl.join("agentdoc")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agentdoc").join("layer.toml"),
             "name = \"AgentDoc\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agentdoc").join("AGENTS.md"),
             "<!-- PENGJ_TEMPLATE_START -->\n# 模板规范 v1\n<!-- PENGJ_TEMPLATE_END -->\n",
         )
@@ -4303,16 +4323,16 @@ description = \"x\"
         // ---- 存量项目 ----
         let proj = tmp.join("legacy-app");
         std::fs::create_dir_all(proj.join(".cargo")).unwrap();
-        std::fs::write(
+        write_test_file(
             proj.join(".cargo").join("config.toml"),
             "[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld\"\nrustflags = [\"-C\", \"target-cpu=x86-64-v3\"]\n",
         )
         .unwrap();
         let user_pkg = "{\n  \"name\": \"legacy-app\",\n  \"version\": \"0.2.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"prepare\": \"lefthook install\"\n  },\n  \"devDependencies\": {\n    \"lefthook\": \"^2.1.10\"\n  }\n}\n";
-        std::fs::write(proj.join("package.json"), user_pkg).unwrap();
+        write_test_file(proj.join("package.json"), user_pkg).unwrap();
         let user_commitlint = "export default { extends: ['@commitlint/config-conventional'] };\n";
-        std::fs::write(proj.join("commitlint.config.js"), user_commitlint).unwrap();
-        std::fs::write(proj.join("AGENTS.md"), "# 项目自有规范\n- 规则 A\n").unwrap();
+        write_test_file(proj.join("commitlint.config.js"), user_commitlint).unwrap();
+        write_test_file(proj.join("AGENTS.md"), "# 项目自有规范\n- 规则 A\n").unwrap();
 
         let templates = Templates::new(&tpl);
         let layers = [
@@ -4325,7 +4345,10 @@ description = \"x\"
             .expect("adopt should succeed");
 
         // -- gate 层产出门禁配置与钩子脚本 --
-        assert!(report.created.iter().any(|f| f == ".gate.toml"));
+        assert!(report
+            .created
+            .iter()
+            .any(|f| f.replace('\\', "/") == ".pengj-templates/gate.toml"));
         assert!(
             report
                 .created
@@ -4415,7 +4438,7 @@ description = \"x\"
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
-    /// 存量项目从旧层迁移到 `gate` 时，`.gate.toml` 从未落过盘——它是 gate 层的
+    /// 存量项目从旧层迁移到 `gate` 时，`.pengj-templates/gate.toml` 从未落过盘——它是 gate 层的
     /// update_ignore 文件，但 update_ignore 的语义是「首次生成时写入、之后归用户
     /// 所有」，不是「永远不写」。缺失时必须补写，否则新接入的门禁没有配置；补写
     /// 之后用户改过的内容仍然不被覆盖。
@@ -4427,12 +4450,16 @@ description = \"x\"
 
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("gate")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("gate").join("layer.toml"),
-            "name = \"Gate\"\ndescription = \"x\"\nupdate_ignore = [\".gate.toml\"]\n",
+            "name = \"Gate\"\ndescription = \"x\"\nupdate_ignore = [\".pengj-templates/gate.toml\"]\n",
         )
         .unwrap();
-        std::fs::write(tpl.join("gate").join(".gate.toml"), "mode = \"chinese\"\n").unwrap();
+        write_test_file(
+            tpl.join("gate").join(".pengj-templates/gate.toml"),
+            "mode = \"chinese\"\n",
+        )
+        .unwrap();
 
         // 模拟「项目已有 manifest、层已接入，但 update_ignore 文件还缺失」
         let proj = tmp.join("app");
@@ -4454,12 +4481,12 @@ description = \"x\"
         assert!(
             upd.created
                 .iter()
-                .any(|f| f.replace('\\', "/") == ".gate.toml"),
+                .any(|f| f.replace('\\', "/") == ".pengj-templates/gate.toml"),
             "缺失的门禁配置必须补写，实际: {:?}",
             upd.created
         );
         assert_eq!(
-            std::fs::read_to_string(proj.join(".gate.toml"))
+            std::fs::read_to_string(proj.join(".pengj-templates/gate.toml"))
                 .unwrap()
                 .trim(),
             "mode = \"chinese\""
@@ -4468,17 +4495,22 @@ description = \"x\"
             ProjectManifest::load(&proj)
                 .unwrap()
                 .files
-                .contains_key(".gate.toml"),
+                .keys()
+                .any(|k| k.replace('\\', "/") == ".pengj-templates/gate.toml"),
             "补写后的门禁配置应进入托管账本"
         );
 
         // 用户改过之后，update 不再接管
-        std::fs::write(proj.join(".gate.toml"), "mode = \"english\"\n").unwrap();
+        write_test_file(
+            proj.join(".pengj-templates/gate.toml"),
+            "mode = \"english\"\n",
+        )
+        .unwrap();
         let upd = update_project(&templates, &proj).expect("second update should succeed");
         assert!(upd.updated.is_empty(), "不应再有更新: {:?}", upd.updated);
         assert!(upd.created.is_empty());
         assert_eq!(
-            std::fs::read_to_string(proj.join(".gate.toml"))
+            std::fs::read_to_string(proj.join(".pengj-templates/gate.toml"))
                 .unwrap()
                 .trim(),
             "mode = \"english\"",
@@ -4488,13 +4520,15 @@ description = \"x\"
             ProjectManifest::load(&proj)
                 .unwrap()
                 .files
-                .contains_key(".gate.toml"),
+                .contains_key(&manifest_key(".pengj-templates/gate.toml")),
             "归用户所有的文件不得从托管账本消失"
         );
 
         // 账本缺失时按磁盘内容补登：早期版本会在跳过 update_ignore 时丢条目
         let mut healed = ProjectManifest::load(&proj).unwrap();
-        healed.files.remove(".gate.toml");
+        healed
+            .files
+            .remove(&manifest_key(".pengj-templates/gate.toml"));
         healed.save(&proj).unwrap();
         let upd = update_project(&templates, &proj).expect("third update should succeed");
         assert!(upd.updated.is_empty() && upd.created.is_empty());
@@ -4502,7 +4536,7 @@ description = \"x\"
             ProjectManifest::load(&proj)
                 .unwrap()
                 .files
-                .contains_key(".gate.toml"),
+                .contains_key(&manifest_key(".pengj-templates/gate.toml")),
             "账本缺失时必须按磁盘内容补登"
         );
 
@@ -4521,21 +4555,21 @@ description = \"x\"
 
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("gate")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("gate").join("layer.toml"),
-            "name = \"Gate\"\ndescription = \"x\"\nupdate_ignore = [\".gate.toml\"]\n",
+            "name = \"Gate\"\ndescription = \"x\"\nupdate_ignore = [\".pengj-templates/gate.toml\"]\n",
         )
         .unwrap();
-        std::fs::write(
-            tpl.join("gate").join(".gate.toml"),
+        write_test_file(
+            tpl.join("gate").join(".pengj-templates/gate.toml"),
             "# PENGJ_TEMPLATE_START\n# 新版说明：空列表 = 拒绝所有 scope\n# PENGJ_TEMPLATE_END\n\ncommit.scopes = [\"*\"]\n",
         )
         .unwrap();
 
         let proj = tmp.join("app");
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::write(
-            proj.join(".gate.toml"),
+        write_test_file(
+            proj.join(".pengj-templates/gate.toml"),
             "# PENGJ_TEMPLATE_START\n# 旧版说明：空列表 = 放行所有 scope\n# PENGJ_TEMPLATE_END\n\ncommit.scopes = [\"vulkan\", \"common\"]\n",
         )
         .unwrap();
@@ -4553,7 +4587,7 @@ description = \"x\"
 
         let templates = Templates::new(&tpl);
         let upd = update_project(&templates, &proj).expect("update should succeed");
-        let text = std::fs::read_to_string(proj.join(".gate.toml")).unwrap();
+        let text = std::fs::read_to_string(proj.join(".pengj-templates/gate.toml")).unwrap();
 
         assert!(text.contains("新版说明"), "说明块必须被刷新: {text}");
         assert!(!text.contains("旧版说明"), "旧说明必须消失: {text}");
@@ -4561,7 +4595,13 @@ description = \"x\"
             text.contains("commit.scopes = [\"vulkan\", \"common\"]"),
             "配置值归用户，不得被模板默认值覆盖: {text}"
         );
-        assert_eq!(upd.docs_synced, vec![".gate.toml".to_string()]);
+        assert_eq!(
+            upd.docs_synced
+                .iter()
+                .map(|p| p.replace('\\', "/"))
+                .collect::<Vec<_>>(),
+            vec![".pengj-templates/gate.toml".to_string()]
+        );
         assert!(
             upd.updated.is_empty(),
             "说明块刷新不应混进普通文件更新: {:?}",
@@ -4586,13 +4626,13 @@ description = \"x\"
 
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("gate")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("gate").join("layer.toml"),
-            "name = \"Gate\"\ndescription = \"x\"\nupdate_ignore = [\".gate.toml\"]\n",
+            "name = \"Gate\"\ndescription = \"x\"\nupdate_ignore = [\".pengj-templates/gate.toml\"]\n",
         )
         .unwrap();
-        std::fs::write(
-            tpl.join("gate").join(".gate.toml"),
+        write_test_file(
+            tpl.join("gate").join(".pengj-templates/gate.toml"),
             "# PENGJ_TEMPLATE_START\n# 新版说明\n# PENGJ_TEMPLATE_END\n\ncommit.scopes = [\"*\"]\n",
         )
         .unwrap();
@@ -4600,7 +4640,7 @@ description = \"x\"
         let proj = tmp.join("app");
         std::fs::create_dir_all(&proj).unwrap();
         let legacy = "# 旧版说明（无受管块）\nmode = \"chinese\"\ncommit.scopes = [\"rdd\"]\n";
-        std::fs::write(proj.join(".gate.toml"), legacy).unwrap();
+        write_test_file(proj.join(".pengj-templates/gate.toml"), legacy).unwrap();
         ProjectManifest {
             tool: "pengj-templates".to_string(),
             version: "0.0.0".to_string(),
@@ -4615,7 +4655,7 @@ description = \"x\"
 
         let templates = Templates::new(&tpl);
         let upd = update_project(&templates, &proj).expect("update should succeed");
-        let text = std::fs::read_to_string(proj.join(".gate.toml")).unwrap();
+        let text = std::fs::read_to_string(proj.join(".pengj-templates/gate.toml")).unwrap();
 
         assert!(
             text.starts_with("# PENGJ_TEMPLATE_START"),
@@ -4645,12 +4685,12 @@ description = \"x\"
 
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
-        std::fs::write(tpl.join("common").join("README.md"), "common\n").unwrap();
+        write_test_file(tpl.join("common").join("README.md"), "common\n").unwrap();
 
         let proj = tmp.join("app");
         std::fs::create_dir_all(&proj).unwrap();
@@ -4700,12 +4740,16 @@ description = \"x\"
 
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("gate")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("gate").join("layer.toml"),
             "name = \"Gate\"\ndescription = \"x\"\n",
         )
         .unwrap();
-        std::fs::write(tpl.join("gate").join(".gate.toml"), "mode = \"english\"\n").unwrap();
+        write_test_file(
+            tpl.join("gate").join(".pengj-templates/gate.toml"),
+            "mode = \"english\"\n",
+        )
+        .unwrap();
 
         let templates = Templates::new(&tpl);
 
@@ -4731,13 +4775,18 @@ description = \"x\"
 
         let upd = update_project(&templates, &proj).expect("update 应成功");
         assert!(
-            upd.created.iter().any(|f| f == ".gate.toml"),
+            upd.created
+                .iter()
+                .any(|f| f.replace('\\', "/") == ".pengj-templates/gate.toml"),
             "门禁配置应被补齐，实际: {:?}",
             upd.created
         );
         let after = ProjectManifest::load(&proj).unwrap();
         assert_eq!(after.layers, vec!["gate".to_string()], "层名应迁移到 gate");
-        assert!(proj.join(".gate.toml").is_file(), "门禁配置应落盘");
+        assert!(
+            proj.join(".pengj-templates/gate.toml").is_file(),
+            "门禁配置应落盘"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -4755,13 +4804,13 @@ description = \"x\"
 
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("gate").join(".githooks")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("gate").join("layer.toml"),
             "name = \"Gate\"\ndescription = \"x\"\n",
         )
         .unwrap();
         let hook = tpl.join("gate").join(".githooks").join("pre-commit");
-        std::fs::write(&hook, "#!/bin/sh\n# gate hook: the pre-commit stage.\n").unwrap();
+        write_test_file(&hook, "#!/bin/sh\n# gate hook: the pre-commit stage.\n").unwrap();
         std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         let templates = Templates::new(&tpl);
@@ -4795,18 +4844,18 @@ description = \"x\"
         // 模板：common + vscode 层
         let tpl = tmp.join("templates");
         std::fs::create_dir_all(tpl.join("common")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("common").join("layer.toml"),
             "name = \"Common\"\ndescription = \"x\"\n",
         )
         .unwrap();
         std::fs::create_dir_all(tpl.join("vscode").join(".vscode")).unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("vscode").join("layer.toml"),
             "name = \"VS Code\"\ndescription = \"x\"\ndepends = [\"common\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("vscode").join(".vscode").join("settings.json"),
             r#"{
   "explorer.fileNesting.enabled": true,
@@ -4818,7 +4867,7 @@ description = \"x\"
         // 存量项目：已有 *.code-workspace（含用户自定义 settings），没有 .vscode/settings.json
         let proj = tmp.join("legacy-ws-app");
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::write(
+        write_test_file(
             proj.join("my.code-workspace"),
             r#"{
   "folders": [{ "path": "." }],
@@ -4897,12 +4946,12 @@ description = \"x\"
                 .join("commit"),
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("layer.toml"),
             "name = \"Agent\"\ndescription = \"x\"\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent")
                 .join(".agents")
                 .join("skills")
@@ -4911,7 +4960,7 @@ description = \"x\"
             "---\nname: commit\ndescription: 提交技能\n---\n# Commit\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             tpl.join("agent").join("AGENTS.md"),
             "<!-- PENGJ_TEMPLATE_START -->\n{% if options[\"skills\"] is defined %}{% for s in options[\"skills\"] %}- {{ s }}\n{% endfor %}{% endif %}<!-- PENGJ_TEMPLATE_END -->\n",
         )
@@ -5090,7 +5139,7 @@ description = \"x\"
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
-    /// gate 层负责代码语言守卫：`.gate.toml` 按 `chinese_programming` / `commit_zh`
+    /// gate 层负责代码语言守卫：`.pengj-templates/gate.toml` 按 `chinese_programming` / `commit_zh`
     /// 渲染出配置与提交规则，`.githooks/*` 挂上钩子，AGENTS.md 的规范条目随层出现；
     /// 钩子脚本本身与语言轴无关（只跟随 skill_lang 的注释语言）。
     #[test]
@@ -5125,8 +5174,9 @@ description = \"x\"
         let zh_root = tmp.join("guard_zh");
         let en_root = tmp.join("guard_en");
 
-        // -- .gate.toml：代码语言与提交主题语言两条轴都按选项渲染 --
-        let zh_config = std::fs::read_to_string(zh_root.join(".gate.toml")).unwrap();
+        // -- .pengj-templates/gate.toml：代码语言与提交主题语言两条轴都按选项渲染 --
+        let zh_config =
+            std::fs::read_to_string(zh_root.join(".pengj-templates/gate.toml")).unwrap();
         assert!(
             zh_config.contains("mode = \"english\""),
             "chinese_programming=false 应渲染成 english，实际:\n{zh_config}"
@@ -5143,7 +5193,8 @@ description = \"x\"
             "新项目默认放行任意 scope，实际:\n{zh_config}"
         );
 
-        let en_config = std::fs::read_to_string(en_root.join(".gate.toml")).unwrap();
+        let en_config =
+            std::fs::read_to_string(en_root.join(".pengj-templates/gate.toml")).unwrap();
         assert!(
             en_config.contains("mode = \"chinese\""),
             "chinese_programming=true 应渲染成 chinese，实际:\n{en_config}"
@@ -5154,7 +5205,7 @@ description = \"x\"
         );
         assert!(
             !contains_cjk(&en_config),
-            "英文项目的 .gate.toml 不得含汉字，实际:\n{en_config}"
+            "英文项目的 .pengj-templates/gate.toml 不得含汉字，实际:\n{en_config}"
         );
 
         // -- 钩子脚本：随层生成，带 gate 标记 --
@@ -5198,7 +5249,10 @@ description = \"x\"
         let bare_agents =
             std::fs::read_to_string(tmp.join("guard_bare").join("AGENTS.md")).unwrap();
         assert!(!bare_agents.contains("代码语言守卫"));
-        assert!(!tmp.join("guard_bare").join(".gate.toml").exists());
+        assert!(!tmp
+            .join("guard_bare")
+            .join(".pengj-templates/gate.toml")
+            .exists());
         assert!(!tmp.join("guard_bare").join(".githooks").exists());
 
         let _ = std::fs::remove_dir_all(&tmp);
@@ -5282,7 +5336,13 @@ description = \"x\"
         );
 
         // -- 配方入口 --
-        let gate_just = std::fs::read_to_string(zh_root.join("just").join("gate.just")).unwrap();
+        let gate_just = std::fs::read_to_string(
+            zh_root
+                .join(".pengj-templates")
+                .join("just")
+                .join("gate.just"),
+        )
+        .unwrap();
         assert!(
             gate_just.contains("gate-hooks-local") && gate_just.contains("install.sh"),
             "just 配方必须给出激活钩子的裸入口"
@@ -5357,17 +5417,17 @@ description = \"x\"
         // 构造一层模板：含 1 个带托管块文件，1 个无托管块文件
         let l1 = tpl_dir.join("layer1");
         std::fs::create_dir_all(&l1).unwrap();
-        std::fs::write(
+        write_test_file(
             l1.join("layer.toml"),
             "name = \"L1\"\ndescription = \"Test\"\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             l1.join("doc.md"),
             "Intro\n<!-- PENGJ_TEMPLATE_START -->\nManaged Block V1\n<!-- PENGJ_TEMPLATE_END -->\nOutro",
         )
         .unwrap();
-        std::fs::write(l1.join("script.sh"), "#!/bin/sh\necho hello\n").unwrap();
+        write_test_file(l1.join("script.sh"), "#!/bin/sh\necho hello\n").unwrap();
 
         let templates = Templates::new(&tpl_dir);
 
@@ -5384,7 +5444,7 @@ description = \"x\"
         assert_eq!(script_item.status, AuditFileStatus::InSync);
 
         // 2. 在 doc.md 托管块外新增用户专属内容（合规自定义）
-        std::fs::write(
+        write_test_file(
             proj_dir.join("doc.md"),
             "Intro\n<!-- PENGJ_TEMPLATE_START -->\nManaged Block V1\n<!-- PENGJ_TEMPLATE_END -->\nOutro\n## Project Custom Notes\n",
         )
@@ -5395,7 +5455,7 @@ description = \"x\"
         assert_eq!(doc_item2.status, AuditFileStatus::ProjectCustomized);
 
         // 3. 在 doc.md 托管块【内部】篡改内容 -> 产生 ViolatedManagedBlock 违规
-        std::fs::write(
+        write_test_file(
             proj_dir.join("doc.md"),
             "Intro\n<!-- PENGJ_TEMPLATE_START -->\nManaged Block TAMPERED\n<!-- PENGJ_TEMPLATE_END -->\nOutro\n## Project Custom Notes\n",
         )
@@ -5407,7 +5467,7 @@ description = \"x\"
         assert!(doc_item3.diff.as_ref().unwrap().contains("TAMPERED"));
 
         // 4. 篡改无托管块的 script.sh -> 产生 LocallyModifiedFile 违规
-        std::fs::write(proj_dir.join("script.sh"), "#!/bin/sh\necho hacked\n").unwrap();
+        write_test_file(proj_dir.join("script.sh"), "#!/bin/sh\necho hacked\n").unwrap();
         let rep4 = audit_project(&templates, &proj_dir, true).unwrap();
         assert!(rep4.has_violations);
         let script_item4 = rep4.items.iter().find(|i| i.path == "script.sh").unwrap();
@@ -5428,13 +5488,13 @@ description = \"x\"
         // 构造层 agent
         let agent_layer = tpl_dir.join("agent");
         std::fs::create_dir_all(agent_layer.join(".agents/skills/caveman")).unwrap();
-        std::fs::write(
+        write_test_file(
             agent_layer.join("layer.toml"),
             "name = \"agent\"\ndescription = \"Agent 层\"\n",
         )
         .unwrap();
         // 纯技能 caveman 无托管块
-        std::fs::write(
+        write_test_file(
             agent_layer.join(".agents/skills/caveman/SKILL.md"),
             "---\nname: caveman\ndescription: caveman\n---\n# Caveman V1\n",
         )
@@ -5446,14 +5506,14 @@ description = \"x\"
         generate(&templates, "myproject", &["agent".to_string()], opts, &tmp).unwrap();
 
         // 模拟上游模板升级了 caveman
-        std::fs::write(
+        write_test_file(
             agent_layer.join(".agents/skills/caveman/SKILL.md"),
             "---\nname: caveman\ndescription: caveman\n---\n# Caveman V2 Updated\n",
         )
         .unwrap();
 
         // 模拟本地磁盘存在修改（无托管块）
-        std::fs::write(
+        write_test_file(
             proj_dir.join(".agents/skills/caveman/SKILL.md"),
             "---\nname: caveman\ndescription: caveman\n---\n# Caveman V1 Local Tweaked\n",
         )
@@ -5507,14 +5567,14 @@ description = \"x\"
 
         let l1 = tpl_dir.join("layer1");
         std::fs::create_dir_all(l1.join("sub")).unwrap();
-        std::fs::write(
+        write_test_file(
             l1.join("layer.toml"),
             "name = \"layer1\"\ndescription = \"Test\"\n",
         )
         .unwrap();
-        std::fs::write(l1.join("sub/orphan.txt"), "delete me\n").unwrap();
-        std::fs::write(l1.join("modified_orphan.txt"), "keep my modifications\n").unwrap();
-        std::fs::write(l1.join("stay.txt"), "stay here\n").unwrap();
+        write_test_file(l1.join("sub/orphan.txt"), "delete me\n").unwrap();
+        write_test_file(l1.join("modified_orphan.txt"), "keep my modifications\n").unwrap();
+        write_test_file(l1.join("stay.txt"), "stay here\n").unwrap();
 
         let templates = Templates::new(&tpl_dir);
         generate(
@@ -5532,7 +5592,7 @@ description = \"x\"
         assert!(proj_dir.join("stay.txt").is_file());
 
         // 用户修改了 modified_orphan.txt，未动 sub/orphan.txt
-        std::fs::write(
+        write_test_file(
             proj_dir.join("modified_orphan.txt"),
             "user modified content\n",
         )
@@ -5631,14 +5691,14 @@ description = \"x\"
 
         let layer = tpl_dir.join("agent");
         std::fs::create_dir_all(layer.join(".agents/skills/caveman")).unwrap();
-        std::fs::write(
+        write_test_file(
             layer.join("layer.toml"),
             "name = \"agent\"
 description = \"Test\"
 ",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             layer.join(".agents/skills/caveman/SKILL.md"),
             "---
 name: caveman
@@ -5791,7 +5851,7 @@ body
 
         let common = tpl.join("common");
         std::fs::create_dir_all(&common).unwrap();
-        std::fs::write(
+        write_test_file(
             common.join("layer.toml"),
             "name = \"Common\"\ndescription = \"C\"\ndepends = []\n",
         )
@@ -5799,26 +5859,26 @@ body
 
         let just = tpl.join("just");
         std::fs::create_dir_all(&just).unwrap();
-        std::fs::write(
+        write_test_file(
             just.join("layer.toml"),
             "name = \"Just\"\ndescription = \"J\"\ndepends = [\"common\"]\n",
         )
         .unwrap();
-        std::fs::write(
+        write_test_file(
             just.join("justfile"),
-            "# PENGJ_TEMPLATE_START\n{% if \"bque\" in layers %}\nimport 'just/bque.just'\n{% endif %}\ndefault:\n    @just --list\n# PENGJ_TEMPLATE_END\n",
+            "# PENGJ_TEMPLATE_START\n{% if \"bque\" in layers %}\nimport '.pengj-templates/just/bque.just'\n{% endif %}\ndefault:\n    @just --list\n# PENGJ_TEMPLATE_END\n",
         )
         .unwrap();
 
         let bque = tpl.join("bque");
         std::fs::create_dir_all(bque.join("just")).unwrap();
-        std::fs::write(
+        write_test_file(
             bque.join("layer.toml"),
             "name = \"bque\"\ndescription = \"Q\"\ndepends = [\"common\", \"just\"]\n",
         )
         .unwrap();
-        std::fs::write(
-            bque.join("just/bque.just"),
+        write_test_file(
+            bque.join(".pengj-templates/just/bque.just"),
             "queue-status:\n    @bque status\n",
         )
         .unwrap();
@@ -5827,13 +5887,13 @@ body
         for skill in ["bque", "caveman"] {
             let dir = agent.join(".agents/skills").join(skill);
             std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(
+            write_test_file(
                 dir.join("SKILL.md"),
                 format!("---\nname: {skill}\ndescription: d\n---\n\n# {skill}\n"),
             )
             .unwrap();
         }
-        std::fs::write(
+        write_test_file(
             agent.join("layer.toml"),
             "name = \"Agent\"\ndescription = \"A\"\ndepends = [\"common\"]\n",
         )
@@ -5854,8 +5914,8 @@ body
         let justfile = proj.join("justfile");
         let mut text = std::fs::read_to_string(&justfile).unwrap();
         text.push_str("\n# project-owned marker\n");
-        std::fs::write(&justfile, &text).unwrap();
-        assert!(!text.contains("import 'just/bque.just'"));
+        write_test_file(&justfile, &text).unwrap();
+        assert!(!text.contains("import '.pengj-templates/just/bque.just'"));
 
         let report = add_layers_to_project(
             &templates,
@@ -5871,10 +5931,10 @@ body
         let manifest = ProjectManifest::load(&proj).unwrap();
         let skills = manifest.options["skills"].as_array().unwrap();
         assert!(skills.iter().any(|v| v.as_str() == Some("bque")));
-        assert!(proj.join("just/bque.just").is_file());
+        assert!(proj.join(".pengj-templates/just/bque.just").is_file());
 
         let after = std::fs::read_to_string(&justfile).unwrap();
-        assert!(after.contains("import 'just/bque.just'"));
+        assert!(after.contains("import '.pengj-templates/just/bque.just'"));
         assert!(
             after.contains("# project-owned marker"),
             "项目专属区必须原样保留"
@@ -5904,7 +5964,7 @@ body
 
     /// `skill_lang` 是全部模板层「面向人的文案」语言轴：`en` 时生成的所有文本文件
     /// （just/gate/Cargo/技能/AGENTS 等）都不得出现汉字；`zh` 时保持既有中文文案。
-    /// `commit_zh` 独立控制门禁的提交主题语言规则值（`.gate.toml` 的 `commit.subject_lang`）。
+    /// `commit_zh` 独立控制门禁的提交主题语言规则值（`.pengj-templates/gate.toml` 的 `commit.subject_lang`）。
     #[test]
     fn skill_lang_drives_every_generated_file_language() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -5938,13 +5998,20 @@ body
             generate(&templates, name, &layers, options, &tmp).unwrap();
         }
 
-        let zh_lint = std::fs::read_to_string(tmp.join("lang_zh").join(".gate.toml")).unwrap();
+        let zh_lint =
+            std::fs::read_to_string(tmp.join("lang_zh").join(".pengj-templates/gate.toml"))
+                .unwrap();
         assert!(contains_cjk(&zh_lint), "zh 项目应保留中文文案");
-        let zh_just = std::fs::read_to_string(tmp.join("lang_zh").join("just/bque.just")).unwrap();
+        let zh_just =
+            std::fs::read_to_string(tmp.join("lang_zh").join(".pengj-templates/just/bque.just"))
+                .unwrap();
         assert!(contains_cjk(&zh_just), "zh 项目应保留中文注释");
 
         // doctor 脚本跟随 skill_lang 语言轴，并已移除 legacy 全局 gate 检测。
-        for script in ["scripts/doctor.sh", "scripts/doctor.ps1"] {
+        for script in [
+            ".pengj-templates/scripts/doctor.sh",
+            ".pengj-templates/scripts/doctor.ps1",
+        ] {
             let zh_doctor = std::fs::read_to_string(tmp.join("lang_zh").join(script)).unwrap();
             assert!(
                 zh_doctor.contains("项目环境自检"),
@@ -5998,19 +6065,19 @@ body
         let _ = std::fs::remove_dir_all(&tmp);
         let layer = tpl.join("demo");
         std::fs::create_dir_all(layer.join("sub")).unwrap();
-        std::fs::write(
+        write_test_file(
             layer.join(LAYER_META_FILE),
             "name = \"Demo\"\ndescription = \"demo layer\"\n",
         )
         .unwrap();
-        std::fs::write(layer.join("config.zh.js"), "// 中文版本\n").unwrap();
-        std::fs::write(layer.join("config.en.js"), "// english version\n").unwrap();
-        std::fs::write(layer.join("sub/plain.zh.txt"), "中文纯文本\n").unwrap();
-        std::fs::write(layer.join("sub/plain.en.txt"), "english plain text\n").unwrap();
-        std::fs::write(layer.join("shared.txt"), "shared file\n").unwrap();
+        write_test_file(layer.join("config.zh.js"), "// 中文版本\n").unwrap();
+        write_test_file(layer.join("config.en.js"), "// english version\n").unwrap();
+        write_test_file(layer.join("sub/plain.zh.txt"), "中文纯文本\n").unwrap();
+        write_test_file(layer.join("sub/plain.en.txt"), "english plain text\n").unwrap();
+        write_test_file(layer.join("shared.txt"), "shared file\n").unwrap();
         // 提交语言轴变体：跟随 commit_zh，而非 skill_lang
-        std::fs::write(layer.join("msg.commit.zh.js"), "// 中文提交校验\n").unwrap();
-        std::fs::write(layer.join("msg.commit.en.js"), "// english commit check\n").unwrap();
+        write_test_file(layer.join("msg.commit.zh.js"), "// 中文提交校验\n").unwrap();
+        write_test_file(layer.join("msg.commit.en.js"), "// english commit check\n").unwrap();
         std::fs::create_dir_all(&tmp).unwrap();
 
         let templates = Templates::new(&tpl);

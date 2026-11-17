@@ -96,7 +96,7 @@ pub fn contains_han(text: &str) -> bool {
 /// - `Cargo.toml` / `rust-toolchain.toml`：构建配置，注释可有可无；
 /// - `src/main.rs`：种子程序，示例输出不本地化。
 ///
-/// 注意这里是 `.agents/skills/` 下的 `scripts/`，不含项目根的 `scripts/doctor.d/`——
+/// 注意这里是 `.agents/skills/` 下的 `scripts/`，不含项目根的 `.pengj-templates/scripts/doctor.d/`——
 /// 后者的 README 是给人看的文档，必须参与检查。
 pub fn is_machine_owned(path: &str) -> bool {
     let p = path.replace('\\', "/");
@@ -245,7 +245,7 @@ mod tests {
             ".agents/skills/git-workflow/scripts/sync-branch.ps1",
             ".agents\\skills\\mcp-bootstrap\\scripts\\ensure-mcp.mjs",
             ".vscode/settings.json",
-            ".pengj-templates.json",
+            ".pengj-templates/manifest.json",
             "Cargo.toml",
             ".agents/skills/wizard/template.sh",
             "rust-toolchain.toml",
@@ -255,11 +255,11 @@ mod tests {
         }
         // 关键：doctor.d 的 README 是文档，不能进白名单，否则会漏掉本次这类 bug。
         for path in [
-            "scripts/doctor.d/README.md",
-            "scripts/doctor.sh",
-            ".gate.toml",
+            ".pengj-templates/scripts/doctor.d/README.md",
+            ".pengj-templates/scripts/doctor.sh",
+            ".pengj-templates/gate.toml",
             "AGENTS.md",
-            "just/rust.just",
+            ".pengj-templates/just/rust.just",
         ] {
             assert!(!is_machine_owned(path), "{path} 不应被当成机器产物");
         }
@@ -268,11 +268,11 @@ mod tests {
     #[test]
     fn both_directions_are_checked() {
         let doc = "# 自定义环境检查\n使用 sh 执行。";
-        assert!(check_file("scripts/doctor.d/README.md", doc, Lang::Zh).is_none());
+        assert!(check_file(".pengj-templates/scripts/doctor.d/README.md", doc, Lang::Zh).is_none());
         assert_eq!(
-            check_file("scripts/doctor.d/README.md", doc, Lang::En),
+            check_file(".pengj-templates/scripts/doctor.d/README.md", doc, Lang::En),
             Some(Finding {
-                path: "scripts/doctor.d/README.md".into(),
+                path: ".pengj-templates/scripts/doctor.d/README.md".into(),
                 lang: Lang::En,
                 kind: FindingKind::HanInEnglish,
             })
@@ -280,9 +280,19 @@ mod tests {
 
         // 本次漏网的形状：纯英文文档，英文检查通过、中文检查必须拦下。
         let english_only = "# Custom environment checks\nRun with sh.";
-        assert!(check_file("scripts/doctor.d/README.md", english_only, Lang::En).is_none());
+        assert!(check_file(
+            ".pengj-templates/scripts/doctor.d/README.md",
+            english_only,
+            Lang::En
+        )
+        .is_none());
         assert_eq!(
-            check_file("scripts/doctor.d/README.md", english_only, Lang::Zh).map(|f| f.kind),
+            check_file(
+                ".pengj-templates/scripts/doctor.d/README.md",
+                english_only,
+                Lang::Zh
+            )
+            .map(|f| f.kind),
             Some(FindingKind::NoHanInChinese)
         );
 
@@ -295,9 +305,13 @@ mod tests {
     fn audit_generated_walks_real_files() {
         let root = std::env::temp_dir().join(format!("pg-i18n-audit-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(root.join("scripts/doctor.d")).unwrap();
+        std::fs::create_dir_all(root.join(".pengj-templates/scripts/doctor.d")).unwrap();
         std::fs::create_dir_all(root.join(".vscode")).unwrap();
-        std::fs::write(root.join("scripts/doctor.d/README.md"), "# 自定义环境检查").unwrap();
+        std::fs::write(
+            root.join(".pengj-templates/scripts/doctor.d/README.md"),
+            "# 自定义环境检查",
+        )
+        .unwrap();
         std::fs::write(root.join(".vscode/settings.json"), "{}").unwrap();
 
         let zh = audit_generated(&root, Lang::Zh);
@@ -305,13 +319,16 @@ mod tests {
         assert!(!zh.has_violations(), "{:?}", zh.findings);
 
         std::fs::write(
-            root.join("scripts/doctor.d/README.md"),
+            root.join(".pengj-templates/scripts/doctor.d/README.md"),
             "# Custom environment checks",
         )
         .unwrap();
         let zh = audit_generated(&root, Lang::Zh);
         assert_eq!(zh.findings.len(), 1);
-        assert_eq!(zh.findings[0].path, "scripts/doctor.d/README.md");
+        assert_eq!(
+            zh.findings[0].path,
+            ".pengj-templates/scripts/doctor.d/README.md"
+        );
 
         let en = audit_generated(&root, Lang::En);
         assert!(!en.has_violations(), "{:?}", en.findings);
@@ -335,6 +352,7 @@ mod tests {
             "generated_at": "now",
             "files": { "AGENTS.md": "x", "my-notes.md": "y" }
         });
+        std::fs::create_dir_all(root.join(crate::manifest::MANIFEST_DIR)).unwrap();
         std::fs::write(
             root.join(crate::manifest::MANIFEST_FILE),
             serde_json::to_string_pretty(&manifest).unwrap(),

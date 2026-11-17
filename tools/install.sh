@@ -126,11 +126,11 @@ fi
 # 8. The commit gate is activated per project.
 #
 # Git keeps hook activation in .git/config, which does not travel with a
-# clone. The project's own environment check (scripts/doctor.sh --fix) is the
+# clone. The project's own environment check (.pengj-templates/scripts/doctor.sh --fix) is the
 # single activation entry point: it works with or without this CLI and only
 # touches repositories that ship .githooks/.
 echo ""
 echo "$(t '提交门禁随此二进制一起发布，按项目分别激活:' 'The commit gate ships inside this binary, activated per project:')"
 echo "  just doctor --fix                 # $(t '在已生成的项目内' 'inside a generated project')"
-echo "  sh scripts/doctor.sh --fix        # $(t '没有 just 时' 'without just')"
+echo "  sh .pengj-templates/scripts/doctor.sh --fix        # $(t '没有 just 时' 'without just')"
 echo "  pengj-templates-cli gate check    # $(t '直接运行代码语言守卫' 'run the code language guard directly')"

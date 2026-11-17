@@ -1,4 +1,4 @@
-# .gate.toml — the commit gate's configuration.
+# .pengj-templates/gate.toml — the commit gate's configuration.
 #
 # The gate is a Rust binary with no third-party dependencies, so every switch
 # it understands lives here instead of in the project manifest. The template

@@ -23,7 +23,7 @@ USAGE
   pengj-templates-cli gate selftest                     run the built-in rule self-test
 
 FLAGS
-  --mode=english|chinese   override `.gate.toml` (env: PENGJ_CODE_LANG)
+  --mode=english|chinese   override `.pengj-templates/gate.toml` (env: PENGJ_CODE_LANG)
   --max-ratio=N            string violation tolerance per file (default 0.01)
   --max-ident-ratio=N      identifier violation tolerance per file (default 0)
   --json                   machine-readable report
@@ -250,7 +250,9 @@ fn check_commits(rest: &[String]) -> Result<u8, String> {
     let report = commit::check_commits(base.as_deref(), head.as_deref())?;
 
     if report.range.is_empty() {
-        println!("[gate] the commit gate is disabled in .gate.toml; nothing to check");
+        println!(
+            "[gate] the commit gate is disabled in .pengj-templates/gate.toml; nothing to check"
+        );
         return Ok(0);
     }
     if report.checked == 0 {

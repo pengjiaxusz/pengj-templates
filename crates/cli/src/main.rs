@@ -137,7 +137,7 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// 纳管存量已有项目（初始化 .pengj-templates.json 并建立基线）
+    /// 纳管存量已有项目（初始化 .pengj-templates/manifest.json 并建立基线）
     Adopt {
         /// 目标项目目录（默认当前目录）
         #[arg(short, long, default_value = ".")]
@@ -826,7 +826,7 @@ fn cmd_check_lang(
     json: bool,
 ) -> anyhow::Result<bool> {
     let report = pengj_core::audit_project_lang(dir, override_lang)
-        .context("校验项目文档语言失败（请先确认已生成项目并有 .pengj-templates.json）")?;
+        .context("校验项目文档语言失败（请先确认已生成项目并有 .pengj-templates/manifest.json）")?;
 
     if json {
         let violations = pengj_core::format_findings(&report);

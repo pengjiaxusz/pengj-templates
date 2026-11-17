@@ -1,4 +1,4 @@
-# {% if options["skill_lang"] == "en" %}just/rust.just — common tasks for a single-crate Rust project (managed by the rust layer){% else %}just/rust.just — Rust 单 crate 常用任务（rust 层托管，模板更新整页覆盖）{% endif %}
+# {% if options["skill_lang"] == "en" %}.pengj-templates/just/rust.just — common tasks for a single-crate Rust project (managed by the rust layer){% else %}.pengj-templates/just/rust.just — Rust 单 crate 常用任务（rust 层托管，模板更新整页覆盖）{% endif %}
 # {% if options["skill_lang"] == "en" %}Imported by the root justfile based on the selected layers. If the project has its own{% else %}由 justfile 主入口按层条件 import；项目若有自己的编排，请在 manifest 里设{% endif %}
 # {% if options["skill_lang"] == "en" %}orchestration, set options["just_recipes"] = "none" and keep these recipes in the project-owned area.{% else %}options["just_recipes"] = "none"，把这些配方留给项目专属区。{% endif %}
 {% if "bque" in layers %}

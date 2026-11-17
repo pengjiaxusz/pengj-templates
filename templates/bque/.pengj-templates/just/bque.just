@@ -1,4 +1,4 @@
-# {% if options["skill_lang"] == "en" %}just/bque.just — global cross-worktree build queue (managed by the bque layer; template updates overwrite this file){% else %}just/bque.just — 全局跨工作树编译排队（bque 层托管，模板更新整页覆盖）{% endif %}
+# {% if options["skill_lang"] == "en" %}.pengj-templates/just/bque.just — global cross-worktree build queue (managed by the bque layer; template updates overwrite this file){% else %}.pengj-templates/just/bque.just — 全局跨工作树编译排队（bque 层托管，模板更新整页覆盖）{% endif %}
 # {% if options["skill_lang"] == "en" %}bque is a Windows global kernel lock scheduler: the unix branch does not queue and only passes the command through.{% else %}bque 是 Windows 全局内核锁调度器：unix 分支不排队，只做等价透传与提示。{% endif %}
 # {% if options["skill_lang"] == "en" %}Every heavy command should go through q-run / q-bench to avoid saturating the CPU and polluting benchmarks.{% else %}任何重型命令都应经 q-run / q-bench，避免裸跑吃满 CPU 与污染跑分。{% endif %}
 

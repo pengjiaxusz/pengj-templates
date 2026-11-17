@@ -5,7 +5,7 @@
 //! the commit message. It has no third-party dependencies, so `Cargo.lock`
 //! stays tiny and the build is a single rustc invocation per file.
 //!
-//! Switches live in `.gate.toml`, never in the manifest: the template renders
+//! Switches live in `.pengj-templates/gate.toml`, never in the manifest: the template renders
 //! that file for each project and the manifest stays free to change shape.
 //!
 //! The crate is a library only. The gate ships inside `pengj-templates-cli`

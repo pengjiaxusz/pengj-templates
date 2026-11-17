@@ -18,7 +18,11 @@ pub struct ProjectManifest {
     pub files: BTreeMap<String, String>,
 }
 
-pub const MANIFEST_FILE: &str = ".pengj-templates.json";
+/// 生成项目时写入的统一工具目录，模板产物都收在这里，根下只留必须待在根上的文件
+pub const MANIFEST_DIR: &str = ".pengj-templates";
+
+/// 引擎写入的清单路径（相对项目根）：`update` 依赖它判断哪些文件是模板托管的
+pub const MANIFEST_FILE: &str = ".pengj-templates/manifest.json";
 
 impl ProjectManifest {
     pub fn load(dir: &std::path::Path) -> Result<Self, crate::error::CoreError> {
@@ -29,8 +33,12 @@ impl ProjectManifest {
     }
 
     pub fn save(&self, dir: &std::path::Path) -> Result<(), crate::error::CoreError> {
+        let path = dir.join(MANIFEST_FILE);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         let text = serde_json::to_string_pretty(self)?;
-        std::fs::write(dir.join(MANIFEST_FILE), text)?;
+        std::fs::write(&path, text)?;
         Ok(())
     }
 }

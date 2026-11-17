@@ -1,4 +1,4 @@
-//! `.gate.toml` reader.
+//! `.pengj-templates/gate.toml` reader.
 //!
 //! The gate is copied verbatim into every generated project, so it must not
 //! depend on the manifest format (`options.chinese_programming` and friends).
@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-pub const CONFIG_FILE: &str = ".gate.toml";
+pub const CONFIG_FILE: &str = ".pengj-templates/gate.toml";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
@@ -297,7 +297,7 @@ fn expected_kind(key: &str) -> Option<ValueKind> {
     }
 }
 
-/// Walk up from `start` looking for `.gate.toml`, stopping at the repository
+/// Walk up from `start` looking for `.pengj-templates/gate.toml`, stopping at the repository
 /// root marker. Returns the config and the path it was read from.
 pub fn load(start: &Path) -> Result<(Config, Option<PathBuf>), String> {
     let mut dir = start.to_path_buf();

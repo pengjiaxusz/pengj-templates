@@ -63,7 +63,7 @@ jobs:
               printf '%s\n' "$output"
               echo '```'
               echo ""
-              echo "{% if options["skill_lang"] | default("zh") == "en" %}Every commit needs a subject of the form `type(scope): subject`. The rule set lives in `.gate.toml`.{% else %}范围内每个提交的标题都要写成 `type(scope): 摘要`。规则集在 `.gate.toml` 里。{% endif %}"
+              echo "{% if options["skill_lang"] | default("zh") == "en" %}Every commit needs a subject of the form `type(scope): subject`. The rule set lives in `.pengj-templates/gate.toml`.{% else %}范围内每个提交的标题都要写成 `type(scope): 摘要`。规则集在 `.pengj-templates/gate.toml` 里。{% endif %}"
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           exit "$status"

@@ -7,7 +7,7 @@
 //!
 //! The scope is deliberately per-repository: `core.hooksPath = .githooks`
 //! inside the repository's own `.git/config`. Git has no versioned way to
-//! activate hooks, so the project's environment check (`scripts/doctor.*`)
+//! activate hooks, so the project's environment check (`.pengj-templates/scripts/doctor.*`)
 //! is the single activation entry point — it calls this command when the CLI
 //! is available and falls back to plain `git config` when it is not.
 

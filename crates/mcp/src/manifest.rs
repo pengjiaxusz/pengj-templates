@@ -1,6 +1,6 @@
 //! 已安装状态清单：`~/.pengj-mcp/manifest.json`
 //!
-//! 与项目级的 `.pengj-templates.json` 同思路：记录「装了什么、从哪来、写进了哪些客户端」，
+//! 与项目级的 `.pengj-templates/manifest.json` 同思路：记录「装了什么、从哪来、写进了哪些客户端」，
 //! `doctor` / `remove` 依赖它做增量判断。
 
 use std::collections::BTreeMap;

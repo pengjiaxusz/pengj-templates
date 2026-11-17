@@ -1,4 +1,4 @@
-# {% if options["skill_lang"] == "en" %}just/rust-workspace.just — common tasks for a multi-crate Rust workspace (managed by the rust-workspace layer){% else %}just/rust-workspace.just — Rust 多 crate 工作区常用任务（rust-workspace 层托管）{% endif %}
+# {% if options["skill_lang"] == "en" %}.pengj-templates/just/rust-workspace.just — common tasks for a multi-crate Rust workspace (managed by the rust-workspace layer){% else %}.pengj-templates/just/rust-workspace.just — Rust 多 crate 工作区常用任务（rust-workspace 层托管）{% endif %}
 # {% if options["skill_lang"] == "en" %}Imported by the root justfile based on the selected layers. If the project has its own{% else %}由 justfile 主入口按层条件 import；项目若有自己的编排，请在 manifest 里设{% endif %}
 # {% if options["skill_lang"] == "en" %}orchestration, set options["just_recipes"] = "none" and keep these recipes in the project-owned area.{% else %}options["just_recipes"] = "none"，把这些配方留给项目专属区。{% endif %}
 {% if "bque" in layers %}
