@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.72.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.71.0...v0.72.0) (2026-11-17)
+
+
+### Features
+
+* **cli:** 新增 CLI 自身更新检查 ([db8240e](https://github.com/pengjiaxusz/pengj-templates/commit/db8240ef7713e5d587cd1cde661c3d1069b69590))
+* **core:** update_ignore 说明块随模板刷新并投递迁移提示 ([18b6d8e](https://github.com/pengjiaxusz/pengj-templates/commit/18b6d8e52db0d6c05d73a4f4c1e553ec17fa763e))
+* **templates:** gate 配置改为「托管说明块 + 纯键值」 ([7008fc9](https://github.com/pengjiaxusz/pengj-templates/commit/7008fc93b06b4ebc9655827731b3e7acf34ae825))
+
 ## [0.71.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.70.0...v0.71.0) (2026-11-17)
 
 
