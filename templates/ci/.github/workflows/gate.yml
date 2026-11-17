@@ -29,6 +29,8 @@ jobs:
           # {% if options["skill_lang"] | default("zh") == "en" %}The full history is needed to walk the commit range, and the head ref keeps GitHub's auto-generated merge commit out of the range.{% else %}校验提交范围需要完整历史；检出 head ref 可避免把 GitHub 自动生成的合并提交算进来。{% endif %}
           fetch-depth: 0
           ref: {% raw %}${{ github.event.pull_request.head.sha || github.sha }}{% endraw %}
+          # {% if options["skill_lang"] | default("zh") == "en" %}Checkout leaves submodules empty, so a project whose path dependencies live in a submodule cannot even load its workspace — and the failure surfaces as a missing dependency rather than a missing submodule. Harmless for projects without submodules.{% else %}checkout 默认不检出子模块，路径依赖放在子模块里的项目连 workspace 都加载不了，而报错表现为「找不到依赖」而不是缺子模块。没有子模块的项目不受影响。{% endif %}
+          submodules: true
 
       - name: {% if options["skill_lang"] | default("zh") == "en" %}Install pengj-templates-cli{% else %}安装 pengj-templates-cli{% endif %}
         run: |
