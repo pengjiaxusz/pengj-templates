@@ -16,7 +16,7 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 {% endif %}
 # PENGJ_TEMPLATE_END
 
-# --- {% if options["skill_lang"] == "en" %}User Custom Section{% else %}用户自定义配置区域 (User Custom Section){% endif %} ---
+# --- {% if options["skill_lang"] == "en" %}User Custom Section{% else %}用户自定义配置区域{% endif %} ---
 # {% if options["skill_lang"] == "en" %}Put project-specific [alias], rustflags and target settings outside the managed block{% else %}项目特有的 [alias]、rustflags、target 配置请写在受管区域外部{% endif %}
 # {% if options["skill_lang"] == "en" %}Template updates only replace the PENGJ_TEMPLATE block above; this area is preserved in full{% else %}模板更新时仅替换上方 PENGJ_TEMPLATE 区域，本区域内容 100% 保留{% endif %}
 

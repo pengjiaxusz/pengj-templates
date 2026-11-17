@@ -1171,6 +1171,7 @@ pub fn adopt_project(
                     match crate::toml_merge::merge_toml_managed(
                         &disk_text,
                         &String::from_utf8_lossy(bytes),
+                        crate::toml_merge::doc_lang(&options),
                     ) {
                         crate::toml_merge::TomlMergeOutcome::Merged(text) => {
                             let merged_bytes = text.into_bytes();
@@ -1497,6 +1498,7 @@ pub fn update_project_with_options(
                 match crate::toml_merge::merge_toml_managed(
                     &disk_text,
                     &String::from_utf8_lossy(bytes),
+                    crate::toml_merge::doc_lang(&manifest.options),
                 ) {
                     crate::toml_merge::TomlMergeOutcome::Merged(text) => {
                         let merged_bytes = text.into_bytes();
@@ -2012,7 +2014,11 @@ pub fn audit_project(
         {
             let disk_text = String::from_utf8_lossy(&disk_bytes);
             let tpl_text = String::from_utf8_lossy(tpl_bytes);
-            match crate::toml_merge::merge_toml_managed(&disk_text, &tpl_text) {
+            match crate::toml_merge::merge_toml_managed(
+                &disk_text,
+                &tpl_text,
+                crate::toml_merge::doc_lang(&options),
+            ) {
                 crate::toml_merge::TomlMergeOutcome::Merged(merged_text) => {
                     if merged_text.as_bytes() == disk_bytes.as_slice() {
                         items.push(AuditItem {

@@ -22,10 +22,79 @@ use crate::block::{extract_managed_block, BlockStyle};
 /// 走 TOML 结构化受管合并的文件（相对项目根路径，统一以 `/` 分隔）
 pub(crate) const MERGE_TOML_MANAGED_FILES: &[&str] = &[".cargo/config.toml"];
 
+/// 面向人的文案语言轴：跟随项目的 `skill_lang`（zh / en）。
+///
+/// 该轴在这里是必需的：`rebuild_block` 写回的受管块注释会**落进用户项目文件**，
+/// 硬编码英文会让中文编程项目在自己的 `.cargo/config.toml` 里残留英文。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum DocLang {
+    /// 中文文案
+    Zh,
+    /// 英文文案
+    En,
+}
+
+impl DocLang {
+    /// 从选项值解析语言轴；缺省按中文处理（与模板渲染的缺省行为一致）
+    pub(crate) fn from_option(value: Option<&str>) -> Self {
+        match value {
+            Some("en") => DocLang::En,
+            _ => DocLang::Zh,
+        }
+    }
+    /// 受管块归属说明：标记本块由模板托管、块外内容归用户所有
+    fn managed_block_note(self) -> &'static str {
+        match self {
+            DocLang::Zh => "# 由 pengj-templates 托管：update 只替换本块，块外内容归用户所有",
+            DocLang::En => {
+                "# Managed by pengj-templates: update replaces only this block, content outside is user-owned"
+            }
+        }
+    }
+
+    /// 同名键冲突的抬头
+    fn conflict_header(self) -> &'static str {
+        match self {
+            DocLang::Zh => "TOML 受管合并存在同名键冲突（用户与模板值不同），本次未写入：",
+            DocLang::En => {
+                "TOML managed merge found conflicting keys (user and template differ); nothing was written:"
+            }
+        }
+    }
+
+    /// 同键不同值的冲突明细
+    fn conflict_value(self, path: &str, user: &str, tmpl: &str) -> String {
+        match self {
+            DocLang::Zh => format!("{path}: 用户 {user} / 模板 {tmpl}，请手工对齐后重跑 update"),
+            DocLang::En => format!(
+                "{path}: user {user} / template {tmpl}; align them manually and re-run update"
+            ),
+        }
+    }
+
+    /// 模板新键需并入用户已有同名表的冲突明细
+    fn conflict_table(self, path: &str, keys: &str) -> String {
+        match self {
+            DocLang::Zh => format!(
+                "{path}: 模板新键 {keys} 需并入用户已有的同名表（TOML 禁止重复表头），请手工添加后重跑 update"
+            ),
+            DocLang::En => format!(
+                "{path}: template keys {keys} must be merged into the user's existing table \
+                 (TOML forbids duplicate headers); add them manually and re-run update"
+            ),
+        }
+    }
+}
+
 /// 判断相对路径是否需要 TOML 结构化合并（跨平台：把 `\` 归一成 `/` 再比较）
 pub(crate) fn is_toml_managed(rel: &std::path::Path) -> bool {
     let rel_str = rel.to_str().unwrap_or("").replace('\\', "/");
     MERGE_TOML_MANAGED_FILES.contains(&rel_str.as_str())
+}
+
+/// 从项目选项里取面向人文案的语言轴（跟随 `skill_lang`，缺省按中文处理）
+pub(crate) fn doc_lang(options: &std::collections::BTreeMap<String, serde_json::Value>) -> DocLang {
+    DocLang::from_option(options.get("skill_lang").and_then(|v| v.as_str()))
 }
 
 /// TOML 受管合并结果
@@ -42,7 +111,13 @@ pub(crate) enum TomlMergeOutcome {
 /// - 渲染结果不含受管块 → 原样返回渲染结果（该文件类型正常都含块，防御式兜底）
 /// - 磁盘既有受管块 → 先整体移除，剩余部分视为用户区
 /// - 合并后的新受管块统一追加到用户区末尾
-pub(crate) fn merge_toml_managed(disk_text: &str, incoming_text: &str) -> TomlMergeOutcome {
+///
+/// `lang` 决定写回文件与冲突报告里的文案语言（跟随项目 `skill_lang`）。
+pub(crate) fn merge_toml_managed(
+    disk_text: &str,
+    incoming_text: &str,
+    lang: DocLang,
+) -> TomlMergeOutcome {
     let Some(incoming_block) = extract_managed_block(incoming_text) else {
         return TomlMergeOutcome::Merged(incoming_text.to_string());
     };
@@ -55,7 +130,7 @@ pub(crate) fn merge_toml_managed(disk_text: &str, incoming_text: &str) -> TomlMe
 
     let Ok(incoming_val) = toml::from_str::<Value>(incoming_block.body.as_str()) else {
         // 受管块正文不是合法 TOML（理论上不会发生）：回退为文本追加语义，不炸更新
-        let rebuilt = rebuild_block(incoming_block.style, incoming_block.body.as_str());
+        let rebuilt = rebuild_block(incoming_block.style, incoming_block.body.as_str(), lang);
         return TomlMergeOutcome::Merged(join_user_and_block(&user_part, &rebuilt));
     };
     let empty_table = Value::Table(toml::map::Map::new());
@@ -67,16 +142,17 @@ pub(crate) fn merge_toml_managed(disk_text: &str, incoming_text: &str) -> TomlMe
         as_table(&user_val),
         String::new(),
         &mut conflicts,
+        lang,
     );
 
     // 保留树里将要产出的表头若与用户已有表头重合 → 会产生非法的重复表定义，
     // 逐节点报冲突（TOML 禁止重复表头，无法静默代劳，需人工并表）
     let mut user_table_paths = std::collections::BTreeSet::new();
     collect_table_paths(as_table(&user_val), "", &mut user_table_paths);
-    push_header_conflicts(&retained, "", &user_table_paths, &mut conflicts);
+    push_header_conflicts(&retained, "", &user_table_paths, &mut conflicts, lang);
 
     if !conflicts.is_empty() {
-        let mut msg = String::from("TOML 受管合并存在同名键冲突（用户与模板值不同），本次未写入：");
+        let mut msg = String::from(lang.conflict_header());
         for c in &conflicts {
             msg.push_str("\n  - ");
             msg.push_str(c);
@@ -91,18 +167,19 @@ pub(crate) fn merge_toml_managed(disk_text: &str, incoming_text: &str) -> TomlMe
 
     let Ok(serialized) = toml::to_string_pretty(&retained) else {
         // 序列化失败（理论不会发生）：同样回退为文本追加语义
-        let rebuilt = rebuild_block(incoming_block.style, incoming_block.body.as_str());
+        let rebuilt = rebuild_block(incoming_block.style, incoming_block.body.as_str(), lang);
         return TomlMergeOutcome::Merged(join_user_and_block(&user_part, &rebuilt));
     };
-    let rebuilt = rebuild_block(incoming_block.style, &serialized);
+    let rebuilt = rebuild_block(incoming_block.style, &serialized, lang);
     TomlMergeOutcome::Merged(join_user_and_block(&user_part, &rebuilt))
 }
 
 /// 用给定风格重建受管块文本（含头注释说明归属，保证尾随换行）
-fn rebuild_block(style: BlockStyle, body: &str) -> String {
+fn rebuild_block(style: BlockStyle, body: &str, lang: DocLang) -> String {
     format!(
-        "{}\n# Managed by pengj-templates: update replaces only this block, content outside is user-owned\n{}\n{}\n",
+        "{}\n{}\n{}\n{}\n",
         style.start_marker(),
+        lang.managed_block_note(),
         body.trim(),
         style.end_marker()
     )
@@ -137,6 +214,7 @@ fn subtract_covered(
     user: &toml::map::Map<String, Value>,
     prefix: String,
     conflicts: &mut Vec<String>,
+    lang: DocLang,
 ) -> toml::map::Map<String, Value> {
     let mut retained = toml::map::Map::new();
     for (k, tv) in tmpl {
@@ -149,16 +227,17 @@ fn subtract_covered(
                 (Some(tt), Some(ut)) => {
                     // 用户已有同名节点：只保留模板侧多出来的部分；
                     // 若剩余子树会与用户已有表头重合，由 push_header_conflicts 统一判定
-                    let sub = subtract_covered(tt, ut, path, conflicts);
+                    let sub = subtract_covered(tt, ut, path, conflicts, lang);
                     if !sub.is_empty() {
                         retained.insert(k.clone(), Value::Table(sub));
                     }
                 }
                 _ => {
                     if tv != uv {
-                        conflicts.push(format!(
-                            "{path}: 用户 {:?} / 模板 {:?}，请手工对齐后重跑 update",
-                            uv, tv
+                        conflicts.push(lang.conflict_value(
+                            &path,
+                            &format!("{:?}", uv),
+                            &format!("{:?}", tv),
                         ));
                     }
                     // 同键同值：已覆盖，剔除
@@ -203,6 +282,7 @@ fn push_header_conflicts(
     prefix: &str,
     user_table_paths: &std::collections::BTreeSet<String>,
     conflicts: &mut Vec<String>,
+    lang: DocLang,
 ) {
     for (k, v) in retained {
         let Some(t) = v.as_table() else { continue };
@@ -213,15 +293,11 @@ fn push_header_conflicts(
             .map(|(lk, _)| path_of(lk, &path))
             .collect();
         if !direct_leaves.is_empty() && user_table_paths.contains(&path) {
-            conflicts.push(format!(
-                "{}: 模板新键 {} 需并入用户已有的同名表（TOML 禁止重复表头），请手工添加后重跑 update",
-                path,
-                direct_leaves.join(", ")
-            ));
+            conflicts.push(lang.conflict_table(&path, &direct_leaves.join(", ")));
             // 该表头已冲突，其子表不再单独下钻：手工并表时一并处理
             continue;
         }
-        push_header_conflicts(t, &path, user_table_paths, conflicts);
+        push_header_conflicts(t, &path, user_table_paths, conflicts, lang);
     }
 }
 
@@ -245,7 +321,7 @@ mod tests {
             "# 注释行\n[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld\"\n\n[target.x86_64-unknown-linux-gnu]\nlinker = \"lld\"\n",
         );
 
-        let merged = match merge_toml_managed(disk, &incoming) {
+        let merged = match merge_toml_managed(disk, &incoming, DocLang::Zh) {
             TomlMergeOutcome::Merged(t) => t,
             TomlMergeOutcome::Conflict(m) => panic!("不应冲突: {m}"),
         };
@@ -273,7 +349,7 @@ mod tests {
         let disk = "[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld.exe\"\n";
         let incoming = wrap("[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld\"\n");
 
-        match merge_toml_managed(disk, &incoming) {
+        match merge_toml_managed(disk, &incoming, DocLang::Zh) {
             TomlMergeOutcome::Conflict(msg) => {
                 assert!(msg.contains("target.x86_64-pc-windows-msvc.linker"));
             }
@@ -288,7 +364,7 @@ mod tests {
         let disk = "[profile.dev]\nopt-level = 0\n";
         let incoming = wrap("[profile.dev]\nopt-level = 0\nincremental = true\n");
 
-        match merge_toml_managed(disk, &incoming) {
+        match merge_toml_managed(disk, &incoming, DocLang::Zh) {
             TomlMergeOutcome::Conflict(msg) => {
                 assert!(msg.contains("profile.dev"));
                 assert!(msg.contains("incremental"));
@@ -304,7 +380,7 @@ mod tests {
         let disk = "[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld\"\n";
         let incoming = wrap("[target.x86_64-unknown-linux-gnu]\nlinker = \"lld\"\n");
 
-        let merged = match merge_toml_managed(disk, &incoming) {
+        let merged = match merge_toml_managed(disk, &incoming, DocLang::Zh) {
             TomlMergeOutcome::Merged(t) => t,
             TomlMergeOutcome::Conflict(m) => panic!("兄弟子表不应冲突: {m}"),
         };
@@ -322,7 +398,7 @@ mod tests {
         );
         let incoming = wrap("[target.x86_64-unknown-linux-gnu]\nlinker = \"lld\"\n");
 
-        let first = match merge_toml_managed(&disk, &incoming) {
+        let first = match merge_toml_managed(&disk, &incoming, DocLang::Zh) {
             TomlMergeOutcome::Merged(t) => t,
             TomlMergeOutcome::Conflict(m) => panic!("不应冲突: {m}"),
         };
@@ -335,7 +411,7 @@ mod tests {
         assert!(first.contains(START));
 
         // 幂等：对合并结果再跑一次不再变化
-        let second = match merge_toml_managed(&first, &incoming) {
+        let second = match merge_toml_managed(&first, &incoming, DocLang::Zh) {
             TomlMergeOutcome::Merged(t) => t,
             TomlMergeOutcome::Conflict(m) => panic!("不应冲突: {m}"),
         };
@@ -348,7 +424,7 @@ mod tests {
         let disk = "[build]\nrustc-wrapper = \"sccache\"\n";
         let incoming = wrap("[build]\nrustc-wrapper = \"sccache\"\n");
 
-        match merge_toml_managed(disk, &incoming) {
+        match merge_toml_managed(disk, &incoming, DocLang::Zh) {
             TomlMergeOutcome::Merged(t) => {
                 assert_eq!(t, disk);
             }
@@ -362,7 +438,7 @@ mod tests {
         let disk = "[alias]\nfoo = \"bar\"\n";
         let incoming = wrap("[target.x86_64-unknown-linux-gnu]\nlinker = \"lld\"\n");
 
-        let merged = match merge_toml_managed(disk, &incoming) {
+        let merged = match merge_toml_managed(disk, &incoming, DocLang::Zh) {
             TomlMergeOutcome::Merged(t) => t,
             TomlMergeOutcome::Conflict(m) => panic!("不应冲突: {m}"),
         };
@@ -380,7 +456,7 @@ mod tests {
     fn incoming_without_managed_block_passes_through() {
         let disk = "a = 1\n";
         let incoming = "b = 2\n";
-        match merge_toml_managed(disk, incoming) {
+        match merge_toml_managed(disk, incoming, DocLang::Zh) {
             TomlMergeOutcome::Merged(t) => assert_eq!(t, incoming),
             TomlMergeOutcome::Conflict(_) => panic!("不应冲突"),
         }
@@ -393,5 +469,64 @@ mod tests {
         assert!(is_toml_managed(Path::new(".cargo\\config.toml")));
         assert!(!is_toml_managed(Path::new("Cargo.toml")));
         assert!(!is_toml_managed(Path::new("AGENTS.md")));
+    }
+
+    #[test]
+    fn managed_block_note_follows_language_axis() {
+        // 受管块注释会写进用户项目文件：中文项目里不得出现英文说明
+        let disk = "";
+        let incoming = wrap("[target.x86_64-unknown-linux-gnu]\nlinker = \"lld\"\n");
+
+        let zh = match merge_toml_managed(disk, &incoming, DocLang::Zh) {
+            TomlMergeOutcome::Merged(t) => t,
+            TomlMergeOutcome::Conflict(m) => panic!("不应冲突: {m}"),
+        };
+        assert!(
+            zh.contains("# 由 pengj-templates 托管"),
+            "中文受管块注释缺失: {zh}"
+        );
+        assert!(
+            !zh.contains("Managed by pengj-templates"),
+            "中文受管块注释混入英文: {zh}"
+        );
+
+        let en = match merge_toml_managed(disk, &incoming, DocLang::En) {
+            TomlMergeOutcome::Merged(t) => t,
+            TomlMergeOutcome::Conflict(m) => panic!("不应冲突: {m}"),
+        };
+        assert!(
+            en.contains("# Managed by pengj-templates"),
+            "英文受管块注释缺失: {en}"
+        );
+        assert!(
+            !en.contains("由 pengj-templates 托管"),
+            "英文受管块注释混入中文: {en}"
+        );
+    }
+
+    #[test]
+    fn conflict_report_follows_language_axis() {
+        // 冲突报告同时出现在中文与英文项目里，不得串语言
+        let disk = "[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld.exe\"\n";
+        let incoming = wrap("[target.x86_64-pc-windows-msvc]\nlinker = \"rust-lld\"\n");
+
+        let zh = match merge_toml_managed(disk, &incoming, DocLang::Zh) {
+            TomlMergeOutcome::Conflict(m) => m,
+            TomlMergeOutcome::Merged(_) => panic!("同键不同值必须报冲突"),
+        };
+        assert!(
+            zh.contains("请手工对齐后重跑 update"),
+            "中文冲突文案缺失: {zh}"
+        );
+
+        let en = match merge_toml_managed(disk, &incoming, DocLang::En) {
+            TomlMergeOutcome::Conflict(m) => m,
+            TomlMergeOutcome::Merged(_) => panic!("同键不同值必须报冲突"),
+        };
+        assert!(
+            en.contains("align them manually and re-run update"),
+            "英文冲突文案缺失: {en}"
+        );
+        assert!(!en.contains("请手工对齐"), "英文冲突文案混入中文: {en}");
     }
 }
