@@ -7,14 +7,14 @@
 #   1. 用 rustfmt 格式化暂存区里的 Rust 文件；
 #   2. 代码语言守卫按 `.gate.toml` 检查暂存的文件。{% endif %}
 #
-# {% if options["skill_lang"] | default("zh") == "en" %}The gate ships inside `pengj-templates-cli`, so this hook calls `pengj-templates-cli gate hook pre-commit`. One binary covers the template engine, the MCP installer and the commit gate.{% else %}门禁内置在 `pengj-templates-cli` 里，本钩子调用 `pengj-templates-cli gate hook pre-commit`。一个二进制同时覆盖模板引擎、MCP 安装与提交门禁。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}The gate lives in `pengj-templates-cli` and nowhere else: this hook only finds the binary and hands the work to `pengj-templates-cli gate hook pre-commit`. One binary covers the template engine, the MCP installer and the commit gate. No CLI means no rule set, so the commit is blocked with install instructions instead of being let through by a check that cannot run.{% else %}门禁只存在于 `pengj-templates-cli` 里：本钩子只负责找到二进制，把活儿交给 `pengj-templates-cli gate hook pre-commit`。一个二进制同时覆盖模板引擎、MCP 安装与提交门禁。没有 CLI 就没有规则集，所以直接拦下提交并给出安装命令，而不是让一个跑不起来的检查放行。{% endif %}
 
 set -e
 
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-# {% if options["skill_lang"] | default("zh") == "en" %}Locate the CLI: PATH first, then the installation directory. The fallback matters for terminals opened before the installer refreshed PATH — without it a working install would look like a missing one.{% else %}定位 CLI：先找 PATH，再回落到安装目录。回落这一步是为了应付「装好 CLI 之前就打开的终端」——PATH 没刷新时不该被当成没装。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}Locate the CLI: PATH first, then the installation directory. The second step matters for terminals opened before the installer refreshed PATH — without it a working install would look like a missing one.{% else %}定位 CLI：先找 PATH，再回落到安装目录。回落这一步是为了应付「装好 CLI 之前就打开的终端」——PATH 没刷新时不该被当成没装。{% endif %}
 if command -v pengj-templates-cli >/dev/null 2>&1; then
     exec pengj-templates-cli gate hook pre-commit
 fi
@@ -31,9 +31,8 @@ do
     fi
 done
 
-# {% if options["skill_lang"] | default("zh") == "en" %}No CLI: rustfmt and the code language guard cannot run here, because neither can be reproduced by a shell script. The commit is let through with a loud warning instead of being blocked by a check that cannot run — the server-side CI enforces the same rules on the push.{% else %}没有 CLI：rustfmt 与代码语言守卫在这个钩子里跑不了——它们没法用 shell 复刻。这里选择放行并大声提示，而不是让一个跑不起来的检查把提交堵死；同样的规则由服务端 CI 在推送时把关。{% endif %}
-echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli was not found: rustfmt and the code language guard did not run.{% else %}找不到 pengj-templates-cli：rustfmt 与代码语言守卫这次没有运行。{% endif %}" >&2
-echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}The commit goes through; the server-side CI enforces the same rules. To run them locally, install the CLI once:{% else %}本次提交会通过；同样的规则由服务端 CI 把关。想在本地也跑，装一次 CLI：{% endif %}" >&2
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}commit blocked: pengj-templates-cli was not found on PATH or in the installation directory.{% else %}提交被拦下：PATH 与安装目录里都找不到 pengj-templates-cli。{% endif %}" >&2
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}rustfmt and the code language guard live inside the CLI, so there is no local check to fall back to. Install it once and the gate comes with it:{% else %}rustfmt 与代码语言守卫都在 CLI 里，本地没有另一套检查可回落。安装一次即可带上：{% endif %}" >&2
 echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
 echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
-exit 0
+exit 1

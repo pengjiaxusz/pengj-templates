@@ -1,9 +1,9 @@
 #!/bin/sh
-# gate install: {% if options["skill_lang"] | default("zh") == "en" %}enable the local commit gate without the CLI{% else %}不依赖 CLI 启用本地提交门禁{% endif %}.
+# gate install: {% if options["skill_lang"] | default("zh") == "en" %}activate the commit hooks on this clone{% else %}在当前克隆上激活提交钩子{% endif %}.
 #
-# {% if options["skill_lang"] | default("zh") == "en" %}This script is the answer to a machine that has no `pengj-templates-cli`: it needs git and a POSIX shell, nothing else. Run it once per clone.{% else %}这个脚本是给「机器上没有 pengj-templates-cli」准备的答案：只需要 git 与一个 POSIX shell，别的不用。每个克隆跑一次即可。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}`core.hooksPath` lives in `.git/config`, which never comes with a clone, so every clone needs this once. The script needs git and a POSIX shell and nothing else — it does not need the CLI, because activating the hooks and running them are separate jobs.{% else %}沿用 `core.hooksPath` 存在 `.git/config` 里、不会随克隆传播，所以每个克隆跑一次即可。脚本只需要 git 与一个 POSIX shell——它不需要 CLI，因为「激活钩子」与「跑钩子」是两件事。{% endif %}
 #
-# {% if options["skill_lang"] | default("zh") == "en" %}The gate then runs in its fallback mode: the commit message is still checked, but by the reduced rule set in `gate-fallback.sh` instead of the CLI. The server-side CI keeps the full rule set in force either way.{% else %}此后门禁以降级模式运行：提交信息照样被检查，只是走 `gate-fallback.sh` 里那套缩减规则，而不是 CLI。完整规则集无论如何都由服务端 CI 兜住。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}The gate itself lives in `pengj-templates-cli`; this script ships no rule set of its own. When the CLI is missing the hooks block commits and print the install command, so the check below only warns.{% else %}门禁本体在 `pengj-templates-cli` 里，本脚本不自带规则。没有 CLI 时钩子会拦下提交并打印安装命令，所以下面的检测只做告警。{% endif %}
 
 set -eu
 
@@ -33,10 +33,10 @@ for hook in commit-msg pre-commit; do
 done
 
 if command -v pengj-templates-cli >/dev/null 2>&1; then
-    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli is installed: the full rule set applies{% else %}检测到 pengj-templates-cli：完整规则集已就位{% endif %}"
+    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli is installed: the hooks will run the full rule set{% else %}检测到 pengj-templates-cli：钩子会跑完整规则集{% endif %}"
 else
-    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli is not installed: the hooks fall back to the reduced rule set, and the server-side CI still enforces the full one{% else %}没检测到 pengj-templates-cli：钩子会走缩减规则集，服务端 CI 仍按完整规则集把关{% endif %}" >&2
-    echo "[gate]   {% if options["skill_lang"] | default("zh") == "en" %}install it once to get the full rule set locally:{% else %}装一次就能在本地拿到完整规则集：{% endif %}" >&2
+    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}the hooks are active, but pengj-templates-cli is not installed: commits will be blocked until it is{% else %}钩子已激活，但没检测到 pengj-templates-cli：装好之前提交会被拦下{% endif %}" >&2
+    echo "[gate]   {% if options["skill_lang"] | default("zh") == "en" %}the gate lives in the CLI; install it once:{% else %}门禁就在 CLI 里，装一次即可：{% endif %}" >&2
     echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
     echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
 fi

@@ -9,8 +9,3 @@ description = "提交门禁内部库：git hooks、约定式提交校验与代�
 [lib]
 name = "pengj_gate"
 path = "src/lib.rs"
-
-[dev-dependencies]
-# 仅测试用：交叉验证模板里的兜底脚本与本库的裁决方向一致。
-pengj-core = { path = "../core" }
-serde_json.workspace = true

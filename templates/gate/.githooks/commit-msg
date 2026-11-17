@@ -3,14 +3,14 @@
 #
 # {% if options["skill_lang"] | default("zh") == "en" %}Validate the commit message against the conventional commit rules configured in `.gate.toml`. Git passes the path to the message file as the first argument.{% else %}按 `.gate.toml` 里配置的约定式提交规则校验提交信息。git 会把信息文件路径作为第一个参数传进来。{% endif %}
 #
-# {% if options["skill_lang"] | default("zh") == "en" %}The gate ships inside `pengj-templates-cli`, so this hook calls `pengj-templates-cli gate hook commit-msg`. One binary covers the template engine, the MCP installer and the commit gate. On a machine without the CLI the hook falls back to `gate-fallback.sh`, a reduced check that needs nothing but git and a POSIX shell.{% else %}门禁内置在 `pengj-templates-cli` 里，本钩子调用 `pengj-templates-cli gate hook commit-msg`。一个二进制同时覆盖模板引擎、MCP 安装与提交门禁。机器上没有 CLI 时，钩子回落到 `gate-fallback.sh`——一套只依赖 git 与 POSIX shell 的缩减检查。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}The gate lives in `pengj-templates-cli` and nowhere else: this hook only finds the binary and hands the message to `pengj-templates-cli gate hook commit-msg`. One binary covers the template engine, the MCP installer and the commit gate. No CLI means no rule set, so the commit is blocked with install instructions instead of being checked by a second, weaker implementation.{% else %}门禁只存在于 `pengj-templates-cli` 里：本钩子只负责找到二进制，把信息交给 `pengj-templates-cli gate hook commit-msg`。一个二进制同时覆盖模板引擎、MCP 安装与提交门禁。没有 CLI 就没有规则集，所以直接拦下提交并给出安装命令，而不是用另一套更弱的实现去检查。{% endif %}
 
 set -e
 
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-# {% if options["skill_lang"] | default("zh") == "en" %}Locate the CLI: PATH first, then the installation directory. The fallback matters for terminals opened before the installer refreshed PATH — without it a working install would look like a missing one.{% else %}定位 CLI：先找 PATH，再回落到安装目录。回落这一步是为了应付「装好 CLI 之前就打开的终端」——PATH 没刷新时不该被当成没装。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}Locate the CLI: PATH first, then the installation directory. The second step matters for terminals opened before the installer refreshed PATH — without it a working install would look like a missing one.{% else %}定位 CLI：先找 PATH，再回落到安装目录。回落这一步是为了应付「装好 CLI 之前就打开的终端」——PATH 没刷新时不该被当成没装。{% endif %}
 if command -v pengj-templates-cli >/dev/null 2>&1; then
     exec pengj-templates-cli gate hook commit-msg "$1"
 fi
@@ -27,14 +27,8 @@ do
     fi
 done
 
-# {% if options["skill_lang"] | default("zh") == "en" %}No CLI: run the reduced check that ships with the repository. It is deliberately more permissive than the CLI, so it never rejects a message the CLI would accept — the server-side CI still holds the full rule set.{% else %}没有 CLI：改跑仓库自带的缩减检查。它被刻意做得比 CLI 更宽松，绝不会拒掉 CLI 会放行的提交——完整规则集仍由服务端 CI 把关。{% endif %}
-fallback="$root/.githooks/gate-fallback.sh"
-if [ -f "$fallback" ]; then
-    exec sh "$fallback" "$1"
-fi
-
-echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli was not found on PATH or in the installation directory, and the fallback check is missing.{% else %}PATH 与安装目录里都找不到 pengj-templates-cli，仓库自带的兜底检查也不在。{% endif %}" >&2
-echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}install it once and the commit gate comes with it:{% else %}安装一次即可带上提交门禁：{% endif %}" >&2
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}commit blocked: pengj-templates-cli was not found on PATH or in the installation directory.{% else %}提交被拦下：PATH 与安装目录里都找不到 pengj-templates-cli。{% endif %}" >&2
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}The gate lives inside the CLI, so there is no local rule set to fall back to. Install it once and the gate comes with it:{% else %}门禁就在 CLI 里，本地没有另一套规则可回落。安装一次即可带上：{% endif %}" >&2
 echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
 echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
-exit 2
+exit 1

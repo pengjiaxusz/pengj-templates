@@ -36,20 +36,20 @@
 - 全英文项目用 `--skill-lang en --no-commit-zh`；生成后所有文本文件零汉字（`crates/core` 有端到端单测保障）。`.agents/skills/*/scripts/` 恒为英文，不受语言轴影响。
 - **文档语言双向门禁**：`crates/core/src/i18n_audit.rs` 对全部生成文本文件双向判定——英文项目不得出现汉字，中文项目里面向人的文案必须含汉字。只查 en 不查 zh 会漏掉「纯英文、没写双语分支」的模板（`doctor.d/README.md` 就是这么把英文文档带进中文项目的）。机器产物走窄白名单：`.json`、`.agents/skills/*/scripts/*`、`Cargo.toml`、`rust-toolchain.toml`、`src/main.rs`。已生成项目跑 `pengj-templates-cli check-lang --dir <项目>`（可 `--lang zh|en` 覆盖、`--json`）或 `just gate-lang`，只审计 manifest 里的模板托管文件；模板改动由 `skill_lang_drives_every_generated_file_language` 端到端测试在 CI 拦截。
 - **代码语言守卫**：`gate` 层产出 `.gate.toml`（配置）与 `.githooks/pre-commit`（钩子），pre-commit 扫描暂存的 `.rs`。判定方向来自 `.gate.toml` 的 `mode`（`english` 查非拉丁文字、`chinese` 查非中文），按文件算占比：字符串违规 ≤ `lang.max_ratio`（默认 1%）、标识符违规 ≤ `lang.max_ident_ratio`（默认 0）。中文模式只判定面向人的文案，机器字面量（参数、路径、协议字段、内嵌源码）不判违规但仍计入分母。真实例外用行尾 `lang-ok: 理由` 或文件头 `lang-allow: 理由` 认证。门禁是纯 Rust 实现、零 Node 依赖，已收编进 `pengj-templates-cli`（唯一入口 `pengj-templates-cli gate ...`），不另有独立二进制。
-- **提交门禁装配**：`gate` 层依赖 `common`，产出 `.gate.toml`（首次生成后归用户所有，列入 `update_ignore`）与 `.githooks/pre-commit` / `.githooks/commit-msg`（模板托管，随更新同步）。钩子脚本在写盘后补可执行位——git 在 Unix 上靠它决定跑不跑钩子，缺位会静默跳过。生成项目后（或新克隆后）跑 `just doctor --fix`（无 just 时用 `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix`）：doctor 检查工具链并优先调用 `.githooks/install.sh` 把 `core.hooksPath` 指向 `.githooks`；CLI 安装器不再写全局 `core.hooksPath`，doctor 也不再检测或告警旧的全局 dispatcher（legacy global gate）——钩子激活一律按仓库本地 `core.hooksPath` 判定。`gate` 层自动带上 `ci` 层，服务端 workflow 负责没有本地钩子的机器。钩子优先调 CLI，没装 CLI 时 commit-msg 回落到 `.githooks/gate-fallback.sh` 的缩减规则、pre-commit 放行并告警；没有 `$PENGJ_GATE` / 独立 `gate` / 仓库 URL 之类的多级回退分支。
+- **提交门禁装配**：`gate` 层依赖 `common`，产出 `.gate.toml`（首次生成后归用户所有，列入 `update_ignore`）与 `.githooks/pre-commit` / `.githooks/commit-msg`（模板托管，随更新同步）。钩子脚本在写盘后补可执行位——git 在 Unix 上靠它决定跑不跑钩子，缺位会静默跳过。生成项目后（或新克隆后）跑 `just doctor --fix`（无 just 时用 `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix`）：doctor 检查工具链并优先调用 `.githooks/install.sh` 把 `core.hooksPath` 指向 `.githooks`；CLI 安装器不再写全局 `core.hooksPath`，doctor 也不再检测或告警旧的全局 dispatcher（legacy global gate）——钩子激活一律按仓库本地 `core.hooksPath` 判定。`gate` 层自动带上 `ci` 层，服务端跑的是同一个二进制。钩子只负责找到 CLI 并把活交给它，**模板不带任何兜底脚本**：没装 CLI 时 `commit-msg` 与 `pre-commit` 都拦下提交并打印安装命令；也没有 `$PENGJ_GATE` / 独立 `gate` / 仓库 URL 之类的多级回退分支。
 - **历史层名迁移**：老的 `lefthook` 层已被 `gate` 层取代。存量项目的 manifest 里仍写着 `lefthook`，引擎按 `LEGACY_LAYER_ALIASES` 映射到 `gate`，不会被当成「已移除的层」静默丢弃。
 
-## 没装 CLI 的机器
+## 没装 CLI 时
 
-没装 `pengj-templates-cli` 的机器不能本地跑完整门禁——CLI 里才有完整规则集。模板为这种情况铺了四道防线，前一道在本地，后一道在服务端：
+门禁只有在 `pengj-templates-cli` 里的一份实现，模板不自带第二套脚本。所以没装 CLI 时：
 
-1. **启用（零依赖）**：`just doctor --fix`（或 `sh scripts/doctor.sh --fix`）会检查工具链并调用 `.githooks/install.sh`；后者只需要 git 与一个 POSIX shell，跑一次就把 `core.hooksPath` 指向 `.githooks` 并补上可执行位。`just gate-hooks-local` 是同一个脚本的裸入口。
-2. **提交标题（本地缩减检查）**：`.githooks/commit-msg` 找不到 CLI 时改跑 `.githooks/gate-fallback.sh`——纯 shell 实现的最小规则集（标题语法、type 白名单、摘要非空、句末句点、主题语言），阈值从 `.gate.toml` 读。**不变式：兜底脚本永远比 CLI 宽松**，它只拦最离谱的错误，绝不误杀 CLI 会放行的提交。
-3. **代码语言与格式（服务端补齐）**：`.githooks/pre-commit` 的 rustfmt 与语言守卫没法用 shell 复刻，没装 CLI 时它**放行并告警**，不拿一个跑不起来的检查堵死提交；这两项由 `ci` 层的 `gate` 任务在服务端补上（rust 项目还会在服务端跑 `cargo fmt --check`）。
-4. **强制力（服务端）**：`ci` 层产出 `.github/workflows/gate.yml`（PR、合并队列、主干推送都跑）、`.github/rulesets/gate.json`（把 `gate` 设成必需状态检查，配置即代码）与 `.github/pull_request_template.md`（提交规则自查清单）。CI 失败时把可操作的修复提示写进 `GITHUB_STEP_SUMMARY`。
+- **本地**：`.githooks/commit-msg` 与 `.githooks/pre-commit` 都拦下提交，打印安装命令后退出——不放行，也不用一套更宽松的 shell 规则顶替。
+- **服务端**：`ci` 层的 `gate` 任务跑同一个二进制，`.github/rulesets/gate.json` 把它设成必需状态检查，PR 一样过不去。CI 失败时把可操作的修复提示写进 `GITHUB_STEP_SUMMARY`。
+
+钩子激活本身不需要 CLI：`just doctor --fix`（或 `sh scripts/doctor.sh --fix`）调用 `.githooks/install.sh`，后者只用 git 与一个 POSIX shell 就把 `core.hooksPath` 指向 `.githooks` 并补上可执行位；`just gate-hooks-local` 是同一个脚本的裸入口。
 
 `ci` 层的 workflow 里 job 名固定为 `gate`：必需状态检查引用的就是这个名字，不能因为 `skill_lang` 切换而失效。
 
 ## `.githooks/` 的语言写法
 
-`.githooks/` 下的脚本（`commit-msg`、`pre-commit`、`gate-fallback.sh`、`install.sh`）用**行内双语分支**而不是 `<stem>.<lang>.<ext>` 拆文件：它们是一套逻辑的四个入口，拆成两份完整副本会让修复只落到一半。渲染结果仍然满足「英文项目零汉字」——每个中文字符串都在 `{% if %}` 分支里。
+`.githooks/` 下的脚本（`commit-msg`、`pre-commit`、`install.sh`）用**行内双语分支**而不是 `<stem>.<lang>.<ext>` 拆文件：它们是一套钩子的三个入口，拆成两份完整副本会让修复只落到一半。渲染结果仍然满足「英文项目零汉字」——每个中文字符串都在 `{% if %}` 分支里。

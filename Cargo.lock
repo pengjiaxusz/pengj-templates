@@ -253,10 +253,6 @@ dependencies = [
 [[package]]
 name = "pengj-gate"
 version = "0.69.0"
-dependencies = [
- "pengj-core",
- "serde_json",
-]
 
 [[package]]
 name = "pengj-mcp"

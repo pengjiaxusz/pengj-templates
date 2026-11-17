@@ -43,11 +43,11 @@
 - 语料来自真实 commitlint 的裁决（`crates/gate/tests/commit_corpus.jsonl`）：门禁不能比它替换掉的工具更松，改规则前先看语料。
 - 门禁只以 `crates/gate` 内部库的形式存在，唯一对外入口是 `pengj-templates-cli gate ...`（参数解析集中在 `crates/gate/src/cli.rs` 的 `run()`）。不再维护独立 `gate` 二进制——装一个 `pengj-templates-cli` 就同时拿到模板引擎、MCP 安装器与提交门禁。
 - 钩子与 `just/gate.just` 统一直接调 `pengj-templates-cli gate ...`，不再做 `$PENGJ_GATE` / 独立 `gate` / 仓库 URL 的多级回退探测；仅本仓库自身（开发态）允许 `cargo run -p pengj-templates-cli -- gate ...` 兜底。
-- **没装 CLI 的机器走四道防线**：本地两道（`.githooks/install.sh` 零依赖启用 + `.githooks/gate-fallback.sh` 纯 shell 的缩减检查），服务端两道（`ci` 层的 workflow + ruleset）。`gate-fallback.sh` 的不变式是**永远比 CLI 宽松**：只拦最离谱的错误，绝不误杀 CLI 会放行的提交——所以它实现的是 `commit.rs` 规则的严格子集，阈值从 `.gate.toml` 读。改 `commit.rs` 的规则时要顺带看一眼这个脚本，但**不要**把它当权威。
-- `pre-commit` 在没有 CLI 时**放行并告警**，不拿一个跑不起来的检查（rustfmt 与语言守卫没法用 shell 复刻）堵死提交；这两项由服务端 CI 补齐。
+- **门禁只有一套实现**：规则全在 `crates/gate`（`commit.rs` / `lang_guard.rs` / `scanner.rs`），钩子与 `just/gate.just` 只负责找到 CLI 并把活交给它。模板**不产出任何兜底脚本**——原 `gate-fallback.sh` 已删除：没装 CLI 时 `commit-msg` 与 `pre-commit` 都直接拦下提交并打印安装命令，不放行、也不用第二套更宽松的 shell 规则顶替。所以改 `commit.rs` 的规则时不需要同步任何脚本。
+- 服务端强制力在 `ci` 层：`gate` 任务跑的是同一个 CLI，`rulesets/gate.json` 把它设成必需状态检查。CI 里没有「降级检查」这条路径，本地与远端永远是同一套规则。
 - `ci` 层的 workflow 里 job 名固定为 `gate`：必需状态检查引用的就是这个名字，不能因为 `skill_lang` 切换而失效。
 
-> EN: the commit gate has zero third-party dependencies; rules live in config.rs / commit.rs; hooks need `core.hooksPath=.githooks` plus the executable bit recorded in the index; hook files carry the `gate hook` marker; the corpus pins the gate to commitlint's verdicts; the gate is an internal library reached only through `pengj-templates-cli gate ...` — one binary covers the template engine, the MCP installer and the commit gate.
+> EN: the commit gate has zero third-party dependencies; rules live in config.rs / commit.rs; hooks need `core.hooksPath=.githooks` plus the executable bit recorded in the index; hook files carry the `gate hook` marker; the corpus pins the gate to commitlint's verdicts; the gate is an internal library reached only through `pengj-templates-cli gate ...` — one binary covers the template engine, the MCP installer and the commit gate. There is exactly one implementation: the hooks only locate the CLI and hand over, and block the commit with install instructions when it is missing (the old shell fallback is gone), while the `ci` job runs the same binary behind a required status check.
 
 ## 模板层规范 / Template layers (templates/)
 
@@ -88,7 +88,7 @@
   - `<stem>.<lang>.<ext>`（如 `foo.zh.js` / `foo.en.js`）跟随 `skill_lang`；
   - `<stem>.commit.<lang>.<ext>` 跟随 `commit_zh`，用于提交校验类产物——`commit_zh` 与 `skill_lang` 是独立轴，「中文文档 + 英文提交」时按提交轴选版。
   - 解析实现：`crates/core/src/engine.rs::resolve_language_variant`；`update` 语义不变（产物路径无语言标记，manifest 照常记录）。
-  - **例外：`.githooks/` 下的脚本用行内双语分支**。`commit-msg` 与 `pre-commit` 没有扩展名，拆不了；`gate-fallback.sh` 与 `install.sh` 与它们是同一套逻辑的四个入口，拆成两份完整副本会让修复只落到一半。渲染结果照样满足「英文项目零汉字」——每个中文字符串都在 `{% if %}` 分支里，`crates/core` 的端到端单测会守住这条。
+  - **例外：`.githooks/` 下的脚本用行内双语分支**。`commit-msg` 与 `pre-commit` 没有扩展名，拆不了；`install.sh` 与它们是同一套钩子的三个入口，拆成两份完整副本会让修复只落到一半。渲染结果照样满足「英文项目零汉字」——每个中文字符串都在 `{% if %}` 分支里，`crates/core` 的端到端单测会守住这条。
 - **代码语言守卫（gate 层）**：门禁在 pre-commit 扫描暂存 `.rs`，按 `.gate.toml` 的 `mode` 判定——`english` 时标识符必须 ASCII、字符串文案必须英文；`chinese` 时字符串文案必须中文（标识符允许英文锚点，符合中文编程规范）。中文模式只判定面向人的文案：命令行参数、路径、协议字段名、内嵌源码/着色器代码等机器字面量不算违规，但仍计入分母，避免额度被稀释。判定按文件算占比：字符串违规数 ÷ 字符串总数 ≤ `lang.max_ratio`（默认 1%），标识符违规数 ÷ 标识符总数 ≤ `lang.max_ident_ratio`（默认 0），允许额度向下取整。真实例外在源码里认证：行尾 `lang-ok: 理由` 免该行，文件头 `lang-allow: 理由` 免整文件（i18n 词表、CJK 测试样本）。`.gate.toml` 属 `update_ignore`（首次生成后归用户所有），但 `.githooks/*` 由模板托管、随更新同步；存量项目从 `lefthook` 层迁过来时，层名由 `lefthook` 自动映射为 `gate`（`LEGACY_LAYER_ALIASES`），门禁不会被静默丢弃。模板仓库自身的中文 CLI 文案是 `skill_lang=zh` 的文案，不是英文编程项目的代码，因此本仓库在 `.gate.toml` 的 `project.disabled` 里关掉了 `lang-guard`。
 - **文档语言门禁（双向）**：`crates/core/src/i18n_audit.rs` 提供 `audit_generated` / `audit_project_lang`，对**全部生成文本文件**做双向校验——英文项目零汉字、中文项目面向人的文案必须含汉字（纯英文模板即违规，典型是漏写双语分支的 `doctor.d/README.md`）。机器产物（`.json`、`.agents/skills/*/scripts/*`、`Cargo.toml`、`rust-toolchain.toml`、`src/main.rs`）走窄白名单，白名单条目要有理由，新增前先确认它不承载面向人文案。CLI 入口 `pengj-templates-cli check-lang --dir <项目>`（可 `--lang zh|en` 覆盖、`--json`），只审计 manifest 记录的模板托管文件；`gate` 层产出 `just gate-lang` 配方。模板仓库的 `skill_lang_drives_every_generated_file_language` 端到端测试已收口到这个审计器，CI（`cargo test --workspace`）会在模板漂移时拦截。
 

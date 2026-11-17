@@ -4917,10 +4917,10 @@ description = \"x\"
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
-    /// 没装 CLI 的机器走四道防线：本地两道（零依赖启用 + 缩减检查），
-    /// 服务端两道（workflow + 必需状态检查的 ruleset）。
+    /// 门禁只有一套实现：钩子直接调 CLI，没装 CLI 就拦下提交；强制力落在 `ci` 层的
+    /// workflow + 必需状态检查的 ruleset 上，模板不再自带第二套 shell 规则集。
     #[test]
-    fn gate_and_ci_layers_ship_the_no_cli_fallback() {
+    fn gate_and_ci_layers_ship_one_implementation() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
@@ -4954,7 +4954,7 @@ description = \"x\"
         let zh_root = tmp.join("no_cli_zh");
         let en_root = tmp.join("no_cli_en");
 
-        // -- 本地第一道：零依赖启用 --
+        // -- 启用入口：零依赖（激活钩子不需要 CLI） --
         let install =
             std::fs::read_to_string(zh_root.join(".githooks").join("install.sh")).unwrap();
         assert!(
@@ -4966,33 +4966,39 @@ description = \"x\"
             "启用脚本必须把可执行位写进索引"
         );
 
-        // -- 本地第二道：缩减检查 --
-        let fallback =
-            std::fs::read_to_string(zh_root.join(".githooks").join("gate-fallback.sh")).unwrap();
+        // -- 只有一套实现：模板不再产出兜底脚本 --
         assert!(
-            fallback.contains("commit.subject_lang") && fallback.contains("commit.types"),
-            "兜底检查必须从 .gate.toml 读规则"
+            !zh_root.join(".githooks").join("gate-fallback.sh").exists(),
+            "门禁只在 CLI 里实现，模板不得再产出兜底脚本"
         );
 
-        // -- 钩子降级：commit-msg 走兜底，pre-commit 放行而不硬阻断 --
+        // -- 钩子：只负责找到 CLI 并交给它，找不到就拦下提交 --
         let msg_hook =
             std::fs::read_to_string(zh_root.join(".githooks").join("commit-msg")).unwrap();
         assert!(
-            msg_hook.contains("gate-fallback.sh"),
-            "commit-msg 必须在找不到 CLI 时走兜底检查"
+            msg_hook.contains("gate hook commit-msg") && msg_hook.contains("exit 1"),
+            "commit-msg 必须调用 CLI，找不到 CLI 时拦下提交"
+        );
+        assert!(
+            !msg_hook.contains("fallback"),
+            "commit-msg 不得再有兜底分支"
         );
         let pre_hook =
             std::fs::read_to_string(zh_root.join(".githooks").join("pre-commit")).unwrap();
         assert!(
-            pre_hook.contains("exit 0") && !pre_hook.contains("exit 2"),
-            "pre-commit 在没有 CLI 时必须放行，而不是拿跑不起来的检查堵死提交"
+            pre_hook.contains("gate hook pre-commit") && pre_hook.contains("exit 1"),
+            "pre-commit 必须调用 CLI，找不到 CLI 时拦下提交而不是放行"
+        );
+        assert!(
+            !pre_hook.contains("fallback"),
+            "pre-commit 不得再有兜底分支"
         );
 
         // -- 配方入口 --
         let gate_just = std::fs::read_to_string(zh_root.join("just").join("gate.just")).unwrap();
         assert!(
             gate_just.contains("gate-hooks-local") && gate_just.contains("install.sh"),
-            "just 配方必须给出不依赖 CLI 的启用入口"
+            "just 配方必须给出激活钩子的裸入口"
         );
 
         // -- 服务端第一道：workflow --

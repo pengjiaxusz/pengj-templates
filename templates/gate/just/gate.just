@@ -5,7 +5,7 @@
 gate-check:
     @pengj-templates-cli gate check
 
-# {% if options["skill_lang"] | default("zh") == "en" %}Raw CLI-free activation: `sh .githooks/install.sh` points core.hooksPath at .githooks and records the executable bit using only git and a POSIX shell. Prefer `just doctor --fix`; this recipe is the fallback for a machine where the doctor cannot run.{% else %}零依赖裸入口：`sh .githooks/install.sh` 只用 git 与 POSIX shell 就把 core.hooksPath 指向 .githooks 并补上可执行位。优先用 `just doctor --fix`；本配方是 doctor 跑不了时的兜底。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}Raw activation: `sh .githooks/install.sh` points core.hooksPath at .githooks and records the executable bit using only git and a POSIX shell. Prefer `just doctor --fix`; this recipe is the bare entry it calls.{% else %}裸入口：`sh .githooks/install.sh` 只用 git 与 POSIX shell 就把 core.hooksPath 指向 .githooks 并补上可执行位。优先用 `just doctor --fix`，本配方是它调用的裸入口。{% endif %}
 gate-hooks-local:
     @sh .githooks/install.sh
 
