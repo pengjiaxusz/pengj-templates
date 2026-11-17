@@ -1465,14 +1465,23 @@ pub fn update_project_with_options(
     let mut new_files: BTreeMap<String, String> = BTreeMap::new();
 
     for (rel, bytes) in &bytes_map {
+        let rel_str = rel.to_string_lossy().into_owned();
         // 黑名单文件：首次生成时写入，之后归用户所有，模板不再接管。
         // 判据是磁盘上是否已有该文件——存量项目在 update / add-layer 里新接入
         // 某层时（例如 lefthook 迁移到 gate），该层的 update_ignore 文件还没
         // 落过盘，必须补写，否则新层缺配置直接跑不起来。
         if ignores.contains(rel) && project_dir.join(rel).exists() {
+            // 清单里保留原记录；存量项目第一次补写后清单里还没有条目时，按磁盘
+            // 实际内容补登，避免归用户所有的文件从托管账本里消失。
+            let sha = match manifest.files.get(&rel_str) {
+                Some(old_sha) => old_sha.clone(),
+                None => std::fs::read(project_dir.join(rel))
+                    .map(|b| sha256_hex(&b))
+                    .unwrap_or_else(|_| sha256_hex(bytes)),
+            };
+            new_files.insert(rel_str, sha);
             continue;
         }
-        let rel_str = rel.to_string_lossy().into_owned();
         let new_sha = sha256_hex(bytes);
 
         let target = project_dir.join(rel);
@@ -4353,6 +4362,13 @@ description = \"x\"
                 .trim(),
             "mode = \"chinese\""
         );
+        assert!(
+            ProjectManifest::load(&proj)
+                .unwrap()
+                .files
+                .contains_key(".gate.toml"),
+            "补写后的门禁配置应进入托管账本"
+        );
 
         // 用户改过之后，update 不再接管
         std::fs::write(proj.join(".gate.toml"), "mode = \"english\"\n").unwrap();
@@ -4365,6 +4381,27 @@ description = \"x\"
                 .trim(),
             "mode = \"english\"",
             "归用户所有的配置不得被覆盖"
+        );
+        assert!(
+            ProjectManifest::load(&proj)
+                .unwrap()
+                .files
+                .contains_key(".gate.toml"),
+            "归用户所有的文件不得从托管账本消失"
+        );
+
+        // 账本缺失时按磁盘内容补登：早期版本会在跳过 update_ignore 时丢条目
+        let mut healed = ProjectManifest::load(&proj).unwrap();
+        healed.files.remove(".gate.toml");
+        healed.save(&proj).unwrap();
+        let upd = update_project(&templates, &proj).expect("third update should succeed");
+        assert!(upd.updated.is_empty() && upd.created.is_empty());
+        assert!(
+            ProjectManifest::load(&proj)
+                .unwrap()
+                .files
+                .contains_key(".gate.toml"),
+            "账本缺失时必须按磁盘内容补登"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
