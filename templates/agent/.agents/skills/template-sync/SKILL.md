@@ -81,7 +81,7 @@ When adopting an unmanaged new or existing repository, **never run adopt blindly
 Inspect the target project workspace across the following dimensions:
 - **Tech Stack & Layer Compatibility**:
   - Check project files: If `Cargo.toml` exists, it matches the Rust stack — recommend `rust` or `rust-workspace`. **Strictly avoid Rust layers for non-Rust repositories**.
-  - Check toolchains: does the repo need local Git hook commit enforcement? If yes, recommend the `gate` layer — it is a pure Rust implementation with no Node dependency. For projects that only want files and no local hook enforcement, default to excluding `gate`, but present it as an optional enhancement.
+  - Check toolchains: does the repo need local Git hook commit enforcement? If yes, recommend the `gate` layer — it is a pure Rust implementation with no Node dependency, and its hooks call `pengj-templates-cli` (one binary covers the template CLI, the MCP installer and the gate). For projects that only want files and no local hook enforcement, default to excluding `gate`, but present it as an optional enhancement.
   - Editor settings: Recommend `vscode` to inject file nesting patterns (`explorer.fileNesting`); existing `.vscode` configs merge automatically.
   - `common` and `agent` are foundational and core layers for all projects (always required).
 - **Programming Paradigm Detection (`--chinese` Chinese Programming)**:
@@ -229,7 +229,7 @@ cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <�
 AI 应首先巡检目标项目的工作区，按以下维度完成自动化诊断：
 - **技术栈与适用层判定**：
   - 检查项目根目录与源码：包含 `Cargo.toml` 则命中 Rust 技术栈，推荐 `rust` 或 `rust-workspace` 层；**非 Rust 项目严禁引入 Rust 相关层**。
-  - 检查工具链：项目是否需要本地 Git Hook 物理拦截提交？需要则推荐 `gate` 层——纯 Rust 实现，无 Node 依赖；只要文件、不要本地拦截的轻量项目默认不选 `gate`，作为可选附加项提示。
+  - 检查工具链：项目是否需要本地 Git Hook 物理拦截提交？需要则推荐 `gate` 层——纯 Rust 实现，无 Node 依赖，钩子统一调用 `pengj-templates-cli`（装这一个二进制就同时有模板 CLI、MCP 安装器与门禁）；只要文件、不要本地拦截的轻量项目默认不选 `gate`，作为可选附加项提示。
   - 编辑器配置：推荐引入 `vscode` 层，提供文件折叠嵌套规则（`explorer.fileNesting`），现有 `.vscode` 配置会自动并集合并。
   - `common` 与 `agent` 为所有项目的基础与核心层（必选）。
 - **编程范式检测（`--chinese` 中文编程）**：
