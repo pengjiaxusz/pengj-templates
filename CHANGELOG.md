@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.3](https://github.com/pengjiaxusz/pengj-templates/compare/v0.65.2...v0.65.3) (2026-11-17)
+
+
+### Bug Fixes
+
+* **core:** 保留 update_ignore 文件的托管账本记录 ([fd0346a](https://github.com/pengjiaxusz/pengj-templates/commit/fd0346a6d31df653e4b6c8346ebd53e2556e644b))
+
 ## [0.65.2](https://github.com/pengjiaxusz/pengj-templates/compare/v0.65.1...v0.65.2) (2026-11-17)
 
 
