@@ -154,9 +154,9 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
   - **本项目自身的版本号走稳定 semver**：发布的版本号不带 `-beta.N` 后缀。manifest 固定指向上一个已发布 tag，保证 release-please 永远能定位到上次发布；发布稳定版只需在代码/模板/配置类提交的描述里加 `Release-As: <版本>`；需要预发布时用同一个 footer 显式切换即可。
   - 版本号方案（release-please 规则）：`feat`→minor、`fix`→patch、`BREAKING CHANGE`→major（`0.x` 阶段因 `bump-minor-pre-major=true`，BREAKING 只升 minor 而不跳 major；`feat` 在 `0.x` 也仍升 minor）。
 
-`rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。
+`rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。注意黑名单冻结的是**值**、不是说明：文件里的 `PENGJ_TEMPLATE_START/END` 受管说明块仍随模板刷新（已有块原位替换；旧版无块文件置顶插入并列入「待复核」），因为文档一旦冻结在用户手里，模板改了语义它也不会跟着改，只会继续按旧说法误导。没有受管块的黑名单文件整份冻结。
 
-`.cargo/config.toml` 走 **TOML 结构化受管合并**：受管块内的表与用户配置做表级并集、键级去重——用户已有的等价键自动去重（避免重复表定义炸掉 cargo），模板新增表进入受管块；同键不同值或需要往用户已有表里补新键时报冲突并跳过写盘，由用户手工对齐后重跑。文本类文件（AGENTS.md、技能 SKILL.md）走**受管块注入**：磁盘已有托管块则原位替换，无块的 legacy 文件则把托管块追加到末尾并计入 `needs_review` 提示人工复核。`layer.toml` 里用 `update_ignore` 声明黑名单文件——`gate` 层的 `.gate.toml` 就在黑名单里：首次生成后归项目所有，模板更新时跳过，用户的 scope 白名单不会被覆盖。
+`.cargo/config.toml` 走 **TOML 结构化受管合并**：受管块内的表与用户配置做表级并集、键级去重——用户已有的等价键自动去重（避免重复表定义炸掉 cargo），模板新增表进入受管块；同键不同值或需要往用户已有表里补新键时报冲突并跳过写盘，由用户手工对齐后重跑。文本类文件（AGENTS.md、技能 SKILL.md）走**受管块注入**：磁盘已有托管块则原位替换，无块的 legacy 文件则把托管块追加到末尾并计入 `needs_review` 提示人工复核。`layer.toml` 里用 `update_ignore` 声明黑名单文件——`gate` 层的 `.gate.toml` 就在黑名单里：首次生成后归项目所有，模板更新时跳过，用户的 scope 白名单不会被覆盖（只刷新文件头部的说明块，0.67 起的 scope 三态语义写在那块里）。跨过破坏性变更时，`update` 会把 `crates/core/src/migrations.rs` 里版本区间内的条目打印成「迁移提示」，不需要你去翻 CHANGELOG。
 
 `.vscode/settings.json` 的模板配置在**项目根已有 `*.code-workspace` 文件时并入工作区文件的 `settings` 节点**（不新建独立 settings 文件）；没有工作区文件时才创建/维护 `.vscode/settings.json`。
 
