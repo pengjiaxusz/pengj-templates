@@ -5,7 +5,7 @@
 gate-check:
     @pengj-templates-cli gate check
 
-# {% if options["skill_lang"] | default("zh") == "en" %}Install the commit gate: point core.hooksPath at .githooks and record the executable bit. Run it once after cloning, because core.hooksPath lives in .git/config and is never cloned.{% else %}安装提交门禁：把 core.hooksPath 指向 .githooks，并记录可执行位。克隆后执行一次即可——core.hooksPath 存在 .git/config 里，不会随克隆传播。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}Install the commit gate: point core.hooksPath at .githooks and record the executable bit. Machines with the CLI installed already have the global dispatcher enabled (`gate hooks install --global`): git reads the global core.hooksPath on every invocation, so a fresh clone is guarded with no extra step. This recipe is the fallback for when the global dispatcher is not enabled.{% else %}安装提交门禁：把 core.hooksPath 指向 .githooks，并记录可执行位。装了 CLI 的机器默认已开启全局分发（`gate hooks install --global`）：git 每次执行都读全局 core.hooksPath，所以新克隆的仓库无需任何操作即被门禁接管。此配方是未开启全局分发时的兜底。{% endif %}
 gate-hooks:
     @pengj-templates-cli gate hooks install
 
