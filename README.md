@@ -144,6 +144,8 @@ The template configuration for `.vscode/settings.json` is merged into the `setti
 
 Using the gate layer: the gate is a pure Rust implementation with no Node dependency, and it now lives inside `pengj-templates-cli` — installing one binary gives you the template engine, the MCP installer and the commit gate at the same time. After generating a project, run `git init` first, then run `just doctor --fix` once (or `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix` without just) — it checks the toolchain and points `core.hooksPath` at `.githooks`, no CLI install required. The installers no longer write a global hook path. The gate layer implies the `ci` layer, so machines without the CLI are covered by the server-side workflow. `core.hooksPath` lives in `.git/config` and never travels with a clone, so run the doctor once after a fresh clone too.
 
+Scope policy: an absent `commit.scopes` key or an empty list now **rejects every `(scope)`** (fail-closed); the old "empty means accept any" behaviour is gone. Set `commit.scopes = ["*"]` to accept any scope, or list crate names to pin a whitelist. Existing projects generated before this change carry `commit.scopes = []` and will start rejecting scoped headers once the CLI is upgraded — add `["*"]` to `.gate.toml` to restore the old behaviour.
+
 The hooks call `pengj-templates-cli gate hook pre-commit` / `pengj-templates-cli gate hook commit-msg <msgfile>` directly; when the CLI is missing, `commit-msg` falls back to `.githooks/gate-fallback.sh` (see below). The old multi-level probing (the `$PENGJ_GATE` environment variable, the standalone `gate` binary and the repository-URL branch) is gone.
 
 ### Machines without the CLI

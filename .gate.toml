@@ -26,7 +26,8 @@ subject_min_han = 2
 max_header = 100
 # The allowed conventional-commit types.
 types = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"]
-# The allowed scopes. An empty list accepts any scope.
+# The allowed scopes. An empty list (or a missing key) rejects every scope;
+# use ["*"] to accept any scope; a list pins a whitelist.
 scopes = ["agent", "cli", "core", "gate", "mcp", "ci", "templates", "main"]
 
 [project]

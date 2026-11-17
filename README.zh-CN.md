@@ -142,6 +142,8 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
 
 gate 层用法：门禁是纯 Rust 实现，没有任何 Node 依赖，且已收编进 `pengj-templates-cli`——装一个二进制就同时拿到模板引擎、MCP 安装器和提交门禁。生成项目后先 `git init`，再执行一次 `just doctor --fix`（无 just 时用 `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix`）——它检查工具链并把 `core.hooksPath` 指向 `.githooks`，不需要先装 CLI；CLI 安装器不再写全局钩子。`gate` 层会自动带上 `ci` 层，未装 CLI 的机器由服务端 workflow 兜底。`core.hooksPath` 存在 `.git/config` 里，不会随克隆传播，所以新克隆后同样跑一次 doctor 即可。
 
+scope 策略：现在省略 `commit.scopes` 或留空列表都会**拒绝一切 `(scope)`**（fail-closed），旧的「空列表表示接受任意 scope」行为已移除。设 `commit.scopes = ["*"]` 放行任意 scope，或填入 crate 名收紧为白名单。本次改动之前生成的项目里写的是 `commit.scopes = []`，升级 CLI 后会开始拒绝带 scope 的标题——在 `.gate.toml` 里加上 `["*"]` 即可恢复旧行为。
+
 钩子直接调用 `pengj-templates-cli gate hook pre-commit` / `pengj-templates-cli gate hook commit-msg <msgfile>`；找不到 CLI 时 `commit-msg` 回落到 `.githooks/gate-fallback.sh`（见下节）。原先的多级回退探测（`$PENGJ_GATE` 环境变量、独立 `gate` 二进制、仓库 URL 分支）已全部移除。
 
 ### 没装 CLI 的机器
