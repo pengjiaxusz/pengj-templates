@@ -5670,27 +5670,27 @@ body
             );
         }
 
-        let en_lint = std::fs::read_to_string(tmp.join("lang_en").join(".gate.toml")).unwrap();
-        assert!(!contains_cjk(&en_lint), "英文项目的门禁配置不得含汉字");
-        let en_hooks =
-            std::fs::read_to_string(tmp.join("lang_en").join(".githooks").join("pre-commit"))
-                .unwrap();
-        assert!(!contains_cjk(&en_hooks), "英文项目的钩子不得含汉字");
-
-        let mut files = Vec::new();
-        collect_files(&tmp.join("lang_en"), &mut files);
-        assert!(files.len() > 20, "生成文件数异常: {}", files.len());
-        for path in files {
-            // 二进制资产（若有）read_to_string 会失败，直接跳过
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            assert!(
-                !contains_cjk(&text),
-                "英文项目文件 {} 出现汉字",
-                path.display()
-            );
-        }
+        // 双向语言门禁：英文项目零汉字、中文项目面向人的文案不得缺中文。
+        // 收口到 i18n_audit，避免「只查 en 不查 zh」漏掉缺双语分支的纯英文模板。
+        let en_audit =
+            crate::i18n_audit::audit_generated(&tmp.join("lang_en"), crate::i18n_audit::Lang::En);
+        assert!(
+            !en_audit.has_violations(),
+            "英文项目语言违规: {:?}",
+            en_audit.findings
+        );
+        let zh_audit =
+            crate::i18n_audit::audit_generated(&tmp.join("lang_zh"), crate::i18n_audit::Lang::Zh);
+        assert!(
+            !zh_audit.has_violations(),
+            "中文项目语言违规: {:?}",
+            zh_audit.findings
+        );
+        assert!(en_audit.files_checked > 20, "英文项目扫描文件数异常");
+        assert_eq!(
+            en_audit.files_checked, zh_audit.files_checked,
+            "两种语言生成的文件数应一致"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

@@ -7,6 +7,7 @@ pub mod block;
 pub mod context;
 pub mod engine;
 pub mod error;
+pub mod i18n_audit;
 pub mod layer;
 pub mod manifest;
 pub mod render;
@@ -22,5 +23,9 @@ pub use engine::{
     GenerateReport, UpdateOptions, UpdateReport,
 };
 pub use error::{CoreError, Result};
+pub use i18n_audit::{
+    audit_generated, audit_project_lang, contains_han, format_findings, Finding, FindingKind, Lang,
+    LangAudit,
+};
 pub use layer::{LayerInfo, SkillInfo};
 pub use manifest::{ProjectManifest, MANIFEST_FILE};

@@ -83,6 +83,26 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           exit "$status"
+
+      - name: {% if options["skill_lang"] | default("zh") == "en" %}Check the documentation language{% else %}校验文案语言{% endif %}
+        run: |
+          set +e
+          output=$(pengj-templates-cli check-lang --dir . 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## {% if options["skill_lang"] | default("zh") == "en" %}The documentation language gate reported violations{% else %}文案语言门禁报了违规{% endif %}"
+              echo ""
+              echo '```'
+              printf '%s\n' "$output"
+              echo '```'
+              echo ""
+              echo "{% if options["skill_lang"] | default("zh") == "en" %}English projects must have no Han characters; Chinese projects must have Chinese in human-facing copy. Fix the template and run `update`.{% else %}英文项目不得出现汉字，中文项目面向人的文案必须含中文。请到模板源修复后对项目执行 `update`。{% endif %}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
       {%- if "rust" in layers or "rust-workspace" in layers %}
 
       # {% if options["skill_lang"] | default("zh") == "en" %}The local pre-commit hook formats the staged Rust files; without the CLI that never happens, so the server checks it.{% else %}本地 pre-commit 钩子会格式化暂存的 Rust 文件；没装 CLI 时这一步不会发生，所以由服务端补上。{% endif %}

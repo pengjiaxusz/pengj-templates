@@ -117,6 +117,21 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// 校验已生成项目的文档语言：en 项目零汉字，zh 项目文案必须含中文
+    ///
+    /// 按项目 manifest 的 skill_lang 判定，可用 --lang 覆盖；只检查模板托管文件。
+    /// 与 `audit`（查模板对齐漂移）互补，专查「文案没跟着语言轴走」这类基础错误。
+    CheckLang {
+        /// 目标项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 覆盖语言判定：zh / en
+        #[arg(long)]
+        lang: Option<String>,
+        /// 以 JSON 格式输出（供脚本/自动化消费）
+        #[arg(long)]
+        json: bool,
+    },
     /// 纳管存量已有项目（初始化 .pengj-templates.json 并建立基线）
     Adopt {
         /// 目标项目目录（默认当前目录）
@@ -333,6 +348,19 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             if any_violations {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        Command::CheckLang { dir, lang, json } => {
+            let override_lang = match lang.as_deref() {
+                None => None,
+                Some("zh") => Some(pengj_core::Lang::Zh),
+                Some("en") => Some(pengj_core::Lang::En),
+                Some(other) => anyhow::bail!("无效语言：{other}（可选 zh/en）"),
+            };
+            let has_violations = cmd_check_lang(&dir, override_lang, json)?;
+            if has_violations {
                 std::process::exit(1);
             }
             Ok(())
@@ -673,6 +701,52 @@ fn cmd_audit(
     }
 
     Ok(report.has_violations)
+}
+
+/// 校验项目的文档语言是否跟随 skill_lang 语言轴。
+///
+/// 这是「文案没翻译」这类基础错误的门禁：en 项目不得出现汉字，zh 项目里
+/// 面向人的文案不得整份缺失中文。只审计 manifest 记录的模板托管文件。
+fn cmd_check_lang(
+    dir: &Path,
+    override_lang: Option<pengj_core::Lang>,
+    json: bool,
+) -> anyhow::Result<bool> {
+    let report = pengj_core::audit_project_lang(dir, override_lang)
+        .context("校验项目文档语言失败（请先确认已生成项目并有 .pengj-templates.json）")?;
+
+    if json {
+        let violations = pengj_core::format_findings(&report);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "lang": report.lang.as_str(),
+                "filesChecked": report.files_checked,
+                "violations": violations,
+            }))?
+        );
+        return Ok(report.has_violations());
+    }
+
+    println!(
+        "项目 {} 文档语言校验（{}）：检查 {} 个模板托管文件",
+        dir.display(),
+        report.lang.as_str(),
+        report.files_checked
+    );
+    if !report.has_violations() {
+        println!("通过：文案与语言轴一致。");
+        return Ok(false);
+    }
+    eprintln!(
+        "发现 {} 处文案语言违规（en 项目不得含汉字；zh 项目文案必须含中文）：",
+        report.findings.len()
+    );
+    for line in pengj_core::format_findings(&report) {
+        eprintln!("{line}");
+    }
+    eprintln!("提示：到模板源补上 {{% if options[\"skill_lang\"] == \"en\" %}}…{{% else %}}…{{% endif %}} 双语分支，再对项目执行 update。");
+    Ok(true)
 }
 
 #[allow(clippy::too_many_arguments)]
