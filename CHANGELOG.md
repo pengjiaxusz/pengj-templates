@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.4...v0.63.0) (2026-11-17)
+
+
+### Features
+
+* **gate:** 全局钩子自动分发 + 服务端 CI 门禁层 ([0f156b0](https://github.com/pengjiaxusz/pengj-templates/commit/0f156b02d1dbdeb200b6b3a20b9bc0cd9bdc014a))
+
 ## [0.62.4](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.3...v0.62.4) (2026-11-17)
 
 
