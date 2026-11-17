@@ -258,9 +258,13 @@ fn resolve_language_variant(rel: &Path, doc_lang: &str, commit_lang: &str) -> Op
     Some(rel.with_file_name(format!("{base}.{ext}")))
 }
 
-/// 定位模板根目录：env `PENGJ_TEMPLATES` > 当前目录 `templates/` > 可执行文件旁 `templates/`
+/// 定位模板根目录：
+/// env `PENGJ_TEMPLATES` > 当前目录 `templates/` > 可执行文件旁 `templates/` >
+/// 可执行文件上两级 `templates/` > 平台数据目录下的 `pengj-templates/templates/`
 ///
-/// 当前目录优先：开发时在仓库根运行即用最新模板；可执行文件旁用于安装打包后的随附模板。
+/// 当前目录优先：开发时在仓库根运行即用最新模板；可执行文件旁用于便携打包；
+/// 上两级用于 `<安装目录>/bin/<可执行文件>` + `<安装目录>/templates/` 的安装布局；
+/// 平台数据目录用于「可执行文件在 PATH、模板在数据目录」的标准安装布局。
 pub fn default_templates_dir() -> Result<PathBuf> {
     if let Ok(p) = env::var("PENGJ_TEMPLATES") {
         let dir = PathBuf::from(p);
@@ -279,11 +283,47 @@ pub fn default_templates_dir() -> Result<PathBuf> {
             if dir.is_dir() {
                 return Ok(dir);
             }
+            // 安装布局：<安装目录>/bin/<可执行文件> + <安装目录>/templates/
+            if let Some(root) = exe_dir.parent() {
+                let dir = root.join("templates");
+                if dir.is_dir() {
+                    return Ok(dir);
+                }
+            }
+        }
+    }
+    if let Some(dir) = platform_data_templates_dir() {
+        if dir.is_dir() {
+            return Ok(dir);
         }
     }
     Err(CoreError::TemplateRoot(
         "（未找到模板目录，可设置 PENGJ_TEMPLATES）".to_string(),
     ))
+}
+
+/// 平台数据目录下的模板根：Windows `%LOCALAPPDATA%\pengj-templates\templates`，
+/// Unix `$XDG_DATA_HOME`（默认 `~/.local/share`）下的 `pengj-templates/templates`。
+///
+/// 安装脚本把可执行文件放进 PATH、把模板放进数据目录时，靠这条找到模板。
+#[cfg(windows)]
+fn platform_data_templates_dir() -> Option<PathBuf> {
+    let base = env::var_os("LOCALAPPDATA")?;
+    Some(
+        PathBuf::from(base)
+            .join("pengj-templates")
+            .join("templates"),
+    )
+}
+
+#[cfg(not(windows))]
+fn platform_data_templates_dir() -> Option<PathBuf> {
+    let base = env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .or_else(|| {
+            env::var_os("HOME").map(|home| PathBuf::from(home).join(".local").join("share"))
+        })?;
+    Some(base.join("pengj-templates").join("templates"))
 }
 
 /// 需要按层累加拼接而非后层覆盖的文件（如 `.gitignore`、`.gitattributes`）。
