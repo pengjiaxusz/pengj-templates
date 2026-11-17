@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.68.0...v0.69.0) (2026-11-17)
+
+
+### Features
+
+* **core:** 新增 repo 初始化能力并接入 doctor ([c1b0e3b](https://github.com/pengjiaxusz/pengj-templates/commit/c1b0e3bcb35d94cf5de9d94ae727e00c3eed5d41))
+
 ## [0.68.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.67.0...v0.68.0) (2026-11-17)
 
 
