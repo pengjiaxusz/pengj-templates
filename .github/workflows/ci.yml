@@ -78,4 +78,4 @@ jobs:
       # 提交门禁（crates/gate）已是 workspace member，随 --workspace 一起测。
       # 它的语料来自真实 commitlint 的裁决，测试保证门禁不会比它替换掉的工具更松。
       - name: 测试
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
