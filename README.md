@@ -171,7 +171,7 @@ just check            # full Rust compile check
 just ci               # format check + compile + clippy + tests
 ```
 
-> On Linux the repository's `.cargo/config.toml` pins the `linux-gnu` linker to `lld`, which the stock runner image does not ship — install it first (`apt install lld`), otherwise the build stops with `linker 'lld' not found`.
+> On Linux the repository's `.cargo/config.toml` routes the `linux-gnu` link through `cc -fuse-ld=lld`, so `lld` has to be installed (`apt install lld`); otherwise the build stops with `linker 'lld' not found`. Going through the compiler driver is deliberate: bare `lld` carries no default library search paths and fails to find `-lgcc_s` / `-lc`.
 
 ### What this repository is made of
 

@@ -169,7 +169,7 @@ just check            # Rust 全部编译检查
 just ci               # 格式化检查 + 编译 + clippy + 测试
 ```
 
-> Linux 上仓库的 `.cargo/config.toml` 把 `linux-gnu` 目标的链接器写死为 `lld`，而 runner 镜像默认不带它——先装上（`apt install lld`），否则编译会以 `linker 'lld' not found` 中止。
+> Linux 上仓库的 `.cargo/config.toml` 把 `linux-gnu` 的链接走 `cc -fuse-ld=lld`，所以需要先装 `lld`（`apt install lld`），否则编译会以 `linker 'lld' not found` 中止。刻意走编译器驱动是必要的：裸 `lld` 不带默认库搜索路径，链接时会找不到 `-lgcc_s` / `-lc`。
 
 ### 本仓库的环境构成
 
