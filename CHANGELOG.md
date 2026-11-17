@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.62.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.61.0-beta.1...v0.62.0) (2026-11-17)
+
+
+### Features
+
+* **ci:** 补齐 CLI 一键安装脚本与 bundle 打包 ([e938046](https://github.com/pengjiaxusz/pengj-templates/commit/e93804613d36cfa096cf04b5a8afa2a2bd9d17d8))
+* **core:** 扩展模板根定位链支持标准安装布局 ([4f80da8](https://github.com/pengjiaxusz/pengj-templates/commit/4f80da888d7527e796890192acdb28780aaf1260))
+
+
+### Bug Fixes
+
+* **ci:** Linux runner 安装 lld 修复链接器缺失 ([4759d3c](https://github.com/pengjiaxusz/pengj-templates/commit/4759d3c759d09e146fdc9767d4c1e866af21fc66))
+* **main:** 修复版本锚点回退并切到稳定版发版 ([e56b3f3](https://github.com/pengjiaxusz/pengj-templates/commit/e56b3f38fc94cdad707afced73833d844fac9442))
+
 ## [0.61.0-beta.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.60.0-beta.1...v0.61.0-beta.1) (2026-11-16)
 
 
