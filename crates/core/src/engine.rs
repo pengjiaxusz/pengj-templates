@@ -2731,9 +2731,15 @@ mod tests {
             skill_name_of(Path::new(".agents/skills/caveman/references/x.md")),
             Some("caveman".to_string())
         );
-        // 反斜杠（Windows 相对路径，strip_prefix 产物）
+        // 反斜杠（Windows 相对路径，strip_prefix 产物）——用平台原生分隔符拼接，
+        // 否则硬编码的 `\` 在 Linux 上会被当成单个路径分量，断言只在 Windows 成立。
         assert_eq!(
-            skill_name_of(Path::new(r".agents\skills\grill-me\SKILL.md")),
+            skill_name_of(
+                &Path::new(".agents")
+                    .join("skills")
+                    .join("grill-me")
+                    .join("SKILL.md")
+            ),
             Some("grill-me".to_string())
         );
         // 非技能路径
