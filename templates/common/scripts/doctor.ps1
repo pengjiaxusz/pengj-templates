@@ -155,15 +155,12 @@ if ($inside) {
     } elseif ($local) {
         Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}core.hooksPath is '$local', not .githooks; the commit gate is not active here{% else %}core.hooksPath 为 '$local'，并非 .githooks；提交门禁未在此生效{% endif %}"
     } elseif ($Fix) {
-        # Activate through the first available path, but judge the outcome by
-        # the resulting git state: an informational line failing to print must
-        # not turn a successful activation into an error.
+        # Activate through the zero-dependency installer shipped by the gate
+        # layer, but judge the outcome by the resulting git state: an
+        # informational line failing to print must not turn a successful
+        # activation into an error.
         if ((Test-Path ".githooks/install.sh") -and (Test-Tool sh)) {
             & sh .githooks/install.sh | Out-Null
-        } elseif (Test-Tool pengj-templates-cli) {
-            & pengj-templates-cli gate hooks install | Out-Null
-        } else {
-            & git config core.hooksPath .githooks | Out-Null
         }
         & git update-index --chmod=+x .githooks/pre-commit .githooks/commit-msg 2>$null | Out-Null
         if ((& git config --local --get core.hooksPath 2>$null) -eq ".githooks") {
@@ -176,6 +173,32 @@ if ($inside) {
     }
 } else {
     Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}not a git work tree; skipping the commit hook check{% else %}当前不是 git 工作树；跳过提交钩子检查{% endif %}"
+}
+{% endif %}
+
+{% if 'agent' in layers %}
+# --- agent client workspace links -----------------------------------------
+
+if (Test-Path ".agents") {
+    if (Test-Tool pengj-templates-cli) {
+        & pengj-templates-cli repo status --dir . 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Report-Ok "{% if options["skill_lang"] | default("zh") == "en" %}workspace links ready (agent clients){% else %}工作区链接已就绪（agent 客户端）{% endif %}"
+        } elseif ($Fix) {
+            & pengj-templates-cli repo init --dir . 2>$null | Out-Null
+            $initCode = $LASTEXITCODE
+            & pengj-templates-cli repo status --dir . 2>$null | Out-Null
+            if ($initCode -eq 0 -and $LASTEXITCODE -eq 0) {
+                Report-Ok "{% if options["skill_lang"] | default("zh") == "en" %}workspace links created (agent clients){% else %}工作区链接已创建（agent 客户端）{% endif %}"
+            } else {
+                Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}could not create the workspace links; run: pengj-templates-cli repo init{% else %}无法创建工作区链接；请运行：pengj-templates-cli repo init{% endif %}"
+            }
+        } else {
+            Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}workspace links are not ready; run 'just doctor --fix'{% else %}工作区链接未就绪；请运行 'just doctor --fix'{% endif %}"
+        }
+    } else {
+        Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; skipping the workspace link check{% else %}未找到 pengj-templates-cli；跳过工作区链接检查{% endif %}"
+    }
 }
 {% endif %}
 

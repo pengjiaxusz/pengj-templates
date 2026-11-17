@@ -1,0 +1,4 @@
+{% if options["skill_lang"] == "en" %}# Agent client workspace links created by `pengj-templates-cli repo init`
+{% else %}# 由 `pengj-templates-cli repo init` 创建的 agent 客户端工作区链接
+{% endif %}/.trae
+/.claude/skills

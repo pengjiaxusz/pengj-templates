@@ -27,8 +27,9 @@ Template files support minijinja placeholders (`{{ project_name }}`, `{{ project
 
 - **Engine**: Rust (`crates/core`) — layer merge, rendering, diff and update logic; templates are loaded from a runtime directory (`PENGJ_TEMPLATES` > `templates/` in the current directory > `templates/` next to the executable > `templates/` two levels above the executable > platform data directory `pengj-templates/templates/`)
 - **MCP installer**: Rust (`crates/mcp`) — recipe catalog, client adapters and real handshake checks; machine-level (cross-project) configuration
+- **Repository bootstrap**: Rust (`crates/core/src/repo.rs`, CLI entry `repo init/status`) — agent-client workspace links, repo-level Git config and submodule fill; called by `just doctor --fix` and independent of template layers
 - **Commit gate**: Rust (`crates/gate`) — conventional-commit validation, code language guard, staged-file rustfmt; zero third-party dependencies, now an internal library reached only through `pengj-templates-cli gate`
-- **CLI**: clap (`crates/cli`, command `pengj-templates-cli`), the single entry point of the whole repository; the built-in `gate` subcommand forwards gate arguments verbatim
+- **CLI**: clap (`crates/cli`, command `pengj-templates-cli`), the single entry point of the whole repository; built-in `repo` and `gate` subcommands
 
 ## Usage
 
@@ -70,6 +71,8 @@ cargo run -p pengj-templates-cli -- update --dir ./my-app                # sync 
 cargo run -p pengj-templates-cli -- add-layer --dir ./my-app --layers just,bque  # add layers to an existing project
 cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # audit half-wired setups and managed-block drift
 cargo run -p pengj-templates-cli -- check-lang --dir ./my-app           # audit docs follow the language axis (en: no Han; zh: Chinese copy)
+cargo run -p pengj-templates-cli -- repo status --dir ./my-app          # check workspace links, Git config and submodules
+cargo run -p pengj-templates-cli -- repo init --dir ./my-app            # create missing workspace links (idempotent, never overwrites)
 ```
 
 **just / bque assembly**: the root `justfile` is produced by the `just` layer; its framework area lives in the `# PENGJ_TEMPLATE_START/END` managed block (`set shell`, `default`, conditional `import` per layer), while the project-owned area outside the block belongs to the user and `update` only replaces the block. The `bque` / `gate` / `rust` / `rust-workspace` layers produce `just/bque.just`, `just/gate.just`, `just/rust.just` and `just/rust-workspace.just` respectively, and all four depend on `just`; `options["just_recipes"] = "none"` turns off the language recipe imports so that older projects with a custom orchestration only pick up the queueing infrastructure. Selecting the `bque` layer also pulls in the `bque` skill to avoid a half-wired setup; `audit` flags projects that are half-wired or missing the justfile managed block. bque is a Windows global lock; on Unix and in CI the same recipes run straight through. See [`templates/README.md`](templates/README.md).

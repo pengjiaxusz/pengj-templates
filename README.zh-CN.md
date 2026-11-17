@@ -27,8 +27,9 @@
 
 - **引擎**：Rust（`crates/core`）— 分层合并、渲染、diff 与更新逻辑；模板从运行时目录加载（`PENGJ_TEMPLATES` > 当前目录 `templates/` > 可执行文件旁 `templates/` > 可执行文件上两级 `templates/` > 平台数据目录 `pengj-templates/templates/`）
 - **MCP 安装**：Rust（`crates/mcp`）— 配方目录 + 客户端适配 + 真实握手巡检，机器级（跨项目）配置
+- **仓库初始化**：Rust（`crates/core/src/repo.rs`，CLI 入口 `repo init/status`）— 工作区客户端链接、仓库级 Git 配置与子模块补缺，供 `just doctor --fix` 调用，不依赖模板层
 - **提交门禁**：Rust（`crates/gate`）— 约定式提交校验、代码语言守卫、rustfmt 暂存格式化；零第三方依赖，已收编为内部库，唯一入口是 `pengj-templates-cli gate`
-- **CLI**：clap（`crates/cli`，命令 `pengj-templates-cli`），全仓库唯一入口；内置 `gate` 子命令透传门禁参数
+- **CLI**：clap（`crates/cli`，命令 `pengj-templates-cli`），全仓库唯一入口；内置 `repo` 与 `gate` 子命令
 
 ## 使用
 
@@ -68,6 +69,8 @@ cargo run -p pengj-templates-cli -- update --dir ./my-app                # 同�
 cargo run -p pengj-templates-cli -- add-layer --dir ./my-app --layers just,bque  # 存量项目增量加层
 cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # 巡检半接入与托管块漂移
 cargo run -p pengj-templates-cli -- check-lang --dir ./my-app           # 校验文案语言轴（en 零汉字；zh 文案含中文）
+cargo run -p pengj-templates-cli -- repo status --dir ./my-app          # 检查工作区链接、Git 配置与子模块
+cargo run -p pengj-templates-cli -- repo init --dir ./my-app            # 创建缺失的工作区链接（幂等，不覆盖）
 ```
 
 **just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`bque` / `gate` / `rust` / `rust-workspace` 层分别产出 `just/bque.just`、`just/gate.just`、`just/rust.just`、`just/rust-workspace.just`，四层都依赖 `just`；`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾 `bque` 层会自动补齐 `bque` 技能，避免半接入；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。

@@ -171,6 +171,13 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         skills: Option<Vec<String>>,
     },
+    /// 仓库级初始化：工作区链接、仓库级 Git 配置与子模块补缺
+    ///
+    /// 不依赖模板目录；供 `just doctor --fix` 调用，也可单独使用。
+    Repo {
+        #[command(subcommand)]
+        cmd: RepoCommand,
+    },
     /// 安装与配置 MCP 服务器（机器级，跨项目共用）
     Mcp {
         #[command(subcommand)]
@@ -253,8 +260,43 @@ enum McpCommand {
     },
 }
 
+#[derive(Subcommand, Clone)]
+enum RepoCommand {
+    /// 检查工作区链接与仓库级配置（缺失或冲突时退出码非 0）
+    Status {
+        /// 项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 追加或覆盖链接，格式 <link>=<target>（相对项目根，可重复）
+        #[arg(long = "link", value_name = "LINK=TARGET")]
+        links: Vec<String>,
+        /// 以 JSON 格式输出（供脚本/自动化消费）
+        #[arg(long)]
+        json: bool,
+    },
+    /// 创建缺失的工作区链接并补齐仓库级配置（幂等，不覆盖已有内容）
+    Init {
+        /// 项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 追加或覆盖链接，格式 <link>=<target>（相对项目根，可重复）
+        #[arg(long = "link", value_name = "LINK=TARGET")]
+        links: Vec<String>,
+        /// 跳过子模块补缺（默认在存在 .gitmodules 时只初始化未初始化的子模块）
+        #[arg(long)]
+        no_submodules: bool,
+        /// 以 JSON 格式输出（供脚本/自动化消费）
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    // repo 子命令只作用于项目目录，不依赖模板目录，提前分发
+    if let Command::Repo { cmd } = &cli.command {
+        return cmd_repo(cmd.clone());
+    }
     // mcp 子命令作用于机器上的客户端配置，不依赖模板目录，提前分发
     if let Command::Mcp { cmd } = &cli.command {
         return cmd_mcp(cmd.clone());
@@ -393,6 +435,7 @@ fn main() -> anyhow::Result<()> {
             commit_and_push,
             skills.as_deref(),
         ),
+        Command::Repo { .. } => unreachable!("repo 子命令已在加载模板前分发"),
         Command::Mcp { .. } => unreachable!("mcp 子命令已在加载模板前分发"),
         Command::Gate { .. } => unreachable!("gate 子命令已在加载模板前分发"),
     }
@@ -1099,4 +1142,77 @@ fn cmd_mcp_doctor(
         std::process::exit(1);
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// repo：仓库级初始化
+// ---------------------------------------------------------------------------
+
+fn cmd_repo(cmd: RepoCommand) -> anyhow::Result<()> {
+    match cmd {
+        RepoCommand::Status { dir, links, json } => {
+            let root = repo_root(&dir)?;
+            let specs = build_links(&root, &links)?;
+            let report = pengj_core::repo_status(&root, &specs)?;
+            print_repo_report(&report, json);
+            if !report.ok {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        RepoCommand::Init {
+            dir,
+            links,
+            no_submodules,
+            json,
+        } => {
+            let root = repo_root(&dir)?;
+            let specs = build_links(&root, &links)?;
+            let report = pengj_core::repo_init(&root, &specs, !no_submodules)?;
+            print_repo_report(&report, json);
+            if !report.ok {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+    }
+}
+
+fn repo_root(dir: &Path) -> anyhow::Result<PathBuf> {
+    dir.canonicalize()
+        .with_context(|| format!("目录不存在: {}", dir.display()))
+}
+
+fn build_links(root: &Path, raw: &[String]) -> anyhow::Result<Vec<pengj_core::LinkSpec>> {
+    let mut links = pengj_core::default_links(root);
+    for value in raw {
+        let spec =
+            pengj_core::LinkSpec::parse(value).map_err(|error| anyhow::anyhow!("{error}"))?;
+        match links.iter_mut().find(|existing| existing.link == spec.link) {
+            Some(existing) => *existing = spec,
+            None => links.push(spec),
+        }
+    }
+    Ok(links)
+}
+
+fn print_repo_report(report: &pengj_core::RepoReport, json: bool) {
+    if json {
+        match serde_json::to_string_pretty(report) {
+            Ok(text) => println!("{text}"),
+            Err(error) => eprintln!("[repo] JSON 序列化失败: {error}"),
+        }
+        return;
+    }
+    for item in &report.items {
+        let label = match item.status {
+            pengj_core::RepoStatus::Ok => "ok",
+            pengj_core::RepoStatus::Missing => "missing",
+            pengj_core::RepoStatus::Created => "created",
+            pengj_core::RepoStatus::Conflict => "conflict",
+            pengj_core::RepoStatus::Skipped => "skipped",
+        };
+        println!("[repo] {label:<8} {}: {}", item.name, item.detail);
+    }
+    println!("[repo] {}", if report.ok { "就绪" } else { "存在问题" });
 }

@@ -141,15 +141,12 @@ if have git && git rev-parse --show-toplevel >/dev/null 2>&1; then
     elif [ -n "$local_hooks" ]; then
         warn "{% if options["skill_lang"] | default("zh") == "en" %}core.hooksPath is '$local_hooks', not .githooks; the commit gate is not active here{% else %}core.hooksPath 为 '$local_hooks'，并非 .githooks；提交门禁未在此生效{% endif %}"
     elif [ "$fix" = "1" ]; then
-        # Activate through the first available path, but judge the outcome by
-        # the resulting git state: an informational line failing to print must
-        # not turn a successful activation into an error.
+        # Activate through the zero-dependency installer shipped by the gate
+        # layer, but judge the outcome by the resulting git state: an
+        # informational line failing to print must not turn a successful
+        # activation into an error.
         if [ -f .githooks/install.sh ]; then
             sh .githooks/install.sh >/dev/null || true
-        elif have pengj-templates-cli; then
-            pengj-templates-cli gate hooks install >/dev/null 2>&1 || true
-        else
-            git config core.hooksPath .githooks || true
         fi
         # Record the mode bit when the hooks are already tracked, so clones on
         # Unix do not silently skip them.
@@ -177,6 +174,27 @@ if have git && git rev-parse --show-toplevel >/dev/null 2>&1; then
     fi
 else
     warn "{% if options["skill_lang"] | default("zh") == "en" %}not a git work tree; skipping the commit hook check{% else %}当前不是 git 工作树；跳过提交钩子检查{% endif %}"
+fi
+{% endif %}
+
+{% if 'agent' in layers %}
+# --- agent client workspace links -----------------------------------------
+
+if [ -d .agents ]; then
+    if have pengj-templates-cli; then
+        if pengj-templates-cli repo status --dir . >/dev/null 2>&1; then
+            ok "{% if options["skill_lang"] | default("zh") == "en" %}workspace links ready (agent clients){% else %}工作区链接已就绪（agent 客户端）{% endif %}"
+        elif [ "$fix" = "1" ] && pengj-templates-cli repo init --dir . >/dev/null 2>&1 \
+            && pengj-templates-cli repo status --dir . >/dev/null 2>&1; then
+            ok "{% if options["skill_lang"] | default("zh") == "en" %}workspace links created (agent clients){% else %}工作区链接已创建（agent 客户端）{% endif %}"
+        elif [ "$fix" = "1" ]; then
+            fail "{% if options["skill_lang"] | default("zh") == "en" %}could not create the workspace links; run: pengj-templates-cli repo init{% else %}无法创建工作区链接；请运行：pengj-templates-cli repo init{% endif %}"
+        else
+            warn "{% if options["skill_lang"] | default("zh") == "en" %}workspace links are not ready; run 'just doctor --fix'{% else %}工作区链接未就绪；请运行 'just doctor --fix'{% endif %}"
+        fi
+    else
+        warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; skipping the workspace link check{% else %}未找到 pengj-templates-cli；跳过工作区链接检查{% endif %}"
+    fi
 fi
 {% endif %}
 

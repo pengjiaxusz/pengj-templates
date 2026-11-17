@@ -34,6 +34,9 @@ pub enum CoreError {
 
     #[error("JSON 解析错误: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("git 命令失败: {0}")]
+    Git(String),
 }
 
 pub type Result<T> = std::result::Result<T, CoreError>;
