@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.74.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.73.0...v0.74.0) (2026-11-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* 存量项目不再被识别。把 .pengj-templates.json、.gate.toml、 scripts/、just/ 搬进 .pengj-templates/（分别改名为 manifest.json、gate.toml、 scripts/、just/）后重跑 update 即可，报错信息里带同样的清单。
+
+### Features
+
+* 模板产物收敛到 .pengj-templates/ ([3c04121](https://github.com/pengjiaxusz/pengj-templates/commit/3c041214ce7c5ef61f9ed72e3b880262a261eafb))
+
 ## [0.73.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.72.0...v0.73.0) (2026-11-17)
 
 
