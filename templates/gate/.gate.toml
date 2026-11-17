@@ -19,5 +19,5 @@ commit.subject_min_han = 2
 commit.max_header = 100
 # {% if options["skill_lang"] | default("zh") == "en" %}The allowed conventional-commit types.{% else %}允许的约定式提交类型。{% endif %}
 commit.types = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"]
-# {% if options["skill_lang"] | default("zh") == "en" %}The allowed scopes. An empty list accepts any scope; fill it in to pin the project to its own crate names.{% else %}允许的 scope 白名单。空列表表示接受任意 scope；可以填入本项目的 crate 名把它收紧。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}The allowed scopes. Leave this key out or keep the list empty to reject every scope; use ["*"] to allow any scope; list crate names to pin a whitelist.{% else %}允许的 scope 白名单。省略本行或留空列表表示拒绝任何 scope；填入 ["*"] 放行所有；填入 crate 名则只放行列出的 scope。{% endif %}
 commit.scopes = []

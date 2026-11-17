@@ -56,7 +56,20 @@ fn render_gate_project(tag: &str, commit_zh: bool) -> PathBuf {
     pengj_core::generate(&templates, "fallback-case", &layers, options, &parent)
         .expect("generate the gate layer");
 
-    parent.join("fallback-case")
+    let project = parent.join("fallback-case");
+
+    // 这些样例只用 `(cli)` 当占位 scope，聚焦的是语言与格式规则。模板默认
+    // `scopes = []` 会拒绝一切 scope，这里显式放行，免得 scope 规则变成噪声。
+    let config_path = project.join(".gate.toml");
+    let config = std::fs::read_to_string(&config_path).expect("read .gate.toml");
+    let relaxed = config.replace("commit.scopes = []", "commit.scopes = [\"*\"]");
+    assert_ne!(
+        config, relaxed,
+        "the rendered config must carry commit.scopes"
+    );
+    std::fs::write(&config_path, relaxed).expect("write .gate.toml");
+
+    project
 }
 
 /// 跑兜底脚本：返回它是否放行这条提交。

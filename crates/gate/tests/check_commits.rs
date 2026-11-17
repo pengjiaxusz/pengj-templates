@@ -23,13 +23,16 @@ impl Repo {
         repo.git(&["init", "-q", "-b", "main"]);
         repo.git(&["config", "user.name", "gate test"]);
         repo.git(&["config", "user.email", "gate@example.com"]);
-        // The rules the generated project ships with: Chinese subjects.
-        std::fs::write(
-            repo.dir.join(".gate.toml"),
-            "[lang]\nmode = \"chinese\"\n\n[commit]\nsubject_lang = \"zh\"\nsubject_min_han = 2\n",
-        )
-        .expect("write .gate.toml");
+        // The rules the generated project ships with: Chinese subjects. The
+        // wildcard keeps these language-focused tests free of scope noise.
+        repo.write_config(
+            "[lang]\nmode = \"chinese\"\n\n[commit]\nsubject_lang = \"zh\"\nsubject_min_han = 2\nscopes = [\"*\"]\n",
+        );
         repo
+    }
+
+    fn write_config(&self, body: &str) {
+        std::fs::write(self.dir.join(".gate.toml"), body).expect("write .gate.toml");
     }
 
     fn git(&self, args: &[&str]) -> String {
@@ -83,6 +86,29 @@ fn accepts_a_range_of_valid_messages() {
         report.rejected.is_empty(),
         "unexpected rejections: {:?}",
         report.rejected
+    );
+}
+
+#[test]
+fn rejects_a_scope_when_no_whitelist_is_configured() {
+    let repo = Repo::new("no-scope");
+    // 空列表与省略 key 同为 fail-closed：任何 scope 都不接受。
+    repo.write_config(
+        "[lang]\nmode = \"chinese\"\n\n[commit]\nsubject_lang = \"zh\"\nsubject_min_han = 2\nscopes = []\n",
+    );
+    let base = repo.commit("chore: 初始化项目骨架");
+    repo.commit("feat(core): 新增解析能力");
+
+    let report = repo.check(Some(&base)).expect("the range is reachable");
+    assert_eq!(report.checked, 1);
+    assert_eq!(report.rejected.len(), 1, "the scope must be rejected");
+    assert!(
+        report.rejected[0]
+            .issues
+            .iter()
+            .any(|issue| issue.contains("scope-enum")),
+        "the scope rule must be reported: {:?}",
+        report.rejected[0].issues
     );
 }
 

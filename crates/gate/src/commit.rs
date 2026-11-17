@@ -42,10 +42,64 @@ const MAX_UNQUOTED_HAN_IN_ENGLISH: usize = 4;
 /// every part is whitelisted.
 const SCOPE_DELIMITERS: [char; 3] = ['/', '\\', ','];
 
+/// `commit.scopes` 的三种策略。
+///
+/// 未配置与空列表都归到 `None`：这是刻意收紧的默认值——没有显式声明 scope
+/// 白名单的项目不接受任何 scope，"忘了配"不能再等于"全放行"。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScopePolicy {
+    /// 未配置或 `[]`：拒绝任何带 scope 的 header。
+    None,
+    /// `["*"]`：放行任意 scope。
+    Any,
+    /// 具体列表：只放行列出的 scope，或每个分段都在列表里的 scope。
+    Whitelist(Vec<String>),
+}
+
+impl ScopePolicy {
+    /// `*` 是"放行所有"的哨兵；空列表与未配置同为"拒绝所有"。
+    pub fn from_config(config: &Config) -> ScopePolicy {
+        match config.list("commit.scopes") {
+            None => ScopePolicy::None,
+            Some([]) => ScopePolicy::None,
+            Some(items) if items.iter().any(|item| item == "*") => ScopePolicy::Any,
+            Some(items) => ScopePolicy::Whitelist(items.to_vec()),
+        }
+    }
+
+    /// `scope-enum` 的裁决：整串命中，或每个分段都命中即通过。
+    pub fn allows(&self, scope: &str) -> bool {
+        match self {
+            ScopePolicy::Any => true,
+            ScopePolicy::None => false,
+            ScopePolicy::Whitelist(allowed) => {
+                allowed.iter().any(|item| item == scope)
+                    || scope
+                        .split(SCOPE_DELIMITERS)
+                        .map(str::trim)
+                        .all(|part| allowed.iter().any(|item| item == part))
+            }
+        }
+    }
+
+    /// 拒绝时的提示前缀。`Any` 永不拒绝，这里只为穷尽匹配。
+    pub fn rejection_hint(&self) -> String {
+        match self {
+            ScopePolicy::Any => String::new(),
+            ScopePolicy::None => {
+                "no scope is allowed (omit `(...)` or set commit.scopes = [\"*\"] in .gate.toml)"
+                    .to_string()
+            }
+            ScopePolicy::Whitelist(items) => {
+                format!("the scope must be one of [{}]", items.join(", "))
+            }
+        }
+    }
+}
+
 pub struct Rules {
     pub types: Vec<String>,
-    /// Empty means "any scope is accepted".
-    pub scopes: Vec<String>,
+    pub scopes: ScopePolicy,
     pub subject_lang: SubjectLang,
     pub min_han: usize,
     pub max_header: usize,
@@ -63,10 +117,7 @@ impl Rules {
                     .map(|item| item.to_string())
                     .collect()
             });
-        let scopes = config
-            .list("commit.scopes")
-            .map(|items| items.to_vec())
-            .unwrap_or_default();
+        let scopes = ScopePolicy::from_config(config);
         let subject_lang = config
             .string("commit.subject_lang")
             .and_then(SubjectLang::parse)
@@ -385,21 +436,6 @@ fn is_numeric_identifier(text: &str, allow_leading_zero: bool) -> bool {
     true
 }
 
-/// Upstream's `scope-enum`: a scope is valid when every delimiter-separated
-/// part is whitelisted, or when the whole scope is.
-fn scope_is_allowed(scope: &str, allowed: &[String]) -> bool {
-    if allowed.is_empty() {
-        return true;
-    }
-    if allowed.iter().any(|item| item == scope) {
-        return true;
-    }
-    scope
-        .split(SCOPE_DELIMITERS)
-        .map(|part| part.trim())
-        .all(|part| allowed.iter().any(|item| item == part))
-}
-
 /// The `type-case` rule: lower-case, ignoring quoted parts.
 fn type_is_lower_case(kind: &str) -> bool {
     let stripped = strip_quoted(kind);
@@ -488,12 +524,13 @@ pub fn validate(raw: &str, rules: &Rules) -> Vec<String> {
         }
     }
 
-    // `scope-enum`: an absent scope is always fine.
+    // `scope-enum`: an absent scope is always fine; a present one is judged
+    // by the configured policy (none / any / whitelist).
     if let Some(scope) = parsed.scope.as_deref() {
-        if !scope_is_allowed(scope, &rules.scopes) {
+        if !rules.scopes.allows(scope) {
             issues.push(format!(
-                "the scope must be one of [{}], found `{scope}` (scope-enum)",
-                rules.scopes.join(", ")
+                "{}, found `{scope}` (scope-enum)",
+                rules.scopes.rejection_hint()
             ));
         }
     }
@@ -710,7 +747,7 @@ mod tests {
                 .iter()
                 .map(|item| item.to_string())
                 .collect(),
-            scopes: vec!["core".into(), "cli".into()],
+            scopes: ScopePolicy::Whitelist(vec!["core".into(), "cli".into()]),
             subject_lang: SubjectLang::Zh,
             min_han: 2,
             max_header: 100,
@@ -847,5 +884,48 @@ mod tests {
     #[test]
     fn a_breaking_change_marker_is_accepted() {
         assert!(validate("feat(cli)!: 新增参数解析支持", &rules_zh()).is_empty());
+    }
+
+    #[test]
+    fn scope_policy_from_config_has_three_states() {
+        let absent = Rules::from_config(&crate::config::parse("").unwrap());
+        assert_eq!(absent.scopes, ScopePolicy::None);
+
+        let empty = Rules::from_config(&crate::config::parse("[commit]\nscopes = []").unwrap());
+        assert_eq!(empty.scopes, ScopePolicy::None);
+
+        let any = Rules::from_config(&crate::config::parse("[commit]\nscopes = [\"*\"]").unwrap());
+        assert_eq!(any.scopes, ScopePolicy::Any);
+
+        let list = Rules::from_config(
+            &crate::config::parse("[commit]\nscopes = [\"core\", \"cli\"]").unwrap(),
+        );
+        assert_eq!(
+            list.scopes,
+            ScopePolicy::Whitelist(vec!["core".into(), "cli".into()])
+        );
+    }
+
+    #[test]
+    fn no_scope_policy_rejects_every_scope_but_allows_omitting_it() {
+        let rules = Rules {
+            scopes: ScopePolicy::None,
+            ..rules_zh()
+        };
+        assert!(validate("feat(core): 新增参数解析支持", &rules)
+            .iter()
+            .any(|issue| issue.contains("scope-enum")));
+        // 不带 scope 的 header 始终合法。
+        assert!(validate("feat: 新增参数解析支持", &rules).is_empty());
+    }
+
+    #[test]
+    fn wildcard_policy_accepts_any_scope() {
+        let rules = Rules {
+            scopes: ScopePolicy::Any,
+            ..rules_zh()
+        };
+        assert!(validate("feat(whatever): 新增参数解析支持", &rules).is_empty());
+        assert!(validate("feat(core/nope): 新增参数解析支持", &rules).is_empty());
     }
 }

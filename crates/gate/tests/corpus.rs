@@ -84,19 +84,21 @@ fn rules() -> commit::Rules {
         .iter()
         .map(|item| item.to_string())
         .collect(),
-        scopes: [
-            "core",
-            "cli",
-            "agent",
-            "app",
-            "mcp",
-            "ci",
-            "templates",
-            "main",
-        ]
-        .iter()
-        .map(|item| item.to_string())
-        .collect(),
+        scopes: commit::ScopePolicy::Whitelist(
+            [
+                "core",
+                "cli",
+                "agent",
+                "app",
+                "mcp",
+                "ci",
+                "templates",
+                "main",
+            ]
+            .iter()
+            .map(|item| item.to_string())
+            .collect(),
+        ),
         subject_lang: config::SubjectLang::Zh,
         min_han: 2,
         max_header: 100,
