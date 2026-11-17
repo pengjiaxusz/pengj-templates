@@ -861,6 +861,64 @@ fn merge_managed_block(project_dir: &Path, rel: &Path, rendered: &[u8]) -> Manag
     merge_managed_block_texts(&disk_text, &rendered_text, placement)
 }
 
+/// `update_ignore` 文件的受管说明块刷新结果
+enum IgnoredDocRefresh {
+    /// 模板侧没有受管块（或磁盘非文本）：整文件彻底冻结，保持老行为
+    Frozen,
+    /// 说明块已与模板一致，无需写盘
+    Unchanged,
+    /// 说明块被原位替换，块外的配置值与用户注释逐字节保留
+    Replaced(Vec<u8>),
+    /// 磁盘文件本无受管块（旧版模板产物 / 用户自建）：说明块置顶插入
+    Injected(Vec<u8>),
+}
+
+/// 刷新 `update_ignore` 文件（配置值归用户）里的受管说明块。
+///
+/// 只动 `PENGJ_TEMPLATE_START` / `PENGJ_TEMPLATE_END` 之间的内容：
+/// - 模板渲染结果不含受管块 -> `Frozen`，一个字节都不碰
+/// - 磁盘已有同风格受管块 -> 原位替换该区间（`Replaced`）
+/// - 磁盘无受管块 -> 置顶插入，交给调用方提示人工复核（`Injected`）
+///
+/// 置顶而非追加：配置文件的说明块属于文件头，追加到 TOML 末尾虽然语法无害，
+/// 但把「怎么配」贴在文件屁股上等于没写。
+fn refresh_ignored_doc_block(path: &Path, rendered: &[u8]) -> Result<IgnoredDocRefresh> {
+    let rendered_text = String::from_utf8_lossy(rendered);
+    let Some(incoming) = crate::block::extract_managed_block(&rendered_text) else {
+        return Ok(IgnoredDocRefresh::Frozen);
+    };
+    let Ok(disk_bytes) = std::fs::read(path) else {
+        return Ok(IgnoredDocRefresh::Frozen);
+    };
+    // 二进制内容按 lossy 文本回写会直接损坏文件，直接冻结
+    if !is_text(&disk_bytes) {
+        return Ok(IgnoredDocRefresh::Frozen);
+    }
+    let disk_text = String::from_utf8_lossy(&disk_bytes).into_owned();
+
+    match crate::block::extract_managed_block(&disk_text) {
+        Some(existing) if existing.style == incoming.style => {
+            let merged =
+                crate::block::replace_managed_block(&disk_text, &rendered_text).into_bytes();
+            if merged == disk_bytes {
+                return Ok(IgnoredDocRefresh::Unchanged);
+            }
+            write_file(path, &merged)?;
+            Ok(IgnoredDocRefresh::Replaced(merged))
+        }
+        _ => {
+            let merged = crate::block::replace_managed_block_with_placement(
+                &disk_text,
+                &rendered_text,
+                crate::block::BlockPlacement::Prepend,
+            )
+            .into_bytes();
+            write_file(path, &merged)?;
+            Ok(IgnoredDocRefresh::Injected(merged))
+        }
+    }
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().map(|b| format!("{b:02x}")).collect()
@@ -1321,6 +1379,10 @@ pub struct UpdateReport {
     pub needs_review: Vec<String>,
     /// `options["skills"]` 中被清理掉的失效技能名（模板里已无此技能）
     pub dropped_skills: Vec<String>,
+    /// `update_ignore` 归用户所有、但模板说明块被刷新过的路径（配置值未被改动）
+    pub docs_synced: Vec<String>,
+    /// 从 manifest 记录版本到当前版本区间内的破坏性模板变更（供 CLI 打印）
+    pub migrations: Vec<crate::migrations::MigrationNote>,
     pub unchanged: usize,
 }
 
@@ -1417,6 +1479,10 @@ pub fn update_project_with_options(
     options: &UpdateOptions,
 ) -> Result<UpdateReport> {
     let mut manifest = ProjectManifest::load(project_dir)?;
+    // 破坏性变更的投递通道：manifest 记的是上次生成/更新时的版本，把区间内的
+    // 迁移条目捞出来随报告返回。能自动迁移的变更不进表，所以这里不会重复喊。
+    let migrations =
+        crate::migrations::notes_between(&manifest.version, crate::migrations::current_version());
     // 过滤掉已从模板中移除/废弃的层，保留当前模板仍支持的层。
     // 历史层名先映射到现名：`lefthook` 已被 `gate` 取代，老项目若直接按
     // 名字过滤会被当成「已移除的层」丢掉，提交门禁就此消失。
@@ -1464,25 +1530,49 @@ pub fn update_project_with_options(
     let mut created = Vec::new();
     let mut conflicted = Vec::new();
     let mut needs_review = Vec::new();
+    let mut docs_synced = Vec::new();
     let mut unchanged = 0usize;
     let mut new_files: BTreeMap<String, String> = BTreeMap::new();
 
     for (rel, bytes) in &bytes_map {
         let rel_str = rel.to_string_lossy().into_owned();
-        // 黑名单文件：首次生成时写入，之后归用户所有，模板不再接管。
+        // 黑名单文件：配置**值**首次生成时写入，之后归用户所有，模板不再接管。
+        // 但「说明」不是用户资产——文件里的受管说明块（PENGJ_TEMPLATE_START/END）
+        // 仍随模板演进。否则语义一反转，注释就原地烂成误导：文档冻结在用户手里，
+        // 而作者以为它还在被维护。
         // 判据是磁盘上是否已有该文件——存量项目在 update / add-layer 里新接入
         // 某层时（例如 lefthook 迁移到 gate），该层的 update_ignore 文件还没
         // 落过盘，必须补写，否则新层缺配置直接跑不起来。
         if ignores.contains(rel) && project_dir.join(rel).exists() {
             // 清单里保留原记录；存量项目第一次补写后清单里还没有条目时，按磁盘
             // 实际内容补登，避免归用户所有的文件从托管账本里消失。
-            let sha = match manifest.files.get(&rel_str) {
+            let ledger_sha = || match manifest.files.get(&rel_str) {
                 Some(old_sha) => old_sha.clone(),
                 None => std::fs::read(project_dir.join(rel))
                     .map(|b| sha256_hex(&b))
                     .unwrap_or_else(|_| sha256_hex(bytes)),
             };
-            new_files.insert(rel_str, sha);
+            match refresh_ignored_doc_block(&project_dir.join(rel), bytes)? {
+                IgnoredDocRefresh::Frozen => {
+                    new_files.insert(rel_str.clone(), ledger_sha());
+                }
+                IgnoredDocRefresh::Unchanged => {
+                    unchanged += 1;
+                    new_files.insert(rel_str.clone(), ledger_sha());
+                }
+                IgnoredDocRefresh::Replaced(written) => {
+                    new_files.insert(rel_str.clone(), sha256_hex(&written));
+                    docs_synced.push(rel_str);
+                }
+                IgnoredDocRefresh::Injected(written) => {
+                    new_files.insert(rel_str.clone(), sha256_hex(&written));
+                    docs_synced.push(rel_str.clone());
+                    needs_review.push(format!(
+                        "{rel_str}：模板说明块已置顶插入（配置值未被改动）——文件里原有的\
+                         旧版说明可能与新块重复甚至相反，请人工合并后删掉多余段落"
+                    ));
+                }
+            }
             continue;
         }
         let new_sha = sha256_hex(bytes);
@@ -1778,6 +1868,8 @@ pub fn update_project_with_options(
 
     manifest.layers = ordered.clone();
     manifest.files = new_files;
+    // 版本跟着走：下一次 update 只报「这条变更之后新增」的迁移提示，不重复喊旧账。
+    manifest.version = crate::migrations::current_version().to_string();
     manifest.save(project_dir)?;
 
     Ok(UpdateReport {
@@ -1789,6 +1881,8 @@ pub fn update_project_with_options(
         removed,
         needs_review,
         dropped_skills,
+        docs_synced,
+        migrations,
         unchanged,
     })
 }
@@ -4410,6 +4504,186 @@ description = \"x\"
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// `update_ignore` 冻结的是配置**值**，不是说明。文件里的受管说明块仍随模板刷新，
+    /// 否则模板改了语义，项目里的注释会永久停在旧说法上——scope 三态从「空列表放行」
+    /// 反转为「空列表拒绝」时踩的就是这个坑：注释比代码危险，因为它会被当真。
+    #[test]
+    fn update_refreshes_managed_doc_block_of_update_ignore_file() {
+        let tmp =
+            std::env::temp_dir().join(format!("pengj-ignore-docblock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("gate")).unwrap();
+        std::fs::write(
+            tpl.join("gate").join("layer.toml"),
+            "name = \"Gate\"\ndescription = \"x\"\nupdate_ignore = [\".gate.toml\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("gate").join(".gate.toml"),
+            "# PENGJ_TEMPLATE_START\n# 新版说明：空列表 = 拒绝所有 scope\n# PENGJ_TEMPLATE_END\n\ncommit.scopes = [\"*\"]\n",
+        )
+        .unwrap();
+
+        let proj = tmp.join("app");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(
+            proj.join(".gate.toml"),
+            "# PENGJ_TEMPLATE_START\n# 旧版说明：空列表 = 放行所有 scope\n# PENGJ_TEMPLATE_END\n\ncommit.scopes = [\"vulkan\", \"common\"]\n",
+        )
+        .unwrap();
+        ProjectManifest {
+            tool: "pengj-templates".to_string(),
+            version: "0.0.0".to_string(),
+            project_name: "app".to_string(),
+            layers: vec!["gate".to_string()],
+            options: BTreeMap::new(),
+            generated_at: "2026-01-01T00:00:00Z".to_string(),
+            files: BTreeMap::new(),
+        }
+        .save(&proj)
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let upd = update_project(&templates, &proj).expect("update should succeed");
+        let text = std::fs::read_to_string(proj.join(".gate.toml")).unwrap();
+
+        assert!(text.contains("新版说明"), "说明块必须被刷新: {text}");
+        assert!(!text.contains("旧版说明"), "旧说明必须消失: {text}");
+        assert!(
+            text.contains("commit.scopes = [\"vulkan\", \"common\"]"),
+            "配置值归用户，不得被模板默认值覆盖: {text}"
+        );
+        assert_eq!(upd.docs_synced, vec![".gate.toml".to_string()]);
+        assert!(
+            upd.updated.is_empty(),
+            "说明块刷新不应混进普通文件更新: {:?}",
+            upd.updated
+        );
+        assert!(
+            upd.needs_review.is_empty(),
+            "已有块时是原位替换，不该要求人工复核: {:?}",
+            upd.needs_review
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 存量项目（旧版模板产物）的 `update_ignore` 文件没有受管块：说明块置顶插入，
+    /// 配置值一个字节不动，并计入 needs_review 让用户清掉残留的旧说明。
+    #[test]
+    fn update_injects_doc_block_into_legacy_ignored_file() {
+        let tmp = std::env::temp_dir().join(format!("pengj-ignore-inject-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("gate")).unwrap();
+        std::fs::write(
+            tpl.join("gate").join("layer.toml"),
+            "name = \"Gate\"\ndescription = \"x\"\nupdate_ignore = [\".gate.toml\"]\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tpl.join("gate").join(".gate.toml"),
+            "# PENGJ_TEMPLATE_START\n# 新版说明\n# PENGJ_TEMPLATE_END\n\ncommit.scopes = [\"*\"]\n",
+        )
+        .unwrap();
+
+        let proj = tmp.join("app");
+        std::fs::create_dir_all(&proj).unwrap();
+        let legacy = "# 旧版说明（无受管块）\nmode = \"chinese\"\ncommit.scopes = [\"rdd\"]\n";
+        std::fs::write(proj.join(".gate.toml"), legacy).unwrap();
+        ProjectManifest {
+            tool: "pengj-templates".to_string(),
+            version: "0.0.0".to_string(),
+            project_name: "app".to_string(),
+            layers: vec!["gate".to_string()],
+            options: BTreeMap::new(),
+            generated_at: "2026-01-01T00:00:00Z".to_string(),
+            files: BTreeMap::new(),
+        }
+        .save(&proj)
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let upd = update_project(&templates, &proj).expect("update should succeed");
+        let text = std::fs::read_to_string(proj.join(".gate.toml")).unwrap();
+
+        assert!(
+            text.starts_with("# PENGJ_TEMPLATE_START"),
+            "说明块必须置顶插入而不是追加到文件末尾: {text}"
+        );
+        assert!(text.contains("# 新版说明"));
+        assert!(
+            text.trim_end().ends_with("commit.scopes = [\"rdd\"]"),
+            "legacy 的配置值必须原样保留在文件末尾: {text}"
+        );
+        assert!(
+            upd.needs_review.iter().any(|m| m.contains("人工合并")),
+            "插入后必须提示清理残留旧说明: {:?}",
+            upd.needs_review
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 跨过破坏性版本时，update 报告里必须带上迁移提示，并把 manifest 版本推到当前，
+    /// 保证同一条提示不会每次 update 都重复喊。
+    #[test]
+    fn update_reports_migrations_and_bumps_manifest_version() {
+        let tmp = std::env::temp_dir().join(format!("pengj-migrations-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("common")).unwrap();
+        std::fs::write(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        std::fs::write(tpl.join("common").join("README.md"), "common\n").unwrap();
+
+        let proj = tmp.join("app");
+        std::fs::create_dir_all(&proj).unwrap();
+        ProjectManifest {
+            tool: "pengj-templates".to_string(),
+            version: "0.66.0".to_string(),
+            project_name: "app".to_string(),
+            layers: vec!["common".to_string()],
+            options: BTreeMap::new(),
+            generated_at: "2026-01-01T00:00:00Z".to_string(),
+            files: BTreeMap::new(),
+        }
+        .save(&proj)
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let upd = update_project(&templates, &proj).expect("update should succeed");
+        assert!(
+            upd.migrations.iter().any(|m| m.version == "0.67.0"),
+            "从 0.66.0 更新必须提示 0.67.0 的破坏性变更: {:?}",
+            upd.migrations
+        );
+        assert_eq!(
+            ProjectManifest::load(&proj).unwrap().version,
+            crate::migrations::current_version(),
+            "update 成功后 manifest 版本要跟到当前，否则同一条提示每次都会重播"
+        );
+
+        let again = update_project(&templates, &proj).expect("second update should succeed");
+        assert!(
+            again.migrations.is_empty(),
+            "同一版本区间只报一次: {:?}",
+            again.migrations
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     /// 老项目的 manifest 里写着 `lefthook` 层：模板已用 `gate` 层取代它，
     /// 更新时必须把层名迁移过去，而不是当成「已移除的层」静默丢弃——
     /// 否则老项目的提交门禁就此消失。
@@ -4857,7 +5131,12 @@ description = \"x\"
             "commit_zh=true 应渲染成 zh，实际:\n{zh_config}"
         );
         assert!(zh_config.contains("commit.types = ["));
-        assert!(zh_config.contains("commit.scopes = []"));
+        // 生成即放行任意 scope：空列表在 0.67 之后意味着「拒绝所有」，
+        // 拿它当新项目默认值等于开局就拦住 `feat(x): ...`。
+        assert!(
+            zh_config.contains("commit.scopes = [\"*\"]"),
+            "新项目默认放行任意 scope，实际:\n{zh_config}"
+        );
 
         let en_config = std::fs::read_to_string(en_root.join(".gate.toml")).unwrap();
         assert!(

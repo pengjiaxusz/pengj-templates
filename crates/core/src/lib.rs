@@ -10,6 +10,7 @@ pub mod error;
 pub mod i18n_audit;
 pub mod layer;
 pub mod manifest;
+pub mod migrations;
 pub mod render;
 pub mod repo;
 pub(crate) mod toml_merge;
@@ -30,4 +31,5 @@ pub use i18n_audit::{
 };
 pub use layer::{LayerInfo, SkillInfo};
 pub use manifest::{ProjectManifest, MANIFEST_FILE};
+pub use migrations::{notes_between, MigrationNote, MIGRATIONS};
 pub use repo::{default_links, repo_init, repo_status, LinkSpec, RepoItem, RepoReport, RepoStatus};

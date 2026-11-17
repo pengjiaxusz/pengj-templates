@@ -638,10 +638,27 @@ fn cmd_update(
     for f in &report.removed {
         println!("  [移除] {f}");
     }
+    for f in &report.docs_synced {
+        println!("  [说明刷新] {f}（只换了模板说明块，你的配置值未被改动）");
+    }
     for name in &report.dropped_skills {
         println!("  [清理] 技能 {name}（模板中已无此技能，已从技能清单移除）");
     }
+    print_migrations(&report.migrations);
     Ok(())
+}
+
+/// 打印跨过的破坏性模板变更。这些变更引擎无法自动迁移，只能由人看一眼。
+fn print_migrations(notes: &[pengj_core::MigrationNote]) {
+    if notes.is_empty() {
+        return;
+    }
+    println!();
+    println!("迁移提示 —— 这次更新跨过了破坏性变更，模板不会替你改，请确认：");
+    for note in notes {
+        println!("  * v{}：{}", note.version, note.summary);
+        println!("    → {}", note.action);
+    }
 }
 
 fn cmd_add_layer(
@@ -687,9 +704,13 @@ fn cmd_add_layer(
     for f in &u.needs_review {
         println!("  [待复核] {f}");
     }
+    for f in &u.docs_synced {
+        println!("  [说明刷新] {f}（只换了模板说明块，你的配置值未被改动）");
+    }
     for name in &u.dropped_skills {
         println!("  [清理] 技能 {name}（模板中已无此技能，已从技能清单移除）");
     }
+    print_migrations(&u.migrations);
     Ok(())
 }
 
