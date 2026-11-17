@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.68.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.67.0...v0.68.0) (2026-11-17)
+
+
+### Features
+
+* **core:** 修复 doctor.d 文档语言并新增双向文案门禁 ([3e0ef5a](https://github.com/pengjiaxusz/pengj-templates/commit/3e0ef5ae61a1890c6668887454ab451ec59a105a))
+
 ## [0.67.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.66.0...v0.67.0) (2026-11-17)
 
 
