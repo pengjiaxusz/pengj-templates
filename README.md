@@ -22,14 +22,38 @@
 
 ## 技术栈
 
-- **引擎**：Rust（`crates/core`）— 分层合并、渲染、diff 与更新逻辑；模板从运行时目录加载（`PENGJ_TEMPLATES` > 当前目录 `templates/` > 可执行文件旁 `templates/`）
+- **引擎**：Rust（`crates/core`）— 分层合并、渲染、diff 与更新逻辑；模板从运行时目录加载（`PENGJ_TEMPLATES` > 当前目录 `templates/` > 可执行文件旁 `templates/` > 可执行文件上两级 `templates/` > 平台数据目录 `pengj-templates/templates/`）
 - **MCP 安装**：Rust（`crates/mcp`）— 配方目录 + 客户端适配 + 真实握手巡检，机器级（跨项目）配置
-- **提交门禁**：Rust（`crates/gate`）— 约定式提交校验、代码语言守卫、rustfmt 暂存格式化；零第三方依赖，同时是独立二进制与 CLI 子命令
+- **提交门禁**：Rust（`crates/gate`）— 约定式提交校验、代码语言守卫、rustfmt 暂存格式化；零第三方依赖，已收编为内部库，唯一入口是 `pengj-templates-cli gate`
 - **CLI**：clap（`crates/cli`，命令 `pengj-templates-cli`），全仓库唯一入口；内置 `gate` 子命令透传门禁参数
 
 ## 使用
 
+### 一键安装（推荐）
+
+新机器上一条命令装好 **模板 CLI + 提交门禁**（同一个二进制），不需要单独装 `gate`：
+
+```powershell
+irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex   # Windows
+```
+
+```bash
+curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh   # Linux / macOS
+```
+
+安装脚本从最新 Release 拉取对应「系统-架构」的 bundle（`pengj-templates-cli.exe` + 随附 `templates/` 模板目录），落到平台数据目录（Windows `%LOCALAPPDATA%\pengj-templates`，Unix `${XDG_DATA_HOME:-~/.local/share}/pengj-templates`），并把 `bin/` 加进 `PATH`。装完即可：
+
+```bash
+pengj-templates-cli --version
+pengj-templates-cli gate --help          # 门禁随 CLI 一起来
+pengj-templates-cli create my-app --layers rust
+```
+
+> 已有旧版会被脚本热替换；模板目录与二进制一起升级，不会出现「CLI 新、模板旧」的错配。想临时用别的模板根目录，设 `PENGJ_TEMPLATES` 环境变量即可覆盖。
+
 ### CLI
+
+以下示例用 `cargo run`（开发态）。已安装的用户直接写 `pengj-templates-cli` 即可。
 
 ```bash
 cargo run -p pengj-templates-cli -- list-layers                          # 列出可用层
@@ -96,12 +120,15 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
   - `release-please` 读 conventional commits 自动 bump semver，多人改版本号到 root `Cargo.toml`，并创建 release PR；合并后打 tag、建 GitHub Release。发布后由 `sync-lockfile` job 自动把新版本号写回 `Cargo.lock` 并提交，无需手动同步。
   - 有 `release` 时自动构建发布 CLI。**产物命名统一带「系统-架构」**：`pengj-templates_<版本>_<os>-<arch>_portable.zip`。
     - 覆盖 Windows x64/arm64、Linux x86_64/arm64、macOS arm64/x86_64（arm 用 GitHub 原生 arm64 runner 构建）。
-    - 每个组合一个便携版 zip，内含单个可执行文件 `pengj-templates-cli`。
+    - 每个组合一个便携版 zip，内含 `pengj-templates-cli` 可执行文件与随附的 `templates/` 模板目录。
+    - 同时产出**固定名**资产 `pengj-templates-cli-<os>-<arch>.zip` / `.tar.gz`，一键安装脚本固定指向它，跨版本命中不会失效。
+    - `install.ps1` / `install.sh` 由独立 job 上传到 Release 根目录，`releases/latest/download/install.ps1` 恒定可达。
   - **全自动发布**：`auto-merge` job 在 release-please 创建 Release PR 后用 PAT 自动合并（无需手动），合并即触发上文构建。
   - **beta/preview 分阶段**：release-please 原生支持用 commit footer 指定预发布号并自动递增：
     - 切到某预发布号：正常提交时在其描述加 `Release-As: 0.5.0-beta.1`、`0.5.0-rc.1`、`0.5.0-preview.1` 等；
     - 之后它会在同阶段自动 +1（`beta.1`→`beta.2`），GitHub Release 会自动标为 **Prerelease**；
     - 要回到正式版，再提交 `Release-As: 0.5.0` 即可。
+  - **本项目自身的版本号走稳定 semver**：`Cargo.toml` 与 `release-please-manifest.json` 都不再带 `-beta.N` 后缀（当前 `0.61.0`）。需要预发布时仍可用上面的 `Release-As:` 显式切到预发布号，不影响默认行为。
   - 版本号方案（release-please 规则）：`feat`→minor、`fix`→patch、`BREAKING CHANGE`→major（`0.x` 阶段因 `bump-minor-pre-major=true`，BREAKING 只升 minor 而不跳 major；`feat` 在 `0.x` 也仍升 minor）。
 
 `rust` 层的 `src/main.rs` 在 `update_ignore` 黑名单中：仅首次生成时写入，之后归用户所有，模板更新时跳过（不覆盖、不冲突、不删除上报）。若模板里还有这类「种子文件、后续归用户」的文件，在各 `layer.toml` 的 `update_ignore` 里列出即可。
@@ -110,13 +137,13 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
 
 `.vscode/settings.json` 的模板配置在**项目根已有 `*.code-workspace` 文件时并入工作区文件的 `settings` 节点**（不新建独立 settings 文件）；没有工作区文件时才创建/维护 `.vscode/settings.json`。
 
-gate 层用法：门禁是纯 Rust 二进制，没有任何 Node 依赖。生成项目后先 `git init`，再执行一次 `just gate-hooks`——它把 `core.hooksPath` 指向 `.githooks` 并把可执行位写进 git 索引（这一步必须做：`core.hooksPath` 存在 `.git/config` 里，不会随克隆传播）。
+gate 层用法：门禁是纯 Rust 实现，没有任何 Node 依赖，且已收编进 `pengj-templates-cli`——装一个二进制就同时拿到模板引擎、MCP 安装器和提交门禁。生成项目后先 `git init`，再执行一次 `just gate-hooks`——它把 `core.hooksPath` 指向 `.githooks` 并把可执行位写进 git 索引（这一步必须做：`core.hooksPath` 存在 `.git/config` 里，不会随克隆传播）。
 
-钩子按以下顺序定位门禁二进制：`$PENGJ_GATE`（显式路径）→ PATH 上的 `gate` → PATH 上的 `pengj-templates-cli`（走 `gate` 子命令）→ 项目内 `crates/gate`（自带一份时）。
+钩子直接调用 `pengj-templates-cli gate hook pre-commit` / `pengj-templates-cli gate hook commit-msg <msgfile>`，不再做多级回退探测（原先的 `$PENGJ_GATE` 环境变量、独立 `gate` 二进制、仓库 URL 分支已全部移除）。找不到 `pengj-templates-cli` 时钩子会直接报错并提示一键安装命令，不会静默跳过。
 
 `.gate.toml` 是门禁的唯一配置面，扁平 TOML 子集：`mode`（`english`/`chinese`，代码语言方向）、`commit.subject_lang`（`zh`/`en`，提交主题语言）、`commit.types`（类型白名单）、`commit.scopes`（scope 白名单，空列表接受任意）、`commit.subject_min_han`（中文主题的最少汉字数）、`commit.max_header`（标题行长度上限）、`lang.max_ratio` / `lang.max_ident_ratio`（代码语言守卫的字符串/标识符违规容忍比例）、`project.disabled`（项目自行关闭的检查）。
 
-代码语言守卫在 pre-commit 阶段扫描暂存的 `.rs`：按 `mode` 判定方向（英文编程拒绝非英文，中文编程拒绝非中文），并按文件计算占比——字符串违规不超过 `lang.max_ratio`（默认 1%）、标识符违规不超过 `lang.max_ident_ratio`（默认 0），额度向下取整。中文模式只判定面向人的文案：命令行参数、路径、协议字段名、内嵌源码/着色器代码等机器字面量不算违规（仍计入分母，避免额度被稀释）。真实例外在源码里认证：行尾 `lang-ok: 理由` 只免该行，文件头 `lang-allow: 理由` 免整个文件（i18n 词表、CJK 测试样本）。全量审计跑 `just gate-check`（或 `gate check`），从仓库根递归扫描 `.rs`，跳过 `target`、`node_modules`、`third-party`、`generated` 与 `submodules`，因此 `backend/`、`launcher/` 这类自定义布局也能覆盖；加 `--list` 列出全部违规、`--json` 输出机器可读报告；`--max-ratio` / `--max-ident-ratio` 可临时放宽阈值，`PENGJ_CODE_LANG=english|chinese` 可覆盖判定方向。
+代码语言守卫在 pre-commit 阶段扫描暂存的 `.rs`：按 `mode` 判定方向（英文编程拒绝非英文，中文编程拒绝非中文），并按文件计算占比——字符串违规不超过 `lang.max_ratio`（默认 1%）、标识符违规不超过 `lang.max_ident_ratio`（默认 0），额度向下取整。中文模式只判定面向人的文案：命令行参数、路径、协议字段名、内嵌源码/着色器代码等机器字面量不算违规（仍计入分母，避免额度被稀释）。真实例外在源码里认证：行尾 `lang-ok: 理由` 只免该行，文件头 `lang-allow: 理由` 免整个文件（i18n 词表、CJK 测试样本）。全量审计跑 `just gate-check`（或 `pengj-templates-cli gate check`），从仓库根递归扫描 `.rs`，跳过 `target`、`node_modules`、`third-party`、`generated` 与 `submodules`，因此 `backend/`、`launcher/` 这类自定义布局也能覆盖；加 `--list` 列出全部违规、`--json` 输出机器可读报告；`--max-ratio` / `--max-ident-ratio` 可临时放宽阈值，`PENGJ_CODE_LANG=english|chinese` 可覆盖判定方向。
 
 生成项目时写入 `.pengj-templates.json` manifest（记录层与模板托管文件哈希），`update` 依据它只更新模板托管文件：本地未改动的文件直接覆盖、被改过的报冲突跳过、含受管块的文件做块级合并（TOML 结构化合并 / 文本托管块注入）、模板新增的自动创建。报告中 `needs_review` 列出建议人工复核的合并结果。
 
@@ -127,14 +154,15 @@ crates/
 ├── core/         # 引擎：层发现、依赖排序、合并渲染、生成/更新、manifest
 ├── cli/          # CLI（pengj-templates-cli，内置 gate 子命令）
 ├── mcp/          # MCP 安装与巡检：配方目录、客户端适配、握手校验
-└── gate/         # 提交门禁（pengj-gate）：约定式提交校验、代码语言守卫、rustfmt
+└── gate/         # 提交门禁内部库（pengj-gate，仅由 CLI 调用）
 templates/        # 层模板（common/ gate/ rust/ ...），运行时目录加载
+tools/            # 一键安装脚本（install.ps1 / install.sh），随 Release 分发
 ```
 
 ## 开发
 
 ```bash
-just setup            # 克隆后一键初始化：构建 gate、安装 git 钩子并验证编译
+just setup            # 克隆后一键初始化：构建 CLI、安装 git 钩子并验证编译
 just check            # Rust 全部编译检查
 just ci               # 格式化检查 + 编译 + clippy + 测试
 ```
@@ -148,7 +176,7 @@ just ci               # 格式化检查 + 编译 + clippy + 测试
 | `crates/core` | 模板引擎：层发现、依赖排序、合并渲染、生成/更新、manifest |
 | `crates/cli` | 命令行入口 `pengj-templates-cli`（含 `gate` 子命令） |
 | `crates/mcp` | MCP 安装与巡检 |
-| `crates/gate` | 提交门禁 `pengj-gate`（零第三方依赖） |
+| `crates/gate` | 提交门禁内部库 `pengj-gate`（零第三方依赖，仅由 CLI 调用） |
 | `templates/` | 层模板目录，运行时加载 |
 
-提交门禁由 `crates/gate` 承担（Rust 实现，无 Node 依赖）：`just gate-hooks` 安装 git 钩子，规则见 `.gate.toml`；`just gate` 透传任意门禁子命令（`check` / `commit-msg` / `fmt` / `hooks install` / `selftest`）。
+提交门禁由 `crates/gate` 承担（Rust 实现，无 Node 依赖），以内部库形式收编进 CLI，唯一入口 `pengj-templates-cli gate ...`：`just gate-hooks` 安装 git 钩子，规则见 `.gate.toml`；`just gate` 透传任意门禁子命令（`check` / `commit-msg` / `fmt` / `hooks install` / `selftest`）。

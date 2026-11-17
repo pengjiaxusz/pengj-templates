@@ -12,7 +12,7 @@
 - **引擎**（Rust）：`crates/core` — 层发现、依赖排序、合并渲染、生成/更新、`.pengj-templates.json` manifest
 - **CLI**（Rust/clap）：`crates/cli`，命令 `pengj-templates-cli`
 - **MCP 安装**（Rust）：`crates/mcp` — 配方目录（catalog）、五家客户端适配、stdio 握手巡检；命令面挂在 `crates/cli` 的 `mcp` 子命令。它作用于**机器上的客户端配置**（`~/.workbuddy/mcp.json`、`~/.claude.json` 等），与项目模板无关，因此不依赖 `--templates`
-- **提交门禁**（Rust）：`crates/gate` — 约定式提交校验、代码语言守卫、rustfmt 暂存格式化；零第三方依赖，既是独立二进制 `gate`，也是 CLI 的 `gate` 子命令
+- **提交门禁**（Rust）：`crates/gate` — 约定式提交校验、代码语言守卫、rustfmt 暂存格式化；零第三方依赖，已收编为内部库，唯一对外入口是 `pengj-templates-cli gate ...`
 - **模板**：`templates/<layer>/`，运行时读取（改模板无需重编译，直接 re-run 生效）
 
 ## 提交规范 / Commits
@@ -41,9 +41,10 @@
 - 钩子安装走 `core.hooksPath=.githooks` + `git update-index --chmod=+x`——Linux 克隆会静默跳过没有可执行位的钩子，改钩子文件时必须确认模式位。
 - 钩子文件必须含 marker `gate hook`；`install` 遇到非 gate 写的钩子会拒绝覆盖，并提示 lefthook / husky 与门禁争抢 `core.hooksPath`。
 - 语料来自真实 commitlint 的裁决（`crates/gate/tests/commit_corpus.jsonl`）：门禁不能比它替换掉的工具更松，改规则前先看语料。
-- 门禁二进制同时以 `crates/gate`（库 + `gate` 二进制）与 `crates/cli` 的 `gate` 子命令两种形态分发，两者共用 `crates/gate/src/cli.rs` 的同一个解析器，不允许行为漂移。
+- 门禁只以 `crates/gate` 内部库的形式存在，唯一对外入口是 `pengj-templates-cli gate ...`（参数解析集中在 `crates/gate/src/cli.rs` 的 `run()`）。不再维护独立 `gate` 二进制——装一个 `pengj-templates-cli` 就同时拿到模板引擎、MCP 安装器与提交门禁。
+- 钩子与 `just/gate.just` 统一直接调 `pengj-templates-cli gate ...`，不再做 `$PENGJ_GATE` / 独立 `gate` / 仓库 URL 的多级回退探测；仅本仓库自身（开发态）允许 `cargo run -p pengj-templates-cli -- gate ...` 兜底。
 
-> EN: the commit gate has zero third-party dependencies; rules live in config.rs / commit.rs; hooks need `core.hooksPath=.githooks` plus the executable bit recorded in the index; hook files carry the `gate hook` marker; the corpus pins the gate to commitlint's verdicts; the standalone binary and the CLI subcommand share one parser.
+> EN: the commit gate has zero third-party dependencies; rules live in config.rs / commit.rs; hooks need `core.hooksPath=.githooks` plus the executable bit recorded in the index; hook files carry the `gate hook` marker; the corpus pins the gate to commitlint's verdicts; the gate is an internal library reached only through `pengj-templates-cli gate ...` — one binary covers the template engine, the MCP installer and the commit gate.
 
 ## 模板层规范 / Template layers (templates/)
 
