@@ -113,27 +113,14 @@ else
     exit 1
 fi
 
-# 8. Register the global hook dispatcher.
+# 8. The commit gate is activated per project.
 #
-# `core.hooksPath` is read by git on every invocation, so pointing it at a
-# dispatcher next to the CLI makes every repository on this machine forward
-# to its own tracked .githooks/ — a fresh clone is guarded with no extra
-# step, and repositories that already exist are covered as soon as this runs.
-# A repository without .githooks/ is left alone, so nothing else is affected.
-#
-# PENGJ_SKIP_GLOBAL_HOOKS=1 turns it off — used by CI, where a global git
-# setting on the runner buys nothing.
-if [ "${PENGJ_SKIP_GLOBAL_HOOKS:-0}" = "1" ]; then
-    echo "--> Skipping the global commit gate registration (PENGJ_SKIP_GLOBAL_HOOKS=1)"
-elif "$exe_path" gate hooks install --global; then
-    :
-else
-    echo "[install] warning: could not register the global commit gate" >&2
-    echo "[install]          run it later with: $exe_path gate hooks install --global" >&2
-fi
-
+# Git keeps hook activation in .git/config, which does not travel with a
+# clone. The project's own environment check (scripts/doctor.sh --fix) is the
+# single activation entry point: it works with or without this CLI and only
+# touches repositories that ship .githooks/.
 echo ""
-echo "The commit gate ships inside this binary:"
-echo "  pengj-templates-cli gate hooks install    # install the git hooks for this repository"
-echo "  pengj-templates-cli gate hooks install --global   # every repository on this machine"
-echo "  pengj-templates-cli gate check             # run the code language guard"
+echo "The commit gate ships inside this binary, activated per project:"
+echo "  just doctor --fix                 # inside a generated project"
+echo "  sh scripts/doctor.sh --fix        # without just"
+echo "  pengj-templates-cli gate check    # run the code language guard directly"

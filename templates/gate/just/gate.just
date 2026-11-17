@@ -1,26 +1,14 @@
 # {% if options["skill_lang"] | default("zh") == "en" %}just/gate.just — commit gate recipes (managed by the gate layer; template updates overwrite this file){% else %}just/gate.just — 提交门禁配方（gate 层托管，模板更新整页覆盖）{% endif %}
-# {% if options["skill_lang"] | default("zh") == "en" %}The commit gate ships inside `pengj-templates-cli`, so every recipe below calls `pengj-templates-cli gate ...`. Install the CLI once and the gate is available. The one exception is `gate-hooks-local`, which needs nothing but git: it is the way in for a machine that has no CLI.{% else %}提交门禁内置在 `pengj-templates-cli` 里，下面每条配方都直接调 `pengj-templates-cli gate ...`。装一次 CLI，门禁即随之可用。唯一的例外是 `gate-hooks-local`，它只需要 git，是给没装 CLI 的机器留的门。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}The commit gate ships inside `pengj-templates-cli`, so the check recipes below call `pengj-templates-cli gate ...`. Activate the hooks with `just doctor --fix` (or `sh scripts/doctor.sh --fix` when the CLI is not installed) — the environment check is the single activation entry point. `gate-hooks-local` is the raw zero-dependency script it calls.{% else %}提交门禁内置在 `pengj-templates-cli` 里，下面的检查配方都直接调 `pengj-templates-cli gate ...`。钩子激活走 `just doctor --fix`（未装 CLI 时用 `sh scripts/doctor.sh --fix`）——环境自检是唯一的激活入口；`gate-hooks-local` 是它调用的零依赖裸脚本。{% endif %}
 
 # {% if options["skill_lang"] | default("zh") == "en" %}Run the code language guard over the whole working tree{% else %}对整个工作树跑代码语言守卫{% endif %}
 gate-check:
     @pengj-templates-cli gate check
 
-# {% if options["skill_lang"] | default("zh") == "en" %}Install the commit gate: point core.hooksPath at .githooks and record the executable bit. Machines with the CLI installed already have the global dispatcher enabled (`gate hooks install --global`): git reads the global core.hooksPath on every invocation, so a fresh clone is guarded with no extra step. This recipe is the fallback for when the global dispatcher is not enabled.{% else %}安装提交门禁：把 core.hooksPath 指向 .githooks，并记录可执行位。装了 CLI 的机器默认已开启全局分发（`gate hooks install --global`）：git 每次执行都读全局 core.hooksPath，所以新克隆的仓库无需任何操作即被门禁接管。此配方是未开启全局分发时的兜底。{% endif %}
-gate-hooks:
-    @pengj-templates-cli gate hooks install
-
-# {% if options["skill_lang"] | default("zh") == "en" %}Install the commit gate without the CLI: the same two steps, done by a shell script that needs nothing but git. The gate then runs in fallback mode, so the commit message is still checked while the full rule set stays with the server-side CI.{% else %}不依赖 CLI 安装提交门禁：同样两步，交给一个只需要 git 的 shell 脚本完成。门禁此后以降级模式运行，提交信息照样被检查，完整规则集仍由服务端 CI 把关。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}Raw CLI-free activation: `sh .githooks/install.sh` points core.hooksPath at .githooks and records the executable bit using only git and a POSIX shell. Prefer `just doctor --fix`; this recipe is the fallback for a machine where the doctor cannot run.{% else %}零依赖裸入口：`sh .githooks/install.sh` 只用 git 与 POSIX shell 就把 core.hooksPath 指向 .githooks 并补上可执行位。优先用 `just doctor --fix`；本配方是 doctor 跑不了时的兜底。{% endif %}
 gate-hooks-local:
     @sh .githooks/install.sh
 
 # {% if options["skill_lang"] | default("zh") == "en" %}Run the built-in rule self-test{% else %}运行内置规则自检{% endif %}
 gate-selftest:
     @pengj-templates-cli gate selftest
-
-# {% if options["skill_lang"] | default("zh") == "en" %}Environment check: locate the CLI and print the one-line installer when it is missing{% else %}环境自检：定位 CLI，缺失时给出一键安装命令{% endif %}
-[unix]
-gate-doctor:
-    @if command -v pengj-templates-cli >/dev/null 2>&1; then echo "pengj-templates-cli: $(command -v pengj-templates-cli)"; pengj-templates-cli --version; else echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found. Install:{% else %}找不到 pengj-templates-cli。安装命令：{% endif %} curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh"; exit 2; fi
-[windows]
-gate-doctor:
-    @if (Get-Command pengj-templates-cli -ErrorAction SilentlyContinue) { Write-Host "pengj-templates-cli: $((Get-Command pengj-templates-cli).Source)"; pengj-templates-cli --version } else { Write-Host "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found. Install:{% else %}找不到 pengj-templates-cli。安装命令：{% endif %} irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex"; exit 2 }

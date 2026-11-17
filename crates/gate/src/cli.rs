@@ -19,8 +19,6 @@ USAGE
   pengj-templates-cli gate hook pre-commit              staged rustfmt + language guard
   pengj-templates-cli gate hook commit-msg FILE         commit message validation
   pengj-templates-cli gate hooks install                point core.hooksPath at .githooks
-  pengj-templates-cli gate hooks install --global       dispatch to every repository on this machine
-  pengj-templates-cli gate hooks uninstall --global     remove the global dispatcher
   pengj-templates-cli gate check-commits [--base REF]   validate the commit messages in a range
   pengj-templates-cli gate selftest                     run the built-in rule self-test
 
@@ -330,21 +328,13 @@ pub fn run(args: &[String]) -> Result<u8, String> {
         },
         "hooks" => match rest.first().map(String::as_str) {
             Some("install") => {
-                if rest.iter().any(|arg| *arg == "--global") {
-                    hooks::install_global()?;
-                } else {
-                    hooks::install()?;
+                if let Some(extra) = rest.get(1) {
+                    return Err(format!("unknown hooks argument: {extra}"));
                 }
+                hooks::install()?;
                 Ok(0)
             }
-            Some("uninstall") => {
-                hooks::uninstall_global()?;
-                Ok(0)
-            }
-            _ => Err(
-                "unknown hooks command; expected `hooks install [--global]` or `hooks uninstall --global`"
-                    .to_string(),
-            ),
+            _ => Err("unknown hooks command; expected `hooks install`".to_string()),
         },
         other if other.starts_with('-') => audit_command(args),
         // Bare arguments keep working as file paths, the way the old

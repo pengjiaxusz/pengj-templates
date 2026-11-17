@@ -31,9 +31,6 @@ jobs:
           ref: {% raw %}${{ github.event.pull_request.head.sha || github.sha }}{% endraw %}
 
       - name: {% if options["skill_lang"] | default("zh") == "en" %}Install pengj-templates-cli{% else %}安装 pengj-templates-cli{% endif %}
-        env:
-          # {% if options["skill_lang"] | default("zh") == "en" %}A global git setting on the runner buys nothing.{% else %}在 runner 上设全局 git 配置没有意义。{% endif %}
-          PENGJ_SKIP_GLOBAL_HOOKS: "1"
         run: |
           curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh
           echo "${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin" >> "$GITHUB_PATH"

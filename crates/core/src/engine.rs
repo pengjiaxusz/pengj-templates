@@ -185,6 +185,24 @@ impl Templates {
         }
         Ok(order)
     }
+
+    /// 解析选中的层，并应用层联动：`gate` 是本地钩子门禁，`ci` 是它的服务端兜底。
+    ///
+    /// 只选 `gate` 时自动补上 `ci`，否则「未装 CLI 的机器由服务端 CI 兜底」在
+    /// 只选 gate 的项目里是假的。`ci` 层本身依赖 `gate`，补入不会引入循环。
+    ///
+    /// `audit` 刻意不走这里：它按 manifest 里实际记录的层巡检，避免存量项目在
+    /// 首次 `update` 前被报「缺少 ci 文件」。
+    pub fn resolve_layers_with_linkage(&self, selected: &[String]) -> Result<Vec<String>> {
+        let metas = self.layer_metas()?;
+        let mut selected: Vec<String> = selected.to_vec();
+        let has_gate = selected.iter().any(|id| canonical_layer_id(id) == "gate");
+        let has_ci = selected.iter().any(|id| canonical_layer_id(id) == "ci");
+        if has_gate && !has_ci && metas.contains_key("ci") {
+            selected.push("ci".to_string());
+        }
+        self.resolve_layers(&selected)
+    }
 }
 
 /// 历史层名 -> 当前层名的别名表。
@@ -945,7 +963,7 @@ pub fn generate(
     parent_dir: &Path,
 ) -> Result<GenerateReport> {
     validate_project_name(project_name)?;
-    let ordered = templates.resolve_layers(selected)?;
+    let ordered = templates.resolve_layers_with_linkage(selected)?;
     let target = parent_dir.join(project_name);
 
     if target.exists() {
@@ -1063,7 +1081,7 @@ pub fn adopt_project(
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "project".to_string());
 
-    let ordered = templates.resolve_layers(selected)?;
+    let ordered = templates.resolve_layers_with_linkage(selected)?;
     let mut options = options;
     if ordered.iter().any(|l| l == "agent") {
         let all_skills: Vec<String> = templates
@@ -1408,7 +1426,7 @@ pub fn update_project_with_options(
         .filter(|l| metas.contains_key(l))
         .filter(|l| seen_layers.insert(l.clone()))
         .collect();
-    let ordered = templates.resolve_layers(&valid_layers)?;
+    let ordered = templates.resolve_layers_with_linkage(&valid_layers)?;
     let mut dropped_skills = Vec::new();
     if ordered.iter().any(|l| l == "agent") {
         let available_skills: BTreeSet<String> = templates
@@ -1798,8 +1816,8 @@ pub fn add_layers_to_project(
             merged.push(layer.clone());
         }
     }
-    // 校验未知层与循环依赖，并让依赖层自动进入清单
-    let ordered = templates.resolve_layers(&merged)?;
+    // 校验未知层与循环依赖，并让依赖层与联动层自动进入清单
+    let ordered = templates.resolve_layers_with_linkage(&merged)?;
 
     let mut added_skills = Vec::new();
     if ordered.iter().any(|l| l == "agent") {
@@ -5305,6 +5323,65 @@ body
         opts3.insert("skills".to_string(), serde_json::json!([]));
         assert!(!ensure_queue_skill(&mut opts3, &with_bque, &available));
         assert!(!ensure_queue_skill(&mut opts, &with_bque, &available));
+    }
+
+    #[test]
+    fn gate_layer_implies_ci_layer() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+
+        let linked = templates
+            .resolve_layers_with_linkage(&["gate".to_string()])
+            .unwrap();
+        assert!(
+            linked.iter().any(|l| l == "ci"),
+            "只选 gate 时应联动 ci，实际: {linked:?}"
+        );
+
+        // audit 路径按 manifest 实际记录的层巡检，不注入联动层
+        let plain = templates.resolve_layers(&["gate".to_string()]).unwrap();
+        assert!(
+            !plain.iter().any(|l| l == "ci"),
+            "audit 路径不应注入 ci，实际: {plain:?}"
+        );
+    }
+
+    #[test]
+    fn generate_gate_project_ships_server_side_ci() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+        let tmp = std::env::temp_dir().join(format!("pengj-gate-ci-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let mut options = BTreeMap::new();
+        options.insert("skill_lang".to_string(), serde_json::json!("en"));
+        options.insert("commit_zh".to_string(), serde_json::json!(false));
+
+        let report = generate(&templates, "gate_ci", &["gate".to_string()], options, &tmp).unwrap();
+        assert!(
+            report.layers.iter().any(|l| l == "ci"),
+            "generate 的层清单应包含联动的 ci，实际: {:?}",
+            report.layers
+        );
+
+        let workflow = tmp.join("gate_ci").join(".github/workflows/gate.yml");
+        assert!(workflow.is_file(), "gate 项目应生成服务端门禁 workflow");
+        let text = std::fs::read_to_string(&workflow).unwrap();
+        assert!(text.contains("check-commits"));
+        assert!(!contains_cjk(&text), "英文项目的 workflow 不得含汉字");
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

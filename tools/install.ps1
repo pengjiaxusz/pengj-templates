@@ -182,31 +182,16 @@ if ($oldVersion) {
     Write-Host "[OK] pengj-templates-cli installed: $newVersion" -ForegroundColor Green
 }
 
-# 9. Register the global hook dispatcher.
+# 9. The commit gate is activated per project.
 #
-# `core.hooksPath` is read by git on every invocation, so pointing it at a
-# dispatcher next to the CLI makes every repository on this machine forward
-# to its own tracked .githooks/ — a fresh clone is guarded with no extra
-# step, and repositories that already exist are covered as soon as this runs.
-# A repository without .githooks/ is left alone, so nothing else is affected.
-#
-# PENGJ_SKIP_GLOBAL_HOOKS=1 turns it off — used by CI, where a global git
-# setting on the runner buys nothing.
-if ($env:PENGJ_SKIP_GLOBAL_HOOKS -eq "1") {
-    Write-Host "--> Skipping the global commit gate registration (PENGJ_SKIP_GLOBAL_HOOKS=1)" -ForegroundColor Gray
-} else {
-    try {
-        & $exePath gate hooks install --global 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor Gray }
-    } catch {
-        Write-Host "Warning: could not register the global commit gate: $_" -ForegroundColor Yellow
-        Write-Host "         run it later with: $exePath gate hooks install --global" -ForegroundColor Yellow
-    }
-}
-
+# Git keeps hook activation in .git/config, which does not travel with a
+# clone. The project's own environment check (scripts/doctor.ps1 -Fix) is the
+# single activation entry point: it works with or without this CLI and only
+# touches repositories that ship .githooks/.
 Write-Host ""
-Write-Host "The commit gate ships inside this binary:" -ForegroundColor Cyan
-Write-Host "  pengj-templates-cli gate hooks install    # install the git hooks for this repository" -ForegroundColor Gray
-Write-Host "  pengj-templates-cli gate hooks install --global   # every repository on this machine" -ForegroundColor Gray
-Write-Host "  pengj-templates-cli gate check             # run the code language guard" -ForegroundColor Gray
+Write-Host "The commit gate ships inside this binary, activated per project:" -ForegroundColor Cyan
+Write-Host "  just doctor --fix                    # inside a generated project" -ForegroundColor Gray
+Write-Host "  pwsh -File scripts/doctor.ps1 -Fix   # without just" -ForegroundColor Gray
+Write-Host "  pengj-templates-cli gate check       # run the code language guard directly" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Ready to use in the current session and in new terminal windows." -ForegroundColor Green

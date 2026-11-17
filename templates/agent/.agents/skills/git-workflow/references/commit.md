@@ -26,6 +26,26 @@ git --no-pager diff --stat
 git --no-pager diff --cached --stat
 ```
 
+{% if 'gate' in layers %}
+---
+
+## 2.1 Activate the Commit Gate
+
+The hooks live in `.githooks/`, but git runs them only when `core.hooksPath` points there. Before the first commit in a fresh clone:
+
+```bash
+git config --get core.hooksPath   # expected: .githooks
+```
+
+If it is empty or points elsewhere, run:
+
+```bash
+just doctor --fix        # or: sh scripts/doctor.sh --fix
+```
+
+The doctor checks the toolchain and activates the hooks without installing anything. If `core.hooksPath` belongs to another tool, it reports the conflict and leaves it alone.
+{% endif %}
+
 ---
 
 ## 3. Pre-Commit Completeness Check
@@ -121,6 +141,26 @@ git status
 git --no-pager diff --stat
 git --no-pager diff --cached --stat
 ```
+
+{% if 'gate' in layers %}
+---
+
+## 2.1 激活提交门禁
+
+门禁钩子放在 `.githooks/` 里，但 git 只有在 `core.hooksPath` 指向它时才会执行。新克隆后的首次提交前：
+
+```bash
+git config --get core.hooksPath   # 期望输出：.githooks
+```
+
+为空或指向别处时执行：
+
+```bash
+just doctor --fix        # 或：sh scripts/doctor.sh --fix
+```
+
+doctor 会检查工具链并在不安装任何东西的前提下激活钩子；若 `core.hooksPath` 属于别的工具，只报告冲突、不覆盖。
+{% endif %}
 
 ---
 
