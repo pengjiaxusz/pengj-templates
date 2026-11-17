@@ -44,7 +44,7 @@ irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/inst
 curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh   # Linux / macOS
 ```
 
-The installer pulls the bundle matching your "os-arch" from the latest Release (the `pengj-templates-cli.exe` executable plus the accompanying `templates/` tree), drops it into the platform data directory (Windows `%LOCALAPPDATA%\pengj-templates`, Unix `${XDG_DATA_HOME:-~/.local/share}/pengj-templates`) and puts `bin/` on `PATH`. Once installed:
+The installer pulls the bundle matching your "os-arch" from the latest Release (the `pengj-templates-cli.exe` executable plus the accompanying `templates/` tree), drops it into the platform data directory (Windows `%LOCALAPPDATA%\pengj-templates`, Unix `${XDG_DATA_HOME:-~/.local/share}/pengj-templates`) and puts `bin/` on `PATH`. The installer is a standalone script rather than a rendered template, so its messages follow the **system language**: Chinese on a Chinese UI / locale (`zh-*`), English otherwise. (The generated project is a separate matter — its copy follows `--skill-lang`.) Once installed:
 
 ```bash
 pengj-templates-cli --version

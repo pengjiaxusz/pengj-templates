@@ -44,7 +44,7 @@ irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/inst
 curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh   # Linux / macOS
 ```
 
-安装脚本从最新 Release 拉取对应「系统-架构」的 bundle（`pengj-templates-cli.exe` + 随附 `templates/` 模板目录），落到平台数据目录（Windows `%LOCALAPPDATA%\pengj-templates`，Unix `${XDG_DATA_HOME:-~/.local/share}/pengj-templates`），并把 `bin/` 加进 `PATH`。装完即可：
+安装脚本从最新 Release 拉取对应「系统-架构」的 bundle（`pengj-templates-cli.exe` + 随附 `templates/` 模板目录），落到平台数据目录（Windows `%LOCALAPPDATA%\pengj-templates`，Unix `${XDG_DATA_HOME:-~/.local/share}/pengj-templates`），并把 `bin/` 加进 `PATH`。安装脚本是独立脚本而非渲染模板，所以它的提示按**系统语言**显示：中文系统 / 区域设置（`zh-*`）显示中文，其余显示英文。（生成项目的文案是另一回事，走 `--skill-lang`。）装完即可：
 
 ```bash
 pengj-templates-cli --version

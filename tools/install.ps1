@@ -11,6 +11,19 @@
 
 $ErrorActionPreference = "Stop"
 
+# 0. Language: Chinese UI -> Chinese messages, everything else -> English.
+#    The installer ships standalone (it is not a rendered template), so it
+#    detects the OS UI language at runtime instead of reading `skill_lang`.
+#    `irm ... | iex` runs this in the caller's scope, so keep helpers flat.
+try {
+    $uiName = [System.Globalization.CultureInfo]::CurrentUICulture.Name
+} catch {
+    $uiName = ""
+}
+if (-not $uiName) { $uiName = "$env:LANG" }
+$IsZh = [bool]($uiName -match '^zh(?:[-_]|$)')
+function T([string]$zhText, [string]$enText) { if ($IsZh) { $zhText } else { $enText } }
+
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls
 
 $repo = "pengjiaxusz/pengj-templates"
@@ -21,7 +34,7 @@ $exePath = Join-Path $binDir "pengj-templates-cli.exe"
 
 Write-Host ""
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "        pengj-templates-cli Installer / Updater (Windows)       " -ForegroundColor Cyan
+Write-Host (T "        pengj-templates-cli 安装 / 更新程序 (Windows)       " "        pengj-templates-cli Installer / Updater (Windows)       ") -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -48,7 +61,7 @@ if ($existing.Count -gt 0) {
     } catch {}
 }
 
-Write-Host "--> Target architecture: $arch" -ForegroundColor Cyan
+Write-Host (T "--> 目标架构: $arch" "--> Target architecture: $arch") -ForegroundColor Cyan
 
 if (-not (Test-Path $binDir)) {
     New-Item -ItemType Directory -Force -Path $binDir | Out-Null
@@ -105,10 +118,10 @@ $bundleUrl = "$baseUrl/pengj-templates-cli-windows-$arch.zip"
 $tempZip = Join-Path $env:TEMP "pengj-templates-$([System.Guid]::NewGuid().ToString('N')).zip"
 $tempExtract = Join-Path $env:TEMP "pengj-templates-$([System.Guid]::NewGuid().ToString('N'))"
 
-Write-Host "--> Downloading $bundleUrl" -ForegroundColor Cyan
+Write-Host (T "--> 正在下载 $bundleUrl" "--> Downloading $bundleUrl") -ForegroundColor Cyan
 if (-not (Download-FileWithFallback -Url $bundleUrl -Destination $tempZip)) {
-    Write-Host "Failed to download the release bundle from GitHub Releases." -ForegroundColor Red
-    Write-Host "Check your network connection or download manually from:" -ForegroundColor Yellow
+    Write-Host (T "从 GitHub Releases 下载发布包失败。" "Failed to download the release bundle from GitHub Releases.") -ForegroundColor Red
+    Write-Host (T "请检查网络连接，或手动从这里下载:" "Check your network connection or download manually from:") -ForegroundColor Yellow
     Write-Host "https://github.com/$repo/releases/latest" -ForegroundColor Yellow
     exit 1
 }
@@ -117,7 +130,7 @@ if (-not (Download-FileWithFallback -Url $bundleUrl -Destination $tempZip)) {
 try {
     Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
 } catch {
-    Write-Host "Failed to extract the release bundle: $_" -ForegroundColor Red
+    Write-Host (T "解压发布包失败: $_" "Failed to extract the release bundle: $_") -ForegroundColor Red
     Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
     Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
     exit 1
@@ -139,8 +152,8 @@ Copy-Item -Path (Join-Path $bundleRoot "templates") -Destination $templatesDir -
 
 Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
 
-Write-Host "--> Installed CLI: $exePath" -ForegroundColor Cyan
-Write-Host "--> Installed templates: $templatesDir" -ForegroundColor Cyan
+Write-Host (T "--> 已安装 CLI: $exePath" "--> Installed CLI: $exePath") -ForegroundColor Cyan
+Write-Host (T "--> 已安装模板: $templatesDir" "--> Installed templates: $templatesDir") -ForegroundColor Cyan
 
 # 5. Also refresh any pengj-templates-cli already on PATH, so an old install
 #    never shadows the new one.
@@ -153,9 +166,9 @@ foreach ($target in $existing) {
         }
         Copy-Item -Path $exePath -Destination $target -Force
         Remove-Item $oldBackup -Force -ErrorAction SilentlyContinue
-        Write-Host "--> Refreshed existing install: $target" -ForegroundColor Cyan
+        Write-Host (T "--> 已刷新已有安装: $target" "--> Refreshed existing install: $target") -ForegroundColor Cyan
     } catch {
-        Write-Host "Warning: could not replace $target (file locked): $_" -ForegroundColor Yellow
+        Write-Host (T "警告: 无法替换 $target（文件被占用）: $_" "Warning: could not replace $target (file locked): $_") -ForegroundColor Yellow
     }
 }
 
@@ -163,7 +176,7 @@ foreach ($target in $existing) {
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 $pathList = if ($userPath) { $userPath -split ';' } else { @() }
 if ($pathList -notcontains $binDir) {
-    Write-Host "--> Adding $binDir to User PATH..." -ForegroundColor Cyan
+    Write-Host (T "--> 正在将 $binDir 加入 User PATH..." "--> Adding $binDir to User PATH...") -ForegroundColor Cyan
     $newPath = if ($userPath) { "$userPath;$binDir" } else { $binDir }
     [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
 }
@@ -177,9 +190,9 @@ if (($env:Path -split ';') -notcontains $binDir) {
 Write-Host ""
 $newVersion = (& $exePath --version 2>$null | Select-Object -First 1)
 if ($oldVersion) {
-    Write-Host "[OK] pengj-templates-cli updated: $oldVersion -> $newVersion" -ForegroundColor Green
+    Write-Host (T "[OK] pengj-templates-cli 已更新: $oldVersion -> $newVersion" "[OK] pengj-templates-cli updated: $oldVersion -> $newVersion") -ForegroundColor Green
 } else {
-    Write-Host "[OK] pengj-templates-cli installed: $newVersion" -ForegroundColor Green
+    Write-Host (T "[OK] pengj-templates-cli 已安装: $newVersion" "[OK] pengj-templates-cli installed: $newVersion") -ForegroundColor Green
 }
 
 # 9. The commit gate is activated per project.
@@ -189,9 +202,9 @@ if ($oldVersion) {
 # single activation entry point: it works with or without this CLI and only
 # touches repositories that ship .githooks/.
 Write-Host ""
-Write-Host "The commit gate ships inside this binary, activated per project:" -ForegroundColor Cyan
-Write-Host "  just doctor --fix                    # inside a generated project" -ForegroundColor Gray
-Write-Host "  pwsh -File scripts/doctor.ps1 -Fix   # without just" -ForegroundColor Gray
-Write-Host "  pengj-templates-cli gate check       # run the code language guard directly" -ForegroundColor Gray
+Write-Host (T "提交门禁随此二进制一起发布，按项目分别激活:" "The commit gate ships inside this binary, activated per project:") -ForegroundColor Cyan
+Write-Host (T "  just doctor --fix                    # 在已生成的项目内" "  just doctor --fix                    # inside a generated project") -ForegroundColor Gray
+Write-Host (T "  pwsh -File scripts/doctor.ps1 -Fix   # 没有 just 时" "  pwsh -File scripts/doctor.ps1 -Fix   # without just") -ForegroundColor Gray
+Write-Host (T "  pengj-templates-cli gate check       # 直接运行代码语言守卫" "  pengj-templates-cli gate check       # run the code language guard directly") -ForegroundColor Gray
 Write-Host ""
-Write-Host "Ready to use in the current session and in new terminal windows." -ForegroundColor Green
+Write-Host (T "当前会话及新开的终端窗口均可直接使用。" "Ready to use in the current session and in new terminal windows.") -ForegroundColor Green
