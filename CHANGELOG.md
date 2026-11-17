@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.62.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.0...v0.62.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **main:** 仓库自身 cargo 配置同步改走 cc -fuse-ld=lld ([923a21f](https://github.com/pengjiaxusz/pengj-templates/commit/923a21fd998040f44cbbfa9ced5ed52f6979cd98))
+* **templates:** Linux 链接改走编译器驱动修复 lld 找不到系统库 ([3e70459](https://github.com/pengjiaxusz/pengj-templates/commit/3e70459fd960fe43a34d38508061803a6ce9bbc6))
+
 ## [0.62.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.61.0-beta.1...v0.62.0) (2026-11-17)
 
 
