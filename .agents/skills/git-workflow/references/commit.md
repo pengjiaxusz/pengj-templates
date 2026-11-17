@@ -26,6 +26,8 @@ git --no-pager diff --stat
 git --no-pager diff --cached --stat
 ```
 
+
+
 ---
 
 ## 3. 提交前完整性检查

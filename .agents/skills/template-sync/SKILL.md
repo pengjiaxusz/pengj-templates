@@ -78,7 +78,7 @@ cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <�
 AI 应首先巡检目标项目的工作区，按以下维度完成自动化诊断：
 - **技术栈与适用层判定**：
   - 检查项目根目录与源码：包含 `Cargo.toml` 则命中 Rust 技术栈，推荐 `rust` 或 `rust-workspace` 层；**非 Rust 项目严禁引入 Rust 相关层**。
-  - 检查工具链：项目是否需要本地 Git Hook 物理拦截提交？需要则推荐 `gate` 层——纯 Rust 实现，无 Node 依赖；只要文件、不要本地拦截的轻量项目默认不选 `gate`，作为可选附加项提示。
+  - 检查工具链：项目是否需要本地 Git Hook 物理拦截提交？需要则推荐 `gate` 层——纯 Rust 实现，无 Node 依赖，钩子统一调用 `pengj-templates-cli`（装这一个二进制就同时有模板 CLI、MCP 安装器与门禁）；只要文件、不要本地拦截的轻量项目默认不选 `gate`，作为可选附加项提示。
   - 编辑器配置：推荐引入 `vscode` 层，提供文件折叠嵌套规则（`explorer.fileNesting`），现有 `.vscode` 配置会自动并集合并。
   - `common` 与 `agent` 为所有项目的基础与核心层（必选）。
 - **编程范式检测（`--chinese` 中文编程）**：
@@ -94,7 +94,8 @@ AI 应首先巡检目标项目的工作区，按以下维度完成自动化诊�
 - **技能集精选（`--skills`）**：
   - 核心基线：`commit`（约定式提交）、`template-sync`（模板同步更新）。
   - 架构与协作：`write-docs`（文档编写与更新，规则由项目自己决定）、`git-workflow`（通用 Git 操作、约定式提交与线性分支同步）。
-  - 辅助增强：`caveman`（token 压缩）、`grill-me`（方案质询）、`subrepo-sync`（子模块/子仓库同步）、`write-a-skill`（技能创建）。默认全选或按需勾选。
+  - 辅助增强：`caveman`（token 压缩）、`grill-me` / `grilling`（方案质询）、`subrepo-sync`（子模块/子仓库同步）、`write-a-skill`（技能创建）。
+  - 工程与效率技能集（源自 `mattpocock/skills`）：`ask-matt`、`code-review`、`codebase-design`、`diagnosing-bugs`、`domain-modeling`、`grill-with-docs`、`implement`、`implement-spec`、`improve-codebase-architecture`、`pr`、`prototype`、`research`、`retro`、`setup-matt-pocock-skills`、`tdd`、`to-spec`、`to-tickets`、`triage`、`wayfinder`、`wizard`、`handoff`、`teach`、`to-questionnaire`、`wait-what`、`writing-for-agents`。默认全选或按需勾选。
 
 #### 2. 向用户呈现诊断报告并咨询选择（必须给推荐方案）
 
