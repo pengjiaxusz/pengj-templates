@@ -107,8 +107,11 @@ jobs:
           if [ -f "$R/pengj${EXT}" ]; then
             mv -f "$R/pengj${EXT}" "$R/pengj-templates-cli${EXT}"
           fi
-      # ===== 便携版 zip（仅 CLI）=====
-      # Windows 用 PowerShell；Linux/macOS 用 bash zip
+      # ===== 便携版 bundle：CLI + templates =====
+      # 模板目录是运行时读取的（改模板无需重编译），所以便携包必须连 templates 一起带走；
+      # 少了 templates，CLI 就只剩一个空壳。
+      # 产出两份：带版本号的给人看（Release 页面），稳定命名的给安装脚本用
+      # （`releases/latest/download/<稳定名>` 才能跨版本命中）。
       - name: 打包便携版（Windows）
         if: matrix.os == 'windows'
         shell: pwsh
@@ -116,24 +119,35 @@ jobs:
           $VER = "$env:VER".Trim()
           # bash 与 pwsh 的 GITHUB_WORKSPACE 路径风格不同，必须用 WS 自行拼接
           $R = "$env:GITHUB_WORKSPACE\target\${{ matrix.rust_target }}\release"
-          $PKG = "pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.zip"
-          Compress-Archive -Path "$R\pengj-templates-cli.exe" -DestinationPath "$env:GITHUB_WORKSPACE\$PKG" -Force
-          "PKG=$PKG" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $STAGE = "$env:GITHUB_WORKSPACE\stage-${{ matrix.id }}"
+          Remove-Item $STAGE -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path "$STAGE\pengj-templates" | Out-Null
+          Copy-Item "$R\pengj-templates-cli.exe" "$STAGE\pengj-templates\pengj-templates-cli.exe"
+          Copy-Item "$env:GITHUB_WORKSPACE\templates" "$STAGE\pengj-templates\templates" -Recurse
+          Compress-Archive -Path "$STAGE\pengj-templates" -DestinationPath "$env:GITHUB_WORKSPACE\pengj-templates-cli-${{ matrix.os }}-${{ matrix.arch }}.zip" -Force
+          Compress-Archive -Path "$STAGE\pengj-templates" -DestinationPath "$env:GITHUB_WORKSPACE\pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.zip" -Force
+          Remove-Item $STAGE -Recurse -Force -ErrorAction SilentlyContinue
       - name: 打包便携版（Unix）
         if: matrix.os != 'windows'
         shell: bash
         run: |
           set -e
           R="$REL_DIR"
-          PKG="pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.zip"
-          echo "PKG=$PKG" >> "$GITHUB_ENV"
-          (cd "$R" && zip -q "$GITHUB_WORKSPACE/$PKG" pengj-templates-cli)
+          STAGE="$GITHUB_WORKSPACE/stage-${{ matrix.id }}"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE/pengj-templates"
+          cp "$R/pengj-templates-cli" "$STAGE/pengj-templates/pengj-templates-cli"
+          cp -R "$GITHUB_WORKSPACE/templates" "$STAGE/pengj-templates/templates"
+          tar -czf "$GITHUB_WORKSPACE/pengj-templates-cli-${{ matrix.os }}-${{ matrix.arch }}.tar.gz" -C "$STAGE" pengj-templates
+          tar -czf "$GITHUB_WORKSPACE/pengj-templates_${VER}_${{ matrix.os }}-${{ matrix.arch }}_portable.tar.gz" -C "$STAGE" pengj-templates
+          rm -rf "$STAGE"
       # ===== 上传便携版到 Release =====
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             pengj-templates_${{ env.VER }}_${{ matrix.os }}-${{ matrix.arch }}*
+            pengj-templates-cli-${{ matrix.os }}-${{ matrix.arch }}.*
           tag_name: ${{ needs.release-please.outputs.tag_name }}
       # pre-release（版本带 - 后缀，如 beta/rc）时把 release 标为 GitHub Prerelease，
       # 让 Release 页显示橙色 PRE-RELEASE 徽章。幂等，矩阵各组合重复执行无害。
@@ -146,6 +160,28 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ===== 一键安装脚本 =====
+  # 单独一个 job 上传：`releases/latest/download/install.ps1` 这种固定名才能跨版本命中，
+  # 而矩阵并行上传同名资产会互相冲突。
+  publish-installers:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - name: 上传安装脚本到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            tools/install.ps1
+            tools/install.sh
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
 
   # Release 合并后，把工作区新版本号自动写回 Cargo.lock 并提交
   # （release-please 只会 bump Cargo.toml / package.json，Cargo.lock 需要 cargo 同步）
