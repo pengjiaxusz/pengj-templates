@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.65.3...v0.66.0) (2026-11-17)
+
+
+### Features
+
+* **cli:** 一键安装脚本按系统语言显示中英文 ([faea56b](https://github.com/pengjiaxusz/pengj-templates/commit/faea56bae8a82e07cc96883b033878fad82e945d))
+
 ## [0.65.3](https://github.com/pengjiaxusz/pengj-templates/compare/v0.65.2...v0.65.3) (2026-11-17)
 
 
