@@ -11,7 +11,7 @@
 | 权威架构文档 | 核心内容 / 职责范围 | 关联模块 / 源码路径 | 规范级别 |
 | :--- | :--- | :--- | :--- |
 | [`系统架构总览.md`](./系统架构总览.md) | 分层模板工具三件套（引擎 Rust + CLI clap + 提交门禁 Rust + templates 运行时目录）与整体生命周期（发现→依赖排序→合并渲染→生成/纳管/更新→manifest 驱动同步） | `crates/core/src/lib.rs`, `crates/core/src/layer.rs`, `crates/cli/src/main.rs`, `crates/gate/src/cli.rs`, `templates/*/layer.toml` | 【权威规范】 |
-| [`对外契约与模板定位.md`](./对外契约与模板定位.md) | 统一模板根定位（`PENGJ_TEMPLATES` > cwd `templates/` > 可执行文件旁 `templates/`，运行时读取无需重编译）与对外契约（CLI 命令 `list-layers/create/update/adopt/add-layer/audit/mcp/gate` + `RenderContext {project_name,project_slug,year,layers,options}`） | `crates/core/src/context.rs`, `crates/core/src/engine.rs::default_templates_dir`, `crates/cli/src/main.rs::load_templates` | 【权威规范】 |
+| [`对外契约与模板定位.md`](./对外契约与模板定位.md) | 统一模板根定位（`PENGJ_TEMPLATES` > cwd `templates/` > 可执行文件旁 `templates/`，运行时读取无需重编译）与对外契约（CLI 命令 `list-layers/create/update/adopt/add-layer/audit/check-lang/mcp/gate` + `RenderContext {project_name,project_slug,year,layers,options}`） | `crates/core/src/context.rs`, `crates/core/src/engine.rs::default_templates_dir`, `crates/cli/src/main.rs::load_templates` | 【权威规范】 |
 
 ## 2. 核心子系统与领域模块
 
