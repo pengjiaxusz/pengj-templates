@@ -6,6 +6,7 @@
 ### Features
 
 * **cli:** 一键安装脚本按系统语言显示中英文 ([faea56b](https://github.com/pengjiaxusz/pengj-templates/commit/faea56bae8a82e07cc96883b033878fad82e945d))
+* **templates:** doctor 按语言轴双语文案并移除 legacy 检测 ([9c8c8c4](https://github.com/pengjiaxusz/pengj-templates/commit/9c8c8c4b192449ac5dc4ff92b370345e5dd84897))
 
 ## [0.65.3](https://github.com/pengjiaxusz/pengj-templates/compare/v0.65.2...v0.65.3) (2026-11-17)
 
