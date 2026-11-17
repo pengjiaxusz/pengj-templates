@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.64.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.63.1...v0.64.0) (2026-11-17)
+
+
+### Features
+
+* **gate:** 没装 CLI 时的四道防线兜底 ([de7fe6b](https://github.com/pengjiaxusz/pengj-templates/commit/de7fe6b85bee76774b558dc70fe3b9e94e74020b))
+
 ## [0.63.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.63.0...v0.63.1) (2026-11-17)
 
 
