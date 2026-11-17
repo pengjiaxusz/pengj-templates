@@ -1,5 +1,6 @@
-# scripts/doctor.ps1 - project environment check.
+# scripts/doctor.ps1 - {% if options["skill_lang"] | default("zh") == "en" %}project environment check{% else %}项目环境自检{% endif %}.
 #
+{% if options["skill_lang"] | default("zh") == "en" -%}
 # Checks only the tools the selected template layers actually use, then runs
 # every custom check in scripts/doctor.d/*.ps1 in sorted order.
 #
@@ -11,6 +12,19 @@
 # Custom checks: drop *.ps1 files into scripts/doctor.d/. Each script runs from
 # the project root with DOCTOR_ROOT set to the project root and DOCTOR_FIX=1
 # when --fix is given. Exit 0 = pass, non-zero = failure; output is shown as-is.
+{%- else -%}
+# 只检查所选模板层实际用到的工具，再按文件名顺序运行 scripts/doctor.d/*.ps1
+# 下的所有自定义检查。
+#
+# 用法：
+#   pwsh -NoProfile -File scripts/doctor.ps1          仅输出报告
+#   pwsh -NoProfile -File scripts/doctor.ps1 --fix    同时激活提交钩子
+#   （just 配方在两个平台上都原样转发 `just doctor --fix`）
+#
+# 自定义检查：把 *.ps1 放进 scripts/doctor.d/。每个脚本从项目根目录运行，
+# DOCTOR_ROOT 指向项目根目录，带 --fix 时设置 DOCTOR_FIX=1。
+# 退出码 0 为通过，非 0 为失败；输出按原样显示。
+{%- endif %}
 
 $Fix = $false
 foreach ($arg in $args) {
@@ -18,15 +32,15 @@ foreach ($arg in $args) {
         "--fix" { $Fix = $true }
         "-fix" { $Fix = $true }
         "-h" {
-            Write-Host "usage: pwsh -NoProfile -File scripts/doctor.ps1 [--fix]"
+            Write-Host "{% if options["skill_lang"] | default("zh") == "en" %}usage: pwsh -NoProfile -File scripts/doctor.ps1 [--fix]{% else %}用法：pwsh -NoProfile -File scripts/doctor.ps1 [--fix]{% endif %}"
             exit 0
         }
         "--help" {
-            Write-Host "usage: pwsh -NoProfile -File scripts/doctor.ps1 [--fix]"
+            Write-Host "{% if options["skill_lang"] | default("zh") == "en" %}usage: pwsh -NoProfile -File scripts/doctor.ps1 [--fix]{% else %}用法：pwsh -NoProfile -File scripts/doctor.ps1 [--fix]{% endif %}"
             exit 0
         }
         default {
-            Write-Host "[doctor] unknown argument: $arg"
+            Write-Host "[doctor] {% if options["skill_lang"] | default("zh") == "en" %}unknown argument:{% else %}未知参数：{% endif %} $arg"
             exit 2
         }
     }
@@ -76,14 +90,14 @@ function Test-Tool($name) {
 if (Test-Tool git) {
     Report-Ok "git $((& git --version) -replace '^git version ', '')"
 } else {
-    Report-Fail "git not found"
+    Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}git not found{% else %}未找到 git{% endif %}"
 }
 
 {% if 'just' in layers %}
 if (Test-Tool just) {
     Report-Ok "just $((& just --version) -replace '^just ', '')"
 } else {
-    Report-Fail "just not found; install: https://github.com/casey/just#installation"
+    Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}just not found; install: https://github.com/casey/just#installation{% else %}未找到 just；安装地址：https://github.com/casey/just#installation{% endif %}"
 }
 {% endif %}
 
@@ -91,12 +105,12 @@ if (Test-Tool just) {
 if (Test-Tool cargo) {
     Report-Ok "cargo $((& cargo --version) -replace '^cargo ', '')"
 } else {
-    Report-Fail "cargo not found; install a Rust toolchain"
+    Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}cargo not found; install a Rust toolchain{% else %}未找到 cargo；请安装 Rust 工具链{% endif %}"
 }
 if (Test-Tool rustc) {
     Report-Ok "rustc $((& rustc --version) -replace '^rustc ', '')"
 } else {
-    Report-Fail "rustc not found; install a Rust toolchain"
+    Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}rustc not found; install a Rust toolchain{% else %}未找到 rustc；请安装 Rust 工具链{% endif %}"
 }
 {% endif %}
 
@@ -104,7 +118,7 @@ if (Test-Tool rustc) {
 if (Test-Tool bque) {
     Report-Ok "bque $((& bque --version 2>$null | Select-Object -First 1))"
 } else {
-    Report-Warn "bque not found; install: irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
+    Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}bque not found; install: irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex{% else %}未找到 bque；安装命令：irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex{% endif %}"
 }
 {% endif %}
 
@@ -112,7 +126,7 @@ if (Test-Tool bque) {
 if (Test-Tool pengj-templates-cli) {
     Report-Ok "pengj-templates-cli $((& pengj-templates-cli --version 2>$null | Select-Object -First 1))"
 } else {
-    Report-Warn "pengj-templates-cli not found; install: irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex"
+    Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; install: irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex{% else %}未找到 pengj-templates-cli；安装命令：irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex{% endif %}"
 }
 {% endif %}
 
@@ -120,7 +134,7 @@ if (Test-Tool pengj-templates-cli) {
 if (Test-Tool node) {
     Report-Ok "node $((& node --version 2>$null))"
 } else {
-    Report-Warn "node not found; it is required by the mcp-bootstrap skill (install Node.js or drop that skill from options.skills)"
+    Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}node not found; it is required by the mcp-bootstrap skill (install Node.js or drop that skill from options.skills){% else %}未找到 node；mcp-bootstrap 技能需要它（请安装 Node.js，或从 options.skills 中移除该技能）{% endif %}"
 }
 {% endif %}
 
@@ -133,15 +147,13 @@ if (Test-Tool git) {
 }
 if ($inside) {
     $local = (& git config --local --get core.hooksPath 2>$null)
-    $globalHooks = (& git config --global --get core.hooksPath 2>$null)
-    $legacyGlobal = [bool]($globalHooks -and $globalHooks -match "pengj-templates[\\/]hooks")
 
     if (-not (Test-Path ".githooks/pre-commit") -or -not (Test-Path ".githooks/commit-msg")) {
-        Report-Fail ".githooks is incomplete; expected pre-commit and commit-msg"
+        Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}.githooks is incomplete; expected pre-commit and commit-msg{% else %}.githooks 不完整；应包含 pre-commit 与 commit-msg{% endif %}"
     } elseif ($local -eq ".githooks") {
-        Report-Ok "commit hooks active (core.hooksPath=.githooks)"
+        Report-Ok "{% if options["skill_lang"] | default("zh") == "en" %}commit hooks active (core.hooksPath=.githooks){% else %}提交钩子已激活（core.hooksPath=.githooks）{% endif %}"
     } elseif ($local) {
-        Report-Warn "core.hooksPath is '$local', not .githooks; the commit gate is not active here"
+        Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}core.hooksPath is '$local', not .githooks; the commit gate is not active here{% else %}core.hooksPath 为 '$local'，并非 .githooks；提交门禁未在此生效{% endif %}"
     } elseif ($Fix) {
         # Activate through the first available path, but judge the outcome by
         # the resulting git state: an informational line failing to print must
@@ -155,23 +167,15 @@ if ($inside) {
         }
         & git update-index --chmod=+x .githooks/pre-commit .githooks/commit-msg 2>$null | Out-Null
         if ((& git config --local --get core.hooksPath 2>$null) -eq ".githooks") {
-            Report-Ok "commit hooks activated (core.hooksPath=.githooks)"
+            Report-Ok "{% if options["skill_lang"] | default("zh") == "en" %}commit hooks activated (core.hooksPath=.githooks){% else %}提交钩子已激活（core.hooksPath=.githooks）{% endif %}"
         } else {
-            Report-Fail "could not activate the commit hooks; run: git config core.hooksPath .githooks"
+            Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}could not activate the commit hooks; run: git config core.hooksPath .githooks{% else %}无法激活提交钩子；请运行：git config core.hooksPath .githooks{% endif %}"
         }
-    } elseif ($legacyGlobal) {
-        Report-Warn "commit hooks are active through the legacy global dispatcher; run 'pwsh -NoProfile -File scripts/doctor.ps1 --fix' to switch to per-repository activation"
     } else {
-        Report-Warn "commit hooks are not active; run 'pwsh -NoProfile -File scripts/doctor.ps1 -Fix' or 'git config core.hooksPath .githooks'"
-    }
-
-    # Older installs wrote a machine-wide dispatcher. It still forwards, but
-    # activation is now per project; report it so the leftover can be removed.
-    if ($legacyGlobal) {
-        Report-Warn "legacy global gate dispatcher detected ($globalHooks); remove it with: git config --global --unset core.hooksPath"
+        Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}commit hooks are not active; run 'pwsh -NoProfile -File scripts/doctor.ps1 --fix' or 'git config core.hooksPath .githooks'{% else %}提交钩子未激活；请运行 'pwsh -NoProfile -File scripts/doctor.ps1 --fix' 或 'git config core.hooksPath .githooks'{% endif %}"
     }
 } else {
-    Report-Warn "not a git work tree; skipping the commit hook check"
+    Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}not a git work tree; skipping the commit hook check{% else %}当前不是 git 工作树；跳过提交钩子检查{% endif %}"
 }
 {% endif %}
 
@@ -195,10 +199,10 @@ if (Test-Path $customDir) {
     }
 }
 if ($custom -eq 0) {
-    Write-Host "[doctor] custom: none (add *.ps1 scripts to scripts/doctor.d/ to extend this check)"
+    Write-Host "{% if options["skill_lang"] | default("zh") == "en" %}[doctor] custom: none (add *.ps1 scripts to scripts/doctor.d/ to extend this check){% else %}[doctor] 自定义检查：无（在 scripts/doctor.d/ 下添加 *.ps1 脚本即可扩展本检查）{% endif %}"
 }
 
-Write-Host "[doctor] $script:checks checks: $script:errors errors, $script:warnings warnings"
+Write-Host "{% if options["skill_lang"] | default("zh") == "en" %}[doctor] $script:checks checks: $script:errors errors, $script:warnings warnings{% else %}[doctor] 共 $script:checks 项检查：$script:errors 个错误，$script:warnings 个警告{% endif %}"
 if ($script:errors -gt 0) {
     exit 1
 }

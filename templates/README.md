@@ -27,7 +27,7 @@
 
 ## 语言轴 / Language axes
 
-- `skill_lang`（`zh` / `en`）决定**所有层**面向人的文案：注释、报错提示、脚本日志、`.gitignore` 拼接段标题以及 agent 层文档。模板统一用 `{% if options["skill_lang"] == "en" %}…{% else %}…{% endif %}` **行内分支**（不引入额外空行），中文分支渲染结果必须与改动前逐字节一致，避免存量中文项目漂移。
+- `skill_lang`（`zh` / `en`）决定**所有层**面向人的文案：注释、报错提示、脚本日志、`.gitignore` 拼接段标题以及 agent 层文档。模板统一用 `{% if options["skill_lang"] == "en" %}…{% else %}…{% endif %}` **行内分支**（不引入额外空行），中文分支渲染结果必须与改动前逐字节一致，避免存量中文项目漂移。`common` 层的 `scripts/doctor.sh` / `scripts/doctor.ps1` 同样按 `skill_lang` 双语输出（保留 `[doctor] ok/warn/error` 结构化前缀，只翻译文案）；注意 `tools/install.*` 一键安装脚本随 Release 独立分发、不经模板渲染，其语言走**系统语言**（`zh-*` 显示中文，其余英文），与 `skill_lang` 无关。
 - `commit_zh` 独立控制门禁的提交主题语言规则（`zh` / `en`）与提交规范技能文档。
 - **代码类产物按语言拆文件，而不是在脚本里写双语分支**：同一份逻辑各写一版完整文件，
   命名 `<stem>.<lang>.<ext>`（跟随 `skill_lang`）或 `<stem>.commit.<lang>.<ext>`（跟随 `commit_zh`，
@@ -35,7 +35,7 @@
   因此英文项目的脚本里不会残留中文校验逻辑，反之亦然。
 - 全英文项目用 `--skill-lang en --no-commit-zh`；生成后所有文本文件零汉字（`crates/core` 有端到端单测保障）。`.agents/skills/*/scripts/` 恒为英文，不受语言轴影响。
 - **代码语言守卫**：`gate` 层产出 `.gate.toml`（配置）与 `.githooks/pre-commit`（钩子），pre-commit 扫描暂存的 `.rs`。判定方向来自 `.gate.toml` 的 `mode`（`english` 查非拉丁文字、`chinese` 查非中文），按文件算占比：字符串违规 ≤ `lang.max_ratio`（默认 1%）、标识符违规 ≤ `lang.max_ident_ratio`（默认 0）。中文模式只判定面向人的文案，机器字面量（参数、路径、协议字段、内嵌源码）不判违规但仍计入分母。真实例外用行尾 `lang-ok: 理由` 或文件头 `lang-allow: 理由` 认证。门禁是纯 Rust 实现、零 Node 依赖，已收编进 `pengj-templates-cli`（唯一入口 `pengj-templates-cli gate ...`），不另有独立二进制。
-- **提交门禁装配**：`gate` 层依赖 `common`，产出 `.gate.toml`（首次生成后归用户所有，列入 `update_ignore`）与 `.githooks/pre-commit` / `.githooks/commit-msg`（模板托管，随更新同步）。钩子脚本在写盘后补可执行位——git 在 Unix 上靠它决定跑不跑钩子，缺位会静默跳过。生成项目后（或新克隆后）跑 `just doctor --fix`（无 just 时用 `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix`）：doctor 检查工具链并优先调用 `.githooks/install.sh` 把 `core.hooksPath` 指向 `.githooks`；CLI 安装器不再写全局 `core.hooksPath`。`gate` 层自动带上 `ci` 层，服务端 workflow 负责没有本地钩子的机器。钩子优先调 CLI，没装 CLI 时 commit-msg 回落到 `.githooks/gate-fallback.sh` 的缩减规则、pre-commit 放行并告警；没有 `$PENGJ_GATE` / 独立 `gate` / 仓库 URL 之类的多级回退分支。
+- **提交门禁装配**：`gate` 层依赖 `common`，产出 `.gate.toml`（首次生成后归用户所有，列入 `update_ignore`）与 `.githooks/pre-commit` / `.githooks/commit-msg`（模板托管，随更新同步）。钩子脚本在写盘后补可执行位——git 在 Unix 上靠它决定跑不跑钩子，缺位会静默跳过。生成项目后（或新克隆后）跑 `just doctor --fix`（无 just 时用 `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix`）：doctor 检查工具链并优先调用 `.githooks/install.sh` 把 `core.hooksPath` 指向 `.githooks`；CLI 安装器不再写全局 `core.hooksPath`，doctor 也不再检测或告警旧的全局 dispatcher（legacy global gate）——钩子激活一律按仓库本地 `core.hooksPath` 判定。`gate` 层自动带上 `ci` 层，服务端 workflow 负责没有本地钩子的机器。钩子优先调 CLI，没装 CLI 时 commit-msg 回落到 `.githooks/gate-fallback.sh` 的缩减规则、pre-commit 放行并告警；没有 `$PENGJ_GATE` / 独立 `gate` / 仓库 URL 之类的多级回退分支。
 - **历史层名迁移**：老的 `lefthook` 层已被 `gate` 层取代。存量项目的 manifest 里仍写着 `lefthook`，引擎按 `LEGACY_LAYER_ALIASES` 映射到 `gate`，不会被当成「已移除的层」静默丢弃。
 
 ## 没装 CLI 的机器

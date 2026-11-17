@@ -5650,6 +5650,26 @@ body
         let zh_just = std::fs::read_to_string(tmp.join("lang_zh").join("just/bque.just")).unwrap();
         assert!(contains_cjk(&zh_just), "zh 项目应保留中文注释");
 
+        // doctor 脚本跟随 skill_lang 语言轴，并已移除 legacy 全局 gate 检测。
+        for script in ["scripts/doctor.sh", "scripts/doctor.ps1"] {
+            let zh_doctor = std::fs::read_to_string(tmp.join("lang_zh").join(script)).unwrap();
+            assert!(
+                zh_doctor.contains("项目环境自检"),
+                "zh 项目的 {script} 应为中文文案"
+            );
+            assert!(
+                !zh_doctor.contains("legacy global")
+                    && !zh_doctor.contains("global_hooks")
+                    && !zh_doctor.contains("legacy_global"),
+                "{script} 不应残留 legacy 全局 gate 检测"
+            );
+            let en_doctor = std::fs::read_to_string(tmp.join("lang_en").join(script)).unwrap();
+            assert!(
+                en_doctor.contains("project environment check"),
+                "en 项目的 {script} 应为英文文案"
+            );
+        }
+
         let en_lint = std::fs::read_to_string(tmp.join("lang_en").join(".gate.toml")).unwrap();
         assert!(!contains_cjk(&en_lint), "英文项目的门禁配置不得含汉字");
         let en_hooks =

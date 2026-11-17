@@ -1,6 +1,7 @@
 #!/bin/sh
-# scripts/doctor.sh - project environment check.
+# scripts/doctor.sh - {% if options["skill_lang"] | default("zh") == "en" %}project environment check{% else %}项目环境自检{% endif %}.
 #
+{% if options["skill_lang"] | default("zh") == "en" -%}
 # Checks only the tools the selected template layers actually use, then runs
 # every custom check in scripts/doctor.d/*.sh in sorted order.
 #
@@ -11,6 +12,18 @@
 # Custom checks: drop *.sh files into scripts/doctor.d/. Each script runs from
 # the project root with DOCTOR_ROOT set to the project root and DOCTOR_FIX=1
 # when --fix is given. Exit 0 = pass, non-zero = failure; output is shown as-is.
+{%- else -%}
+# 只检查所选模板层实际用到的工具，再按文件名顺序运行 scripts/doctor.d/*.sh
+# 下的所有自定义检查。
+#
+# 用法：
+#   sh scripts/doctor.sh          仅输出报告
+#   sh scripts/doctor.sh --fix    同时激活提交钩子并修正相关模式
+#
+# 自定义检查：把 *.sh 放进 scripts/doctor.d/。每个脚本从项目根目录运行，
+# DOCTOR_ROOT 指向项目根目录，带 --fix 时设置 DOCTOR_FIX=1。
+# 退出码 0 为通过，非 0 为失败；输出按原样显示。
+{%- endif %}
 
 set -u
 
@@ -19,11 +32,11 @@ for arg in "$@"; do
     case "$arg" in
         --fix) fix=1 ;;
         -h|--help)
-            echo "usage: sh scripts/doctor.sh [--fix]"
+            echo "{% if options["skill_lang"] | default("zh") == "en" %}usage: sh scripts/doctor.sh [--fix]{% else %}用法：sh scripts/doctor.sh [--fix]{% endif %}"
             exit 0
             ;;
         *)
-            echo "[doctor] unknown argument: $arg" >&2
+            echo "[doctor] {% if options["skill_lang"] | default("zh") == "en" %}unknown argument:{% else %}未知参数：{% endif %} $arg" >&2
             exit 2
             ;;
     esac
@@ -56,20 +69,20 @@ is_windows() {
 if have git; then
     ok "git $(git --version | sed 's/^git version //')"
 else
-    fail "git not found"
+    fail "{% if options["skill_lang"] | default("zh") == "en" %}git not found{% else %}未找到 git{% endif %}"
 fi
 
 {% if 'just' in layers %}
 if have just; then
     ok "just $(just --version | sed 's/^just //')"
 else
-    fail "just not found; install: https://github.com/casey/just#installation"
+    fail "{% if options["skill_lang"] | default("zh") == "en" %}just not found; install: https://github.com/casey/just#installation{% else %}未找到 just；安装地址：https://github.com/casey/just#installation{% endif %}"
 fi
 if is_windows; then
     if have pwsh; then
         ok "pwsh $(pwsh --version)"
     else
-        fail "pwsh not found; the just recipes use PowerShell 7 on Windows"
+        fail "{% if options["skill_lang"] | default("zh") == "en" %}pwsh not found; the just recipes use PowerShell 7 on Windows{% else %}未找到 pwsh；Windows 上的 just 配方需要 PowerShell 7{% endif %}"
     fi
 fi
 {% endif %}
@@ -78,12 +91,12 @@ fi
 if have cargo; then
     ok "cargo $(cargo --version | sed 's/^cargo //')"
 else
-    fail "cargo not found; install a Rust toolchain"
+    fail "{% if options["skill_lang"] | default("zh") == "en" %}cargo not found; install a Rust toolchain{% else %}未找到 cargo；请安装 Rust 工具链{% endif %}"
 fi
 if have rustc; then
     ok "rustc $(rustc --version | sed 's/^rustc //')"
 else
-    fail "rustc not found; install a Rust toolchain"
+    fail "{% if options["skill_lang"] | default("zh") == "en" %}rustc not found; install a Rust toolchain{% else %}未找到 rustc；请安装 Rust 工具链{% endif %}"
 fi
 {% endif %}
 
@@ -92,10 +105,10 @@ if is_windows; then
     if have bque; then
         ok "bque $(bque --version 2>/dev/null | head -n 1)"
     else
-        warn "bque not found; install: irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
+        warn "{% if options["skill_lang"] | default("zh") == "en" %}bque not found; install: irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex{% else %}未找到 bque；安装命令：irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex{% endif %}"
     fi
 else
-    ok "bque not required on this platform"
+    ok "{% if options["skill_lang"] | default("zh") == "en" %}bque not required on this platform{% else %}当前平台不需要 bque{% endif %}"
 fi
 {% endif %}
 
@@ -103,7 +116,7 @@ fi
 if have pengj-templates-cli; then
     ok "pengj-templates-cli $(pengj-templates-cli --version 2>/dev/null | head -n 1)"
 else
-    warn "pengj-templates-cli not found; install: curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh"
+    warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; install: curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh{% else %}未找到 pengj-templates-cli；安装命令：curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh{% endif %}"
 fi
 {% endif %}
 
@@ -111,7 +124,7 @@ fi
 if have node; then
     ok "node $(node --version 2>/dev/null)"
 else
-    warn "node not found; it is required by the mcp-bootstrap skill (install Node.js or drop that skill from options.skills)"
+    warn "{% if options["skill_lang"] | default("zh") == "en" %}node not found; it is required by the mcp-bootstrap skill (install Node.js or drop that skill from options.skills){% else %}未找到 node；mcp-bootstrap 技能需要它（请安装 Node.js，或从 options.skills 中移除该技能）{% endif %}"
 fi
 {% endif %}
 
@@ -120,18 +133,13 @@ fi
 
 if have git && git rev-parse --show-toplevel >/dev/null 2>&1; then
     local_hooks=$(git config --local --get core.hooksPath 2>/dev/null || true)
-    global_hooks=$(git config --global --get core.hooksPath 2>/dev/null || true)
-    legacy_global=0
-    case "$global_hooks" in
-        *pengj-templates/hooks*) legacy_global=1 ;;
-    esac
 
     if [ ! -f .githooks/pre-commit ] || [ ! -f .githooks/commit-msg ]; then
-        fail ".githooks is incomplete; expected pre-commit and commit-msg"
+        fail "{% if options["skill_lang"] | default("zh") == "en" %}.githooks is incomplete; expected pre-commit and commit-msg{% else %}.githooks 不完整；应包含 pre-commit 与 commit-msg{% endif %}"
     elif [ "$local_hooks" = ".githooks" ]; then
-        ok "commit hooks active (core.hooksPath=.githooks)"
+        ok "{% if options["skill_lang"] | default("zh") == "en" %}commit hooks active (core.hooksPath=.githooks){% else %}提交钩子已激活（core.hooksPath=.githooks）{% endif %}"
     elif [ -n "$local_hooks" ]; then
-        warn "core.hooksPath is '$local_hooks', not .githooks; the commit gate is not active here"
+        warn "{% if options["skill_lang"] | default("zh") == "en" %}core.hooksPath is '$local_hooks', not .githooks; the commit gate is not active here{% else %}core.hooksPath 为 '$local_hooks'，并非 .githooks；提交门禁未在此生效{% endif %}"
     elif [ "$fix" = "1" ]; then
         # Activate through the first available path, but judge the outcome by
         # the resulting git state: an informational line failing to print must
@@ -147,14 +155,12 @@ if have git && git rev-parse --show-toplevel >/dev/null 2>&1; then
         # Unix do not silently skip them.
         git update-index --chmod=+x .githooks/pre-commit .githooks/commit-msg 2>/dev/null || true
         if [ "$(git config --local --get core.hooksPath 2>/dev/null || true)" = ".githooks" ]; then
-            ok "commit hooks activated (core.hooksPath=.githooks)"
+            ok "{% if options["skill_lang"] | default("zh") == "en" %}commit hooks activated (core.hooksPath=.githooks){% else %}提交钩子已激活（core.hooksPath=.githooks）{% endif %}"
         else
-            fail "could not activate the commit hooks; run: git config core.hooksPath .githooks"
+            fail "{% if options["skill_lang"] | default("zh") == "en" %}could not activate the commit hooks; run: git config core.hooksPath .githooks{% else %}无法激活提交钩子；请运行：git config core.hooksPath .githooks{% endif %}"
         fi
-    elif [ "$legacy_global" = "1" ]; then
-        warn "commit hooks are active through the legacy global dispatcher; run 'sh scripts/doctor.sh --fix' to switch to per-repository activation"
     else
-        warn "commit hooks are not active; run 'sh scripts/doctor.sh --fix' or 'git config core.hooksPath .githooks'"
+        warn "{% if options["skill_lang"] | default("zh") == "en" %}commit hooks are not active; run 'sh scripts/doctor.sh --fix' or 'git config core.hooksPath .githooks'{% else %}提交钩子未激活；请运行 'sh scripts/doctor.sh --fix' 或 'git config core.hooksPath .githooks'{% endif %}"
     fi
 
     # git silently skips a hook without the executable bit on Unix
@@ -162,21 +168,15 @@ if have git && git rev-parse --show-toplevel >/dev/null 2>&1; then
         for hook in pre-commit commit-msg; do
             if [ -f ".githooks/$hook" ] && [ ! -x ".githooks/$hook" ]; then
                 if [ "$fix" = "1" ]; then
-                    chmod +x ".githooks/$hook" && ok ".githooks/$hook is executable"
+                    chmod +x ".githooks/$hook" && ok "{% if options["skill_lang"] | default("zh") == "en" %}.githooks/$hook is executable{% else %}.githooks/$hook 已具备可执行权限{% endif %}"
                 else
-                    warn ".githooks/$hook is not executable; run with --fix"
+                    warn "{% if options["skill_lang"] | default("zh") == "en" %}.githooks/$hook is not executable; run with --fix{% else %}.githooks/$hook 不可执行；请带 --fix 运行{% endif %}"
                 fi
             fi
         done
     fi
-
-    # Older installs wrote a machine-wide dispatcher. It still forwards, but
-    # activation is now per project; report it so the leftover can be removed.
-    if [ "$legacy_global" = "1" ]; then
-        warn "legacy global gate dispatcher detected ($global_hooks); remove it with: git config --global --unset core.hooksPath"
-    fi
 else
-    warn "not a git work tree; skipping the commit hook check"
+    warn "{% if options["skill_lang"] | default("zh") == "en" %}not a git work tree; skipping the commit hook check{% else %}当前不是 git 工作树；跳过提交钩子检查{% endif %}"
 fi
 {% endif %}
 
@@ -199,10 +199,10 @@ if [ -d scripts/doctor.d ]; then
     done
 fi
 if [ "$custom" -eq 0 ]; then
-    printf '[doctor] custom: none (add *.sh scripts to scripts/doctor.d/ to extend this check)\n'
+    printf '[doctor] {% if options["skill_lang"] | default("zh") == "en" %}custom: none (add *.sh scripts to scripts/doctor.d/ to extend this check){% else %}自定义检查：无（在 scripts/doctor.d/ 下添加 *.sh 脚本即可扩展本检查）{% endif %}\n'
 fi
 
-printf '[doctor] %d checks: %d errors, %d warnings\n' "$checks" "$errors" "$warnings"
+printf '[doctor] {% if options["skill_lang"] | default("zh") == "en" %}%d checks: %d errors, %d warnings{% else %}共 %d 项检查：%d 个错误，%d 个警告{% endif %}\n' "$checks" "$errors" "$warnings"
 if [ "$errors" -gt 0 ]; then
     exit 1
 fi
