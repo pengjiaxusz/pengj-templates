@@ -98,7 +98,7 @@
 
 ## 文档 / Docs
 
-- `README.md` 为中文主文档；agent 层内容双语。
+- 根 `README.md` 为**英文**主文档（GitHub 默认展示），`README.zh-CN.md` 为中文版，两版顶部互相挂语言切换；两版内容保持 1:1（同样的章节、命令、参数与标识符），改动任一侧都要同步另一侧。`docs/architecture/**` 与 `templates/README.md` 保持中文。agent 层内容双语。
 - CI 对纯文档改动（根目录 `*.md`、`docs/**`、`.agents/**`）自动跳过；模板（`templates/**`）改动必触发构建。
 - 版本号与发布走 release-please（conventional commits 驱动），见 `.github/workflows/release.yml`。
 

@@ -137,7 +137,7 @@ cargo fmt --check 2>$null; cargo clippy --workspace --all-targets -- -D warnings
 | --- | --- | --- |
 | 1 | 是否触及架构（新增/调整模块边界、数据流、生命周期、系统拓扑、跨层契约、核心不变式）？ | `docs/architecture/README.md` 索引与对应 `docs/architecture/<domain>.md` 是否已同步；必要时按 `docs/architecture/README.md` 的编写规范更新文档 |
 | 2 | 是否改动模板层/引擎核心契约（`crates/core` 合并渲染、manifest、层依赖、受管块/TOML 合并）？ | `AGENTS.md` / `templates/README.md` / 层 `layer.toml` 说明是否同步；是否跑通端到端 `create`/`update` 验证 |
-| 3 | 是否新增对外接口/参数（CLI args、生成选项 `options`、技能列表）？ | `README.md` / `--help` 是否完全自解释；`.gate.toml` 的 `commit.scopes` 白名单是否更新 |
+| 3 | 是否新增对外接口/参数（CLI args、生成选项 `options`、技能列表）？ | `README.md`（英文）与 `README.zh-CN.md`（中文）是否同步且完全自解释；`--help` 是否自解释；`.gate.toml` 的 `commit.scopes` 白名单是否更新 |
 | 4 | 是否改动构建/依赖/工具链（Cargo / 提交门禁 / CI）？ | `cargo check --workspace` / `cargo test --workspace` / `just ci` 是否通过 |
 
 判定表速查：
