@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.70.0...v0.71.0) (2026-11-17)
+
+
+### Features
+
+* **ci:** 服务端门禁检出子模块 ([6d35e9a](https://github.com/pengjiaxusz/pengj-templates/commit/6d35e9a419a71337392eff0007b50a9613306a8d))
+
 ## [0.70.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.69.0...v0.70.0) (2026-11-17)
 
 
