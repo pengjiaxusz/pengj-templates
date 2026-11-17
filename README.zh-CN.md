@@ -162,6 +162,8 @@ gh api -X POST "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/rul
 
 它把 `gate` 设成默认分支的必需状态检查，从此红灯的 PR 合不进去——CI 从「参考」变成「门禁」。
 
+私有仓库 + 免费套餐拿不到这个能力：GitHub 要求 GitHub Pro 才允许启用 ruleset 与分支保护。此时 CI 照样是红的，只是拦不住合并——`.github/rulesets/gate.json` 仍留在仓库里，升级套餐或转公开后一条命令就能生效。
+
 `.gate.toml` 是门禁的唯一配置面，扁平 TOML 子集：`mode`（`english`/`chinese`，代码语言方向）、`commit.subject_lang`（`zh`/`en`，提交主题语言）、`commit.types`（类型白名单）、`commit.scopes`（scope 白名单，空列表接受任意）、`commit.subject_min_han`（中文主题的最少汉字数）、`commit.max_header`（标题行长度上限）、`lang.max_ratio` / `lang.max_ident_ratio`（代码语言守卫的字符串/标识符违规容忍比例）、`project.disabled`（项目自行关闭的检查）。
 
 代码语言守卫在 pre-commit 阶段扫描暂存的 `.rs`：按 `mode` 判定方向（英文编程拒绝非英文，中文编程拒绝非中文），并按文件计算占比——字符串违规不超过 `lang.max_ratio`（默认 1%）、标识符违规不超过 `lang.max_ident_ratio`（默认 0），额度向下取整。中文模式只判定面向人的文案：命令行参数、路径、协议字段名、内嵌源码/着色器代码等机器字面量不算违规（仍计入分母，避免额度被稀释）。真实例外在源码里认证：行尾 `lang-ok: 理由` 只免该行，文件头 `lang-allow: 理由` 免整个文件（i18n 词表、CJK 测试样本）。全量审计跑 `just gate-check`（或 `pengj-templates-cli gate check`），从仓库根递归扫描 `.rs`，跳过 `target`、`node_modules`、`third-party`、`generated` 与 `submodules`，因此 `backend/`、`launcher/` 这类自定义布局也能覆盖；加 `--list` 列出全部违规、`--json` 输出机器可读报告；`--max-ratio` / `--max-ident-ratio` 可临时放宽阈值，`PENGJ_CODE_LANG=english|chinese` 可覆盖判定方向。
