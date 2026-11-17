@@ -1,11 +1,11 @@
 # PENGJ_TEMPLATE_START
 # ==============================================================================
-# 1. Line endings & normalization (Auto Line Endings & Normalization)
+# {% if options["skill_lang"] | default("zh") == "en" %}1. Line endings & normalization (Auto Line Endings & Normalization){% else %}1. 换行符与规范化（自动换行符与规范化）{% endif %}
 # ==============================================================================
-# Default all text files to LF in git repo, auto-adapt on checkout
+# {% if options["skill_lang"] | default("zh") == "en" %}Default all text files to LF in git repo, auto-adapt on checkout{% else %}仓库内所有文本文件默认以 LF 存储，检出时自动适配{% endif %}
 * text=auto eol=lf
 
-# Explicitly declare LF for specific text formats
+# {% if options["skill_lang"] | default("zh") == "en" %}Explicitly declare LF for specific text formats{% else %}为常见文本格式显式声明 LF{% endif %}
 *.md text eol=lf
 *.toml text eol=lf
 *.yaml text eol=lf
@@ -14,7 +14,7 @@
 *.txt text eol=lf
 *.env* text eol=lf
 
-# Script file line ending controls
+# {% if options["skill_lang"] | default("zh") == "en" %}Script file line ending controls{% else %}脚本文件的换行符控制{% endif %}
 *.sh text eol=lf
 *.bash text eol=lf
 *.zsh text eol=lf
@@ -22,15 +22,16 @@
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
 
-# Managed agent assets: the engine renders them as LF and fingerprints the
+# {% if options["skill_lang"] | default("zh") == "en" %}Managed agent assets: the engine renders them as LF and fingerprints the
 # exact bytes, so they must stay LF on checkout. Without this, a repo-level
-# `*.ps1 eol=crlf` makes every update think the skill scripts were modified.
+# `*.ps1 eol=crlf` makes every update think the skill scripts were modified.{% else %}托管的 agent 资产：引擎以 LF 渲染并对精确字节做指纹，因此检出后必须保持 LF。
+# 否则仓库级的 `*.ps1 eol=crlf` 会让每次更新都误判技能脚本被改动过。{% endif %}
 .agents/** text eol=lf
 
 # ==============================================================================
-# 2. Common binary assets (Binary Files)
+# {% if options["skill_lang"] | default("zh") == "en" %}2. Common binary assets (Binary Files){% else %}2. 常见二进制资产（二进制文件）{% endif %}
 # ==============================================================================
-# Prevent Git from attempting text merge or line ending conversion on binaries
+# {% if options["skill_lang"] | default("zh") == "en" %}Prevent Git from attempting text merge or line ending conversion on binaries{% else %}避免 Git 对二进制文件做文本合并或换行符转换{% endif %}
 *.png binary
 *.jpg binary
 *.jpeg binary
@@ -53,17 +54,18 @@
 *.wasm binary
 
 # ==============================================================================
-# 3. GitHub Linguist & diff controls
+# {% if options["skill_lang"] | default("zh") == "en" %}3. GitHub Linguist & diff controls{% else %}3. GitHub Linguist 与 diff 控制{% endif %}
 # ==============================================================================
-# Mark package manager lockfiles as generated to keep PR diffs clean
+# {% if options["skill_lang"] | default("zh") == "en" %}Mark package manager lockfiles as generated to keep PR diffs clean{% else %}把包管理器的锁文件标记为生成物，保持 PR diff 干净{% endif %}
 pnpm-lock.yaml linguist-generated=true
 package-lock.json linguist-generated=true
 yarn.lock linguist-generated=true
 Cargo.lock linguist-generated=true
 
-# No export-ignore rules on purpose: source archives (git archive, GitHub ZIP)
+# {% if options["skill_lang"] | default("zh") == "en" %}No export-ignore rules on purpose: source archives (git archive, GitHub ZIP)
 # must keep repo rules (.gitignore, .gitattributes) and AI/editor context
 # (.agents/, .github/, .vscode/). Projects that need a trimmed tarball can add
-# export-ignore entries outside this managed block.
+# export-ignore entries outside this managed block.{% else %}刻意不设 export-ignore 规则：源码归档（git archive、GitHub ZIP）必须保留仓库规则
+#（.gitignore、.gitattributes）与 AI/编辑器上下文（.agents/、.github/、.vscode/）。
+# 需要精简 tarball 的项目可以在本托管块之外自行添加 export-ignore 条目。{% endif %}
 # PENGJ_TEMPLATE_END
-

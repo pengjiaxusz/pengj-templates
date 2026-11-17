@@ -1,5 +1,5 @@
 #!/bin/sh
-# gate hook: the pre-commit stage.
+# gate hook: {% if options["skill_lang"] | default("zh") == "en" %}the pre-commit stage.{% else %}提交前的 pre-commit 阶段。{% endif %}
 #
 # {% if options["skill_lang"] | default("zh") == "en" %}Two checks run before a commit lands:
 #   1. the staged Rust files are formatted with rustfmt;
@@ -15,8 +15,8 @@ root=$(git rev-parse --show-toplevel)
 cd "$root"
 
 if ! command -v pengj-templates-cli >/dev/null 2>&1; then
-    echo "[gate] pengj-templates-cli was not found on PATH." >&2
-    echo "[gate] install it once and the commit gate comes with it:" >&2
+    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli was not found on PATH.{% else %}PATH 上找不到 pengj-templates-cli。{% endif %}" >&2
+    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}install it once and the commit gate comes with it:{% else %}安装一次即可带上提交门禁：{% endif %}" >&2
     echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
     echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
     exit 2

@@ -16,7 +16,7 @@ gate-selftest:
 # {% if options["skill_lang"] | default("zh") == "en" %}Environment check: locate the CLI and print the one-line installer when it is missing{% else %}环境自检：定位 CLI，缺失时给出一键安装命令{% endif %}
 [unix]
 gate-doctor:
-    @if command -v pengj-templates-cli >/dev/null 2>&1; then echo "pengj-templates-cli: $(command -v pengj-templates-cli)"; pengj-templates-cli --version; else echo "[gate] pengj-templates-cli not found. Install: curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh"; exit 2; fi
+    @if command -v pengj-templates-cli >/dev/null 2>&1; then echo "pengj-templates-cli: $(command -v pengj-templates-cli)"; pengj-templates-cli --version; else echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found. Install:{% else %}找不到 pengj-templates-cli。安装命令：{% endif %} curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh"; exit 2; fi
 [windows]
 gate-doctor:
-    @if (Get-Command pengj-templates-cli -ErrorAction SilentlyContinue) { Write-Host "pengj-templates-cli: $((Get-Command pengj-templates-cli).Source)"; pengj-templates-cli --version } else { Write-Host "[gate] pengj-templates-cli not found. Install: irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex"; exit 2 }
+    @if (Get-Command pengj-templates-cli -ErrorAction SilentlyContinue) { Write-Host "pengj-templates-cli: $((Get-Command pengj-templates-cli).Source)"; pengj-templates-cli --version } else { Write-Host "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found. Install:{% else %}找不到 pengj-templates-cli。安装命令：{% endif %} irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex"; exit 2 }
