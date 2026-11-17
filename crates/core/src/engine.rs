@@ -1465,8 +1465,11 @@ pub fn update_project_with_options(
     let mut new_files: BTreeMap<String, String> = BTreeMap::new();
 
     for (rel, bytes) in &bytes_map {
-        // 黑名单文件：仅首次生成时写入，之后归用户所有，模板不再接管
-        if ignores.contains(rel) {
+        // 黑名单文件：首次生成时写入，之后归用户所有，模板不再接管。
+        // 判据是磁盘上是否已有该文件——存量项目在 update / add-layer 里新接入
+        // 某层时（例如 lefthook 迁移到 gate），该层的 update_ignore 文件还没
+        // 落过盘，必须补写，否则新层缺配置直接跑不起来。
+        if ignores.contains(rel) && project_dir.join(rel).exists() {
             continue;
         }
         let rel_str = rel.to_string_lossy().into_owned();
@@ -4296,6 +4299,72 @@ description = \"x\"
             std::fs::read_to_string(proj.join("package.json")).unwrap(),
             user_pkg,
             "update 也不得动已不归模板管理的 package.json"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 存量项目从旧层迁移到 `gate` 时，`.gate.toml` 从未落过盘——它是 gate 层的
+    /// update_ignore 文件，但 update_ignore 的语义是「首次生成时写入、之后归用户
+    /// 所有」，不是「永远不写」。缺失时必须补写，否则新接入的门禁没有配置；补写
+    /// 之后用户改过的内容仍然不被覆盖。
+    #[test]
+    fn update_creates_missing_update_ignore_file_and_then_leaves_it_alone() {
+        let tmp = std::env::temp_dir().join(format!("pengj-ignore-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let tpl = tmp.join("templates");
+        std::fs::create_dir_all(tpl.join("gate")).unwrap();
+        std::fs::write(
+            tpl.join("gate").join("layer.toml"),
+            "name = \"Gate\"\ndescription = \"x\"\nupdate_ignore = [\".gate.toml\"]\n",
+        )
+        .unwrap();
+        std::fs::write(tpl.join("gate").join(".gate.toml"), "mode = \"chinese\"\n").unwrap();
+
+        // 模拟「项目已有 manifest、层已接入，但 update_ignore 文件还缺失」
+        let proj = tmp.join("app");
+        std::fs::create_dir_all(&proj).unwrap();
+        ProjectManifest {
+            tool: "pengj-templates".to_string(),
+            version: "0.0.0".to_string(),
+            project_name: "app".to_string(),
+            layers: vec!["gate".to_string()],
+            options: BTreeMap::new(),
+            generated_at: "2026-01-01T00:00:00Z".to_string(),
+            files: BTreeMap::new(),
+        }
+        .save(&proj)
+        .unwrap();
+
+        let templates = Templates::new(&tpl);
+        let upd = update_project(&templates, &proj).expect("update should succeed");
+        assert!(
+            upd.created
+                .iter()
+                .any(|f| f.replace('\\', "/") == ".gate.toml"),
+            "缺失的门禁配置必须补写，实际: {:?}",
+            upd.created
+        );
+        assert_eq!(
+            std::fs::read_to_string(proj.join(".gate.toml"))
+                .unwrap()
+                .trim(),
+            "mode = \"chinese\""
+        );
+
+        // 用户改过之后，update 不再接管
+        std::fs::write(proj.join(".gate.toml"), "mode = \"english\"\n").unwrap();
+        let upd = update_project(&templates, &proj).expect("second update should succeed");
+        assert!(upd.updated.is_empty(), "不应再有更新: {:?}", upd.updated);
+        assert!(upd.created.is_empty());
+        assert_eq!(
+            std::fs::read_to_string(proj.join(".gate.toml"))
+                .unwrap()
+                .trim(),
+            "mode = \"english\"",
+            "归用户所有的配置不得被覆盖"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
