@@ -192,7 +192,7 @@ tools/            # One-liner installers (install.ps1 / install.sh), shipped wit
 ## Development
 
 ```bash
-just setup            # one-shot bootstrap after cloning: build the CLI, install the git hooks and verify the build
+just gate-hooks       # activate the commit hooks (once per clone)
 just check            # full Rust compile check
 just ci               # format check + compile + clippy + tests
 ```

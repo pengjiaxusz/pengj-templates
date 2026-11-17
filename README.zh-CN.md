@@ -190,7 +190,7 @@ tools/            # 一键安装脚本（install.ps1 / install.sh），随 Relea
 ## 开发
 
 ```bash
-just setup            # 克隆后一键初始化：构建 CLI、安装 git 钩子并验证编译
+just gate-hooks       # 激活提交钩子（每个克隆一次）
 just check            # Rust 全部编译检查
 just ci               # 格式化检查 + 编译 + clippy + 测试
 ```
