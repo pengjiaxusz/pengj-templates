@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.63.0...v0.63.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **gate:** 英文输出改用 ASCII 标点,避免 Windows 控制台乱码 ([3b84003](https://github.com/pengjiaxusz/pengj-templates/commit/3b840037cb5b5e889d2e707e6c8b0bec48b248e3))
+
 ## [0.63.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.4...v0.63.0) (2026-11-17)
 
 
