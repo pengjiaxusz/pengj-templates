@@ -31,9 +31,9 @@ do
     fi
 done
 
-echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli was not found on PATH or in the installation directory.{% else %}PATH 与安装目录里都找不到 pengj-templates-cli。{% endif %}" >&2
-echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}install it once and the commit gate comes with it:{% else %}安装一次即可带上提交门禁：{% endif %}" >&2
+# {% if options["skill_lang"] | default("zh") == "en" %}No CLI: rustfmt and the code language guard cannot run here, because neither can be reproduced by a shell script. The commit is let through with a loud warning instead of being blocked by a check that cannot run — the server-side CI enforces the same rules on the push.{% else %}没有 CLI：rustfmt 与代码语言守卫在这个钩子里跑不了——它们没法用 shell 复刻。这里选择放行并大声提示，而不是让一个跑不起来的检查把提交堵死；同样的规则由服务端 CI 在推送时把关。{% endif %}
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli was not found: rustfmt and the code language guard did not run.{% else %}找不到 pengj-templates-cli：rustfmt 与代码语言守卫这次没有运行。{% endif %}" >&2
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}The commit goes through; the server-side CI enforces the same rules. To run them locally, install the CLI once:{% else %}本次提交会通过；同样的规则由服务端 CI 把关。想在本地也跑，装一次 CLI：{% endif %}" >&2
 echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
 echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
-echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}to commit without the local gate for now, use `git commit --no-verify` (the server-side CI still checks every push).{% else %}若暂时无法安装，可用 `git commit --no-verify` 跳过本地门禁（服务端 CI 仍会校验每次推送）。{% endif %}" >&2
-exit 2
+exit 0

@@ -1,5 +1,5 @@
 # {% if options["skill_lang"] | default("zh") == "en" %}just/gate.just — commit gate recipes (managed by the gate layer; template updates overwrite this file){% else %}just/gate.just — 提交门禁配方（gate 层托管，模板更新整页覆盖）{% endif %}
-# {% if options["skill_lang"] | default("zh") == "en" %}The commit gate ships inside `pengj-templates-cli`, so every recipe below calls `pengj-templates-cli gate ...`. Install the CLI once and the gate is available.{% else %}提交门禁内置在 `pengj-templates-cli` 里，下面每条配方都直接调 `pengj-templates-cli gate ...`。装一次 CLI，门禁即随之可用。{% endif %}
+# {% if options["skill_lang"] | default("zh") == "en" %}The commit gate ships inside `pengj-templates-cli`, so every recipe below calls `pengj-templates-cli gate ...`. Install the CLI once and the gate is available. The one exception is `gate-hooks-local`, which needs nothing but git: it is the way in for a machine that has no CLI.{% else %}提交门禁内置在 `pengj-templates-cli` 里，下面每条配方都直接调 `pengj-templates-cli gate ...`。装一次 CLI，门禁即随之可用。唯一的例外是 `gate-hooks-local`，它只需要 git，是给没装 CLI 的机器留的门。{% endif %}
 
 # {% if options["skill_lang"] | default("zh") == "en" %}Run the code language guard over the whole working tree{% else %}对整个工作树跑代码语言守卫{% endif %}
 gate-check:
@@ -8,6 +8,10 @@ gate-check:
 # {% if options["skill_lang"] | default("zh") == "en" %}Install the commit gate: point core.hooksPath at .githooks and record the executable bit. Machines with the CLI installed already have the global dispatcher enabled (`gate hooks install --global`): git reads the global core.hooksPath on every invocation, so a fresh clone is guarded with no extra step. This recipe is the fallback for when the global dispatcher is not enabled.{% else %}安装提交门禁：把 core.hooksPath 指向 .githooks，并记录可执行位。装了 CLI 的机器默认已开启全局分发（`gate hooks install --global`）：git 每次执行都读全局 core.hooksPath，所以新克隆的仓库无需任何操作即被门禁接管。此配方是未开启全局分发时的兜底。{% endif %}
 gate-hooks:
     @pengj-templates-cli gate hooks install
+
+# {% if options["skill_lang"] | default("zh") == "en" %}Install the commit gate without the CLI: the same two steps, done by a shell script that needs nothing but git. The gate then runs in fallback mode, so the commit message is still checked while the full rule set stays with the server-side CI.{% else %}不依赖 CLI 安装提交门禁：同样两步，交给一个只需要 git 的 shell 脚本完成。门禁此后以降级模式运行，提交信息照样被检查，完整规则集仍由服务端 CI 把关。{% endif %}
+gate-hooks-local:
+    @sh .githooks/install.sh
 
 # {% if options["skill_lang"] | default("zh") == "en" %}Run the built-in rule self-test{% else %}运行内置规则自检{% endif %}
 gate-selftest:

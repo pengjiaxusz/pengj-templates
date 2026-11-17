@@ -14,6 +14,7 @@ Template content is split into layers by applicability. Layers compose freely at
 | `just` | The single root `justfile` entry point: managed framework block + project-owned area outside the block, importing language/queue recipes per layer | Repositories that want one unified task entry point |
 | `bque` | Windows global build queueing: `just/bque.just` (`queue-*` / `queue-doctor` / `q-run` / `q-bench`) | Repositories that need cross-worktree queueing and clean benchmarks |
 | `gate` | Commit gate: `.gate.toml` config + `.githooks/*` hooks (conventional-commit validation, code language guard, rustfmt); pure Rust, zero third-party dependencies | Repositories that want Git hooks |
+| `ci` | Server-side gate: GitHub Actions validates commit subjects and the code language on pull requests, merge queue and main pushes, plus a required-status-check ruleset and a pull request checklist | Repositories hosted on GitHub |
 | `agent` | AI coding assistant standards (`AGENTS.md`), generating Rust / Chinese-programming conventions per the selected layers and options | Repositories where an agent should follow the standards |
 | `vscode` | VS Code workspace configuration: recommended extensions, clippy for the Rust checks under Chinese programming | Repositories developed in VS Code |
 | `rust` | Rust-specific: `Cargo.toml`, clippy/rustfmt, optional sccache, `just/rust.just` | Rust projects |
@@ -143,7 +144,25 @@ The template configuration for `.vscode/settings.json` is merged into the `setti
 
 Using the gate layer: the gate is a pure Rust implementation with no Node dependency, and it now lives inside `pengj-templates-cli` — installing one binary gives you the template engine, the MCP installer and the commit gate at the same time. After generating a project, run `git init` first, then run `just gate-hooks` once — it points `core.hooksPath` at `.githooks` and records the executable bit in the git index (this step is mandatory: `core.hooksPath` lives in `.git/config` and never travels with a clone).
 
-The hooks call `pengj-templates-cli gate hook pre-commit` / `pengj-templates-cli gate hook commit-msg <msgfile>` directly; the multi-level fallback probing is gone (the `$PENGJ_GATE` environment variable, the standalone `gate` binary and the repository-URL branch have all been removed). When `pengj-templates-cli` is not on PATH the hook fails loudly and prints the one-line installer instead of silently skipping.
+The hooks call `pengj-templates-cli gate hook pre-commit` / `pengj-templates-cli gate hook commit-msg <msgfile>` directly; the multi-level fallback probing is gone (the `$PENGJ_GATE` environment variable, the standalone `gate` binary and the repository-URL branch have all been removed).
+
+### Machines without the CLI
+
+A machine without `pengj-templates-cli` cannot run the full rule set locally — the rules live inside the CLI. The template lays out four lines of defence for that case, two local and two server-side:
+
+1. **Enable it (zero dependencies)**: `sh .githooks/install.sh` (or `just gate-hooks-local`) needs git and a POSIX shell, nothing else. It points `core.hooksPath` at `.githooks` and records the executable bit.
+2. **Commit subjects (a reduced local check)**: when `commit-msg` finds no CLI it runs `.githooks/gate-fallback.sh` instead — a minimal rule set written in plain shell (header grammar, type whitelist, non-empty subject, trailing full stop, subject language), with the thresholds read from `.gate.toml`. **The invariant: the fallback is always more permissive than the CLI.** It catches the worst offenders and never rejects a message the CLI would accept.
+3. **Code language and formatting (filled in by the server)**: rustfmt and the language guard cannot be reproduced by a shell script, so without the CLI the `pre-commit` hook lets the commit through with a loud warning instead of blocking on a check that cannot run. Both run on the server instead, in the `gate` job of the `ci` layer (Rust projects also get `cargo fmt --check` there).
+4. **Enforcement (server-side)**: the `ci` layer ships `.github/workflows/gate.yml`, `.github/rulesets/gate.json` (the `gate` job as a required status check, configuration as code) and `.github/pull_request_template.md`. When a run fails, the workflow writes an actionable summary into `GITHUB_STEP_SUMMARY`, so the pull request page says what to change.
+
+The ruleset takes effect after a maintainer applies it once:
+
+```bash
+gh api -X POST "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/rulesets" \
+  --input .github/rulesets/gate.json
+```
+
+It makes `gate` a required status check on the default branch, so a red pull request cannot be merged — the CI turns from a reference into a gate.
 
 `.gate.toml` is the gate's single configuration surface, a flat TOML subset: `mode` (`english`/`chinese`, the code language direction), `commit.subject_lang` (`zh`/`en`, the commit subject language), `commit.types` (type whitelist), `commit.scopes` (scope whitelist, an empty list accepts anything), `commit.subject_min_han` (minimum number of Han characters in a Chinese subject), `commit.max_header` (maximum header length), `lang.max_ratio` / `lang.max_ident_ratio` (tolerated violation ratios for strings / identifiers in the code language guard), and `project.disabled` (the checks the project opts out of).
 

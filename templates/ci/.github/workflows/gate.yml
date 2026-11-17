@@ -2,8 +2,15 @@ name: {% if options["skill_lang"] | default("zh") == "en" %}gate{% else %}提交
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main, master]
+  workflow_dispatch:
+
+# {% if options["skill_lang"] | default("zh") == "en" %}Only the newest run per branch matters: an outdated run reports on a range that no longer exists.{% else %}同一个分支只保留最新一次运行：过期的运行报告的提交范围早已不存在。{% endif %}
+concurrency:
+  group: {% raw %}${{ github.workflow }}-${{ github.ref }}{% endraw %}
+  cancel-in-progress: true
 
 # {% if options["skill_lang"] | default("zh") == "en" %}The server-side counterpart of the local commit hooks. It needs nothing from the contributor's machine, so a pull request is checked even when the author never installed the CLI.{% else %}本地提交钩子的服务端对应物。它不需要贡献者机器上的任何配置，所以即使作者从未安装 CLI，PR 一样会被校验。{% endif %}
 permissions:
@@ -12,7 +19,8 @@ permissions:
 
 jobs:
   gate:
-    name: {% if options["skill_lang"] | default("zh") == "en" %}commit message + language guard{% else %}提交标题与语言守卫{% endif %}
+    # {% if options["skill_lang"] | default("zh") == "en" %}The name is a stable identifier on purpose: a required status check refers to it, and that reference must not break when the documentation language changes.{% else %}这里的名字是刻意保持稳定的标识：必需状态检查引用的就是它，而这份引用不能因为文档语言切换就失效。{% endif %}
+    name: gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -36,11 +44,51 @@ jobs:
           GATE_BASE: {% raw %}${{ github.event.pull_request.base.sha || github.event.before }}{% endraw %}
         run: |
           base="${GATE_BASE:-}"
-          if [ -z "$base" ] || printf '%s' "$base" | grep -qE '^0+$'; then
-            pengj-templates-cli gate check-commits
-          else
-            pengj-templates-cli gate check-commits --base "$base"
+          if printf '%s' "$base" | grep -qE '^0+$'; then
+            base=""
           fi
+          set +e
+          if [ -n "$base" ]; then
+            output=$(pengj-templates-cli gate check-commits --base "$base" 2>&1)
+          else
+            output=$(pengj-templates-cli gate check-commits 2>&1)
+          fi
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## {% if options["skill_lang"] | default("zh") == "en" %}The commit gate rejected this range{% else %}提交门禁拦下了这段提交{% endif %}"
+              echo ""
+              echo '```'
+              printf '%s\n' "$output"
+              echo '```'
+              echo ""
+              echo "{% if options["skill_lang"] | default("zh") == "en" %}Every commit needs a subject of the form `type(scope): subject`. The rule set lives in `.gate.toml`.{% else %}范围内每个提交的标题都要写成 `type(scope): 摘要`。规则集在 `.gate.toml` 里。{% endif %}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
 
       - name: {% if options["skill_lang"] | default("zh") == "en" %}Run the code language guard{% else %}运行代码语言守卫{% endif %}
-        run: pengj-templates-cli gate check
+        run: |
+          set +e
+          output=$(pengj-templates-cli gate check 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ]; then
+            {
+              echo "## {% if options["skill_lang"] | default("zh") == "en" %}The code language guard reported violations{% else %}代码语言守卫报了违规{% endif %}"
+              echo ""
+              echo '```'
+              printf '%s\n' "$output"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
+      {%- if "rust" in layers or "rust-workspace" in layers %}
+
+      # {% if options["skill_lang"] | default("zh") == "en" %}The local pre-commit hook formats the staged Rust files; without the CLI that never happens, so the server checks it.{% else %}本地 pre-commit 钩子会格式化暂存的 Rust 文件；没装 CLI 时这一步不会发生，所以由服务端补上。{% endif %}
+      - name: {% if options["skill_lang"] | default("zh") == "en" %}Check the formatting{% else %}检查代码格式{% endif %}
+        run: cargo fmt --check
+      {%- endif %}

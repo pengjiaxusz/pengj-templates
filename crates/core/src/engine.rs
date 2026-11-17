@@ -4793,6 +4793,143 @@ description = \"x\"
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// 没装 CLI 的机器走四道防线：本地两道（零依赖启用 + 缩减检查），
+    /// 服务端两道（workflow + 必需状态检查的 ruleset）。
+    #[test]
+    fn gate_and_ci_layers_ship_the_no_cli_fallback() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+        let tmp = std::env::temp_dir().join(format!("pengj-no-cli-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let layers = vec![
+            "common".to_string(),
+            "just".to_string(),
+            "gate".to_string(),
+            "ci".to_string(),
+            "agent".to_string(),
+        ];
+        let mut zh_opts = BTreeMap::new();
+        zh_opts.insert("chinese_programming".to_string(), serde_json::json!(true));
+        zh_opts.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        zh_opts.insert("commit_zh".to_string(), serde_json::json!(true));
+        generate(&templates, "no_cli_zh", &layers, zh_opts, &tmp).unwrap();
+
+        let mut en_opts = BTreeMap::new();
+        en_opts.insert("chinese_programming".to_string(), serde_json::json!(false));
+        en_opts.insert("skill_lang".to_string(), serde_json::json!("en"));
+        en_opts.insert("commit_zh".to_string(), serde_json::json!(false));
+        generate(&templates, "no_cli_en", &layers, en_opts, &tmp).unwrap();
+
+        let zh_root = tmp.join("no_cli_zh");
+        let en_root = tmp.join("no_cli_en");
+
+        // -- 本地第一道：零依赖启用 --
+        let install =
+            std::fs::read_to_string(zh_root.join(".githooks").join("install.sh")).unwrap();
+        assert!(
+            install.contains("core.hooksPath"),
+            "启用脚本必须写 core.hooksPath"
+        );
+        assert!(
+            install.contains("update-index --chmod=+x"),
+            "启用脚本必须把可执行位写进索引"
+        );
+
+        // -- 本地第二道：缩减检查 --
+        let fallback =
+            std::fs::read_to_string(zh_root.join(".githooks").join("gate-fallback.sh")).unwrap();
+        assert!(
+            fallback.contains("commit.subject_lang") && fallback.contains("commit.types"),
+            "兜底检查必须从 .gate.toml 读规则"
+        );
+
+        // -- 钩子降级：commit-msg 走兜底，pre-commit 放行而不硬阻断 --
+        let msg_hook =
+            std::fs::read_to_string(zh_root.join(".githooks").join("commit-msg")).unwrap();
+        assert!(
+            msg_hook.contains("gate-fallback.sh"),
+            "commit-msg 必须在找不到 CLI 时走兜底检查"
+        );
+        let pre_hook =
+            std::fs::read_to_string(zh_root.join(".githooks").join("pre-commit")).unwrap();
+        assert!(
+            pre_hook.contains("exit 0") && !pre_hook.contains("exit 2"),
+            "pre-commit 在没有 CLI 时必须放行，而不是拿跑不起来的检查堵死提交"
+        );
+
+        // -- 配方入口 --
+        let gate_just = std::fs::read_to_string(zh_root.join("just").join("gate.just")).unwrap();
+        assert!(
+            gate_just.contains("gate-hooks-local") && gate_just.contains("install.sh"),
+            "just 配方必须给出不依赖 CLI 的启用入口"
+        );
+
+        // -- 服务端第一道：workflow --
+        let workflow =
+            std::fs::read_to_string(zh_root.join(".github").join("workflows").join("gate.yml"))
+                .unwrap();
+        assert!(
+            workflow.contains("GITHUB_STEP_SUMMARY"),
+            "CI 失败时必须把可操作的提示写进 step summary"
+        );
+        assert!(workflow.contains("merge_group"), "CI 必须覆盖合并队列");
+        assert!(workflow.contains("concurrency:"), "CI 必须取消过期的运行");
+
+        // -- 服务端第二道：ruleset 的 context 必须与 workflow 的 job 名一致 --
+        let ruleset =
+            std::fs::read_to_string(zh_root.join(".github").join("rulesets").join("gate.json"))
+                .unwrap();
+        let job_name = workflow
+            .lines()
+            .filter_map(|line| {
+                // job 的 `name:` 是缩进的；步骤名带 `- ` 前缀，workflow 顶层的 `name:` 不缩进
+                let trimmed = line.trim_start();
+                if line.starts_with(' ') && trimmed.starts_with("name: ") {
+                    Some(trimmed.trim_start_matches("name: ").trim().to_string())
+                } else {
+                    None
+                }
+            })
+            .next()
+            .expect("the workflow must name its job");
+        assert!(
+            ruleset.contains(&format!("\"context\": \"{job_name}\"")),
+            "ruleset 引用的状态检查名必须与 workflow 的 job 名一致：{job_name}"
+        );
+
+        // -- PR 自查清单 --
+        assert!(
+            zh_root
+                .join(".github")
+                .join("pull_request_template.md")
+                .is_file(),
+            "ci 层必须产出 PR 自查清单"
+        );
+
+        // -- 英文项目：这两处目录不得残留汉字 --
+        let mut files = Vec::new();
+        collect_files(&en_root.join(".githooks"), &mut files);
+        collect_files(&en_root.join(".github"), &mut files);
+        assert!(!files.is_empty());
+        for file in files {
+            let text = std::fs::read_to_string(&file).unwrap();
+            assert!(
+                !contains_cjk(&text),
+                "英文项目的 {} 不得含汉字",
+                file.display()
+            );
+        }
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     #[test]
     fn audit_project_detects_clean_customized_and_violations() {
         let tmp = std::env::temp_dir().join(format!("pengj_test_audit_{}", std::process::id()));

@@ -1,3 +1,3 @@
 name = "CI"
-description = "服务端门禁：GitHub Actions 在 PR 与主干推送时校验提交标题与代码语言，不依赖任何本地配置"
+description = "服务端门禁：GitHub Actions 在 PR 与主干推送时校验提交标题与代码语言，不依赖任何本地配置；附必需状态检查的 ruleset 与 PR 自查模板"
 depends = ["common", "gate"]

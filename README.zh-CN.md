@@ -14,6 +14,7 @@
 | `just` | 唯一的根 `justfile` 主入口：托管块框架区 + 块外项目专属区，按层 import 语言/排队配方 | 需要统一任务入口的仓库 |
 | `bque` | Windows 全局编译排队：`just/bque.just`（`queue-*` / `queue-doctor` / `q-run` / `q-bench`） | 需要跨工作树排队与纯净跑分 |
 | `gate` | 提交门禁：`.gate.toml` 配置 + `.githooks/*` 钩子（约定式提交校验、代码语言守卫、rustfmt），纯 Rust 实现、零第三方依赖 | 需要 Git 钩子的仓库 |
+| `ci` | 服务端门禁：GitHub Actions 在 PR/合并队列/主干推送时校验提交标题与代码语言，附必需状态检查 ruleset 与 PR 自查模板 | 托管在 GitHub 上的仓库 |
 | `agent` | AI 编码助手规范（`AGENTS.md`），按所选层/选项生成 rust、中文编程等约定 | 希望 agent 遵循规范 |
 | `vscode` | VS Code 工作区配置：推荐扩展、中文编程下 rust 检查走 clippy | 使用 VS Code 开发 |
 | `rust` | Rust 仓库专属：`Cargo.toml`、clippy/rustfmt、可选 sccache、`just/rust.just` | Rust 项目 |
@@ -141,7 +142,25 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
 
 gate 层用法：门禁是纯 Rust 实现，没有任何 Node 依赖，且已收编进 `pengj-templates-cli`——装一个二进制就同时拿到模板引擎、MCP 安装器和提交门禁。生成项目后先 `git init`，再执行一次 `just gate-hooks`——它把 `core.hooksPath` 指向 `.githooks` 并把可执行位写进 git 索引（这一步必须做：`core.hooksPath` 存在 `.git/config` 里，不会随克隆传播）。
 
-钩子直接调用 `pengj-templates-cli gate hook pre-commit` / `pengj-templates-cli gate hook commit-msg <msgfile>`，不再做多级回退探测（原先的 `$PENGJ_GATE` 环境变量、独立 `gate` 二进制、仓库 URL 分支已全部移除）。找不到 `pengj-templates-cli` 时钩子会直接报错并提示一键安装命令，不会静默跳过。
+钩子直接调用 `pengj-templates-cli gate hook pre-commit` / `pengj-templates-cli gate hook commit-msg <msgfile>`，不再做多级回退探测（原先的 `$PENGJ_GATE` 环境变量、独立 `gate` 二进制、仓库 URL 分支已全部移除）。
+
+### 没装 CLI 的机器
+
+没装 `pengj-templates-cli` 的机器拿不到完整规则集——规则就在 CLI 里。模板为这种情况铺了四道防线，本地两道、服务端两道：
+
+1. **启用（零依赖）**：`sh .githooks/install.sh`（或 `just gate-hooks-local`）只需要 git 与一个 POSIX shell，跑一次就把 `core.hooksPath` 指向 `.githooks` 并补上可执行位。
+2. **提交标题（本地缩减检查）**：`commit-msg` 找不到 CLI 时改跑 `.githooks/gate-fallback.sh`——纯 shell 实现的最小规则集（标题语法、type 白名单、摘要非空、句末句点、主题语言），阈值从 `.gate.toml` 读。**不变式：兜底脚本永远比 CLI 宽松**，只拦最离谱的错误，绝不误杀 CLI 会放行的提交。
+3. **代码语言与格式（服务端补齐）**：`pre-commit` 的 rustfmt 与语言守卫没法用 shell 复刻，没装 CLI 时它放行并告警，不拿一个跑不起来的检查堵死提交；这两项由 `ci` 层的 `gate` 任务在服务端补上（rust 项目还会在服务端跑 `cargo fmt --check`）。
+4. **强制力（服务端）**：`ci` 层产出 `.github/workflows/gate.yml`、`.github/rulesets/gate.json`（把 `gate` 设成必需状态检查，配置即代码）与 `.github/pull_request_template.md`。CI 失败时把可操作的修复提示写进 `GITHUB_STEP_SUMMARY`，PR 页面直接能看到该怎么改。
+
+ruleset 需要维护者执行一次才会生效：
+
+```bash
+gh api -X POST "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/rulesets" \
+  --input .github/rulesets/gate.json
+```
+
+它把 `gate` 设成默认分支的必需状态检查，从此红灯的 PR 合不进去——CI 从「参考」变成「门禁」。
 
 `.gate.toml` 是门禁的唯一配置面，扁平 TOML 子集：`mode`（`english`/`chinese`，代码语言方向）、`commit.subject_lang`（`zh`/`en`，提交主题语言）、`commit.types`（类型白名单）、`commit.scopes`（scope 白名单，空列表接受任意）、`commit.subject_min_han`（中文主题的最少汉字数）、`commit.max_header`（标题行长度上限）、`lang.max_ratio` / `lang.max_ident_ratio`（代码语言守卫的字符串/标识符违规容忍比例）、`project.disabled`（项目自行关闭的检查）。
 
