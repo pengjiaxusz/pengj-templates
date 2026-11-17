@@ -21,6 +21,41 @@ pub fn run(args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Run git inside `dir`.
+///
+/// The gate must not depend on the caller's working directory: the CLI can
+/// be invoked from anywhere, and tests run in parallel with a different
+/// repository each.
+pub fn run_in(dir: &Path, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .map_err(|error| format!("cannot run git in {}: {error}", dir.display()))?;
+    if !output.status.success() {
+        return Err(format!(
+            "`git {}` failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Run git inside `dir` and keep stdout, treating a non-zero status as "no
+/// answer" instead of an error.
+pub fn probe_in(dir: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 /// Run git and keep stdout, but treat a non-zero status as "no answer" instead
 /// of an error. Used for probes such as `rev-parse --git-dir`.
 pub fn probe(args: &[&str]) -> Option<String> {

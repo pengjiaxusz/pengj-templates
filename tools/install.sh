@@ -113,7 +113,27 @@ else
     exit 1
 fi
 
+# 8. Register the global hook dispatcher.
+#
+# `core.hooksPath` is read by git on every invocation, so pointing it at a
+# dispatcher next to the CLI makes every repository on this machine forward
+# to its own tracked .githooks/ — a fresh clone is guarded with no extra
+# step, and repositories that already exist are covered as soon as this runs.
+# A repository without .githooks/ is left alone, so nothing else is affected.
+#
+# PENGJ_SKIP_GLOBAL_HOOKS=1 turns it off — used by CI, where a global git
+# setting on the runner buys nothing.
+if [ "${PENGJ_SKIP_GLOBAL_HOOKS:-0}" = "1" ]; then
+    echo "--> Skipping the global commit gate registration (PENGJ_SKIP_GLOBAL_HOOKS=1)"
+elif "$exe_path" gate hooks install --global; then
+    :
+else
+    echo "[install] warning: could not register the global commit gate" >&2
+    echo "[install]          run it later with: $exe_path gate hooks install --global" >&2
+fi
+
 echo ""
 echo "The commit gate ships inside this binary:"
-echo "  pengj-templates-cli gate hooks install    # install the git hooks"
+echo "  pengj-templates-cli gate hooks install    # install the git hooks for this repository"
+echo "  pengj-templates-cli gate hooks install --global   # every repository on this machine"
 echo "  pengj-templates-cli gate check             # run the code language guard"

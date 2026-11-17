@@ -19,6 +19,9 @@ USAGE
   pengj-templates-cli gate hook pre-commit              staged rustfmt + language guard
   pengj-templates-cli gate hook commit-msg FILE         commit message validation
   pengj-templates-cli gate hooks install                point core.hooksPath at .githooks
+  pengj-templates-cli gate hooks install --global       dispatch to every repository on this machine
+  pengj-templates-cli gate hooks uninstall --global     remove the global dispatcher
+  pengj-templates-cli gate check-commits [--base REF]   validate the commit messages in a range
   pengj-templates-cli gate selftest                     run the built-in rule self-test
 
 FLAGS
@@ -220,6 +223,68 @@ fn self_test() -> u8 {
     }
 }
 
+/// Validate every commit message in a range.
+///
+/// This is the server-side counterpart of the `commit-msg` hook: it needs no
+/// local setup at all, so a pull request is guarded even when the author
+/// never installed the hooks.
+fn check_commits(rest: &[String]) -> Result<u8, String> {
+    let mut base: Option<String> = None;
+    let mut head: Option<String> = None;
+    let mut index = 0;
+    while index < rest.len() {
+        let flag = rest[index].as_str();
+        let value = rest.get(index + 1).ok_or_else(|| {
+            format!("{flag} needs a value; expected a git ref, e.g. --base origin/main")
+        })?;
+        match flag {
+            "--base" => base = Some(value.clone()),
+            "--head" => head = Some(value.clone()),
+            other => {
+                return Err(format!(
+                    "unknown flag for check-commits: {other}; expected --base or --head"
+                ))
+            }
+        }
+        index += 2;
+    }
+
+    let report = commit::check_commits(base.as_deref(), head.as_deref())?;
+
+    if report.range.is_empty() {
+        println!("[gate] the commit gate is disabled in .gate.toml; nothing to check");
+        return Ok(0);
+    }
+    if report.checked == 0 {
+        println!("[gate] no commits in {}; nothing to check", report.range);
+        return Ok(0);
+    }
+
+    for rejected in &report.rejected {
+        let short = &rejected.sha[..rejected.sha.len().min(8)];
+        eprintln!("[gate] commit {short} was rejected: {}", rejected.subject);
+        for issue in &rejected.issues {
+            eprintln!("  - {issue}");
+        }
+    }
+
+    if !report.rejected.is_empty() {
+        eprintln!(
+            "[gate] {}/{} commit(s) in {} were rejected",
+            report.rejected.len(),
+            report.checked,
+            report.range
+        );
+        Ok(1)
+    } else {
+        println!(
+            "[gate] commit messages passed: {} commit(s) checked in {}",
+            report.checked, report.range
+        );
+        Ok(0)
+    }
+}
+
 /// Run the gate with the given arguments and return the process exit code.
 ///
 /// `pengj-templates-cli gate ...` is the only public entry point, so there is
@@ -237,6 +302,7 @@ pub fn run(args: &[String]) -> Result<u8, String> {
         }
         "audit" | "check" => audit_command(rest),
         "selftest" | "--self-test" => Ok(self_test()),
+        "check-commits" => check_commits(rest),
         "fmt" => {
             let files = if rest.is_empty() {
                 git::staged_rust_files()?
@@ -264,10 +330,21 @@ pub fn run(args: &[String]) -> Result<u8, String> {
         },
         "hooks" => match rest.first().map(String::as_str) {
             Some("install") => {
-                hooks::install()?;
+                if rest.iter().any(|arg| *arg == "--global") {
+                    hooks::install_global()?;
+                } else {
+                    hooks::install()?;
+                }
                 Ok(0)
             }
-            _ => Err("unknown hooks command; expected `hooks install`".to_string()),
+            Some("uninstall") => {
+                hooks::uninstall_global()?;
+                Ok(0)
+            }
+            _ => Err(
+                "unknown hooks command; expected `hooks install [--global]` or `hooks uninstall --global`"
+                    .to_string(),
+            ),
         },
         other if other.starts_with('-') => audit_command(args),
         // Bare arguments keep working as file paths, the way the old

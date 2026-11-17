@@ -33,7 +33,6 @@ use crate::lang_guard::is_han;
 const CONVENTIONAL_TYPES: [&str; 11] = [
     "feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert",
 ];
-
 const DEFAULT_MAX_HEADER: usize = 100;
 const DEFAULT_MIN_HAN: usize = 2;
 const DEFAULT_MAX_FOOTER_LINE: usize = 100;
@@ -590,6 +589,115 @@ pub fn validate_file(path: &str) -> Result<u8, String> {
         "\n[gate] the rule set lives in .gate.toml under [commit]; the convention is documented in the git-workflow skill."
     );
     Ok(1)
+}
+
+/// The outcome of checking a range of commits.
+#[derive(Debug, Clone)]
+pub struct CommitCheckReport {
+    /// The range that was walked, for the message.
+    pub range: String,
+    /// How many commits were checked.
+    pub checked: usize,
+    /// One entry per rejected commit: the sha, its subject and the issues.
+    pub rejected: Vec<RejectedCommit>,
+}
+
+/// A commit whose message did not pass the rules.
+#[derive(Debug, Clone)]
+pub struct RejectedCommit {
+    pub sha: String,
+    pub subject: String,
+    pub issues: Vec<String>,
+}
+
+/// The refs a CI run usually branches from, in the order they are tried.
+const BASE_CANDIDATES: [&str; 4] = ["origin/main", "origin/master", "main", "master"];
+
+/// Pick the base ref: the explicit one, else the first branch that exists.
+fn resolve_base(dir: &std::path::Path, explicit: Option<&str>) -> String {
+    if let Some(base) = explicit {
+        return base.to_string();
+    }
+    for candidate in BASE_CANDIDATES {
+        if crate::git::probe_in(dir, &["rev-parse", "--verify", "--quiet", candidate]).is_some() {
+            return candidate.to_string();
+        }
+    }
+    "HEAD~1".to_string()
+}
+
+/// Validate every commit message in a range.
+///
+/// This is the server-side counterpart of the `commit-msg` hook: it needs no
+/// local setup at all, so a pull request is guarded even when the author
+/// never installed the CLI.
+pub fn check_commits(base: Option<&str>, head: Option<&str>) -> Result<CommitCheckReport, String> {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    check_commits_in(&cwd, base, head)
+}
+
+/// Validate every commit message in a range, working inside `dir`.
+///
+/// The repository root is resolved once and every git call runs there, so the
+/// result never depends on where the command was invoked from.
+pub fn check_commits_in(
+    dir: &std::path::Path,
+    base: Option<&str>,
+    head: Option<&str>,
+) -> Result<CommitCheckReport, String> {
+    let root = crate::git::probe_in(dir, &["rev-parse", "--show-toplevel"])
+        .filter(|root| !root.is_empty())
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| "not a git work tree; check-commits needs a repository".to_string())?;
+
+    let (config, _) = crate::config::load(&root)?;
+    if config.is_disabled("commit") {
+        return Ok(CommitCheckReport {
+            range: String::new(),
+            checked: 0,
+            rejected: Vec::new(),
+        });
+    }
+    let rules = Rules::from_config(&config);
+
+    let base_ref = resolve_base(&root, base);
+    if crate::git::probe_in(&root, &["rev-parse", "--verify", "--quiet", &base_ref]).is_none() {
+        return Err(format!(
+            "the base ref `{base_ref}` does not exist in this repository.\n  \
+             the commit range cannot be walked — fetch the full history first \
+             (`git fetch --unshallow`) or pass a reachable --base"
+        ));
+    }
+    let head_ref = head.unwrap_or("HEAD").to_string();
+    let range = format!("{base_ref}..{head_ref}");
+    let listing = crate::git::run_in(&root, &["rev-list", "--reverse", &range])?;
+    let shas: Vec<String> = listing
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect();
+
+    let mut rejected = Vec::new();
+    for sha in &shas {
+        let message = crate::git::run_in(&root, &["show", "-s", "--format=%B", sha])?;
+        let issues = validate(&message, &rules);
+        if issues.is_empty() {
+            continue;
+        }
+        let subject = message.lines().next().unwrap_or("").trim().to_string();
+        rejected.push(RejectedCommit {
+            sha: sha.clone(),
+            subject,
+            issues,
+        });
+    }
+
+    Ok(CommitCheckReport {
+        range,
+        checked: shas.len(),
+        rejected,
+    })
 }
 
 #[cfg(test)]

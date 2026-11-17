@@ -14,12 +14,26 @@ set -e
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-if ! command -v pengj-templates-cli >/dev/null 2>&1; then
-    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli was not found on PATH.{% else %}PATH 上找不到 pengj-templates-cli。{% endif %}" >&2
-    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}install it once and the commit gate comes with it:{% else %}安装一次即可带上提交门禁：{% endif %}" >&2
-    echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
-    echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
-    exit 2
+# {% if options["skill_lang"] | default("zh") == "en" %}Locate the CLI: PATH first, then the installation directory. The fallback matters for terminals opened before the installer refreshed PATH — without it a working install would look like a missing one.{% else %}定位 CLI：先找 PATH，再回落到安装目录。回落这一步是为了应付「装好 CLI 之前就打开的终端」——PATH 没刷新时不该被当成没装。{% endif %}
+if command -v pengj-templates-cli >/dev/null 2>&1; then
+    exec pengj-templates-cli gate hook pre-commit
 fi
 
-exec pengj-templates-cli gate hook pre-commit
+for candidate in \
+    "${PENGJ_INSTALL_DIR:+$PENGJ_INSTALL_DIR/bin/pengj-templates-cli.exe}" \
+    "${PENGJ_INSTALL_DIR:+$PENGJ_INSTALL_DIR/bin/pengj-templates-cli}" \
+    "${LOCALAPPDATA:+$LOCALAPPDATA/pengj-templates/bin/pengj-templates-cli.exe}" \
+    "${XDG_DATA_HOME:+$XDG_DATA_HOME/pengj-templates/bin/pengj-templates-cli}" \
+    "${HOME:+$HOME/.local/share/pengj-templates/bin/pengj-templates-cli}"
+do
+    if [ -x "$candidate" ]; then
+        exec "$candidate" gate hook pre-commit
+    fi
+done
+
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli was not found on PATH or in the installation directory.{% else %}PATH 与安装目录里都找不到 pengj-templates-cli。{% endif %}" >&2
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}install it once and the commit gate comes with it:{% else %}安装一次即可带上提交门禁：{% endif %}" >&2
+echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
+echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}to commit without the local gate for now, use `git commit --no-verify` (the server-side CI still checks every push).{% else %}若暂时无法安装，可用 `git commit --no-verify` 跳过本地门禁（服务端 CI 仍会校验每次推送）。{% endif %}" >&2
+exit 2

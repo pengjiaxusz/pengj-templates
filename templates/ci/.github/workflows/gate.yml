@@ -1,0 +1,46 @@
+name: {% if options["skill_lang"] | default("zh") == "en" %}gate{% else %}提交门禁{% endif %}
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+# {% if options["skill_lang"] | default("zh") == "en" %}The server-side counterpart of the local commit hooks. It needs nothing from the contributor's machine, so a pull request is checked even when the author never installed the CLI.{% else %}本地提交钩子的服务端对应物。它不需要贡献者机器上的任何配置，所以即使作者从未安装 CLI，PR 一样会被校验。{% endif %}
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gate:
+    name: {% if options["skill_lang"] | default("zh") == "en" %}commit message + language guard{% else %}提交标题与语言守卫{% endif %}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # {% if options["skill_lang"] | default("zh") == "en" %}The full history is needed to walk the commit range, and the head ref keeps GitHub's auto-generated merge commit out of the range.{% else %}校验提交范围需要完整历史；检出 head ref 可避免把 GitHub 自动生成的合并提交算进来。{% endif %}
+          fetch-depth: 0
+          ref: {% raw %}${{ github.event.pull_request.head.sha || github.sha }}{% endraw %}
+
+      - name: {% if options["skill_lang"] | default("zh") == "en" %}Install pengj-templates-cli{% else %}安装 pengj-templates-cli{% endif %}
+        env:
+          # {% if options["skill_lang"] | default("zh") == "en" %}A global git setting on the runner buys nothing.{% else %}在 runner 上设全局 git 配置没有意义。{% endif %}
+          PENGJ_SKIP_GLOBAL_HOOKS: "1"
+        run: |
+          curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh
+          echo "${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin" >> "$GITHUB_PATH"
+
+      - name: {% if options["skill_lang"] | default("zh") == "en" %}Check the commit messages{% else %}校验提交标题{% endif %}
+        env:
+          # {% if options["skill_lang"] | default("zh") == "en" %}The base of the range: the target branch for a pull request, the previous commit for a push.{% else %}范围的基准：PR 用目标分支，推送用上一个提交。{% endif %}
+          GATE_BASE: {% raw %}${{ github.event.pull_request.base.sha || github.event.before }}{% endraw %}
+        run: |
+          base="${GATE_BASE:-}"
+          if [ -z "$base" ] || printf '%s' "$base" | grep -qE '^0+$'; then
+            pengj-templates-cli gate check-commits
+          else
+            pengj-templates-cli gate check-commits --base "$base"
+          fi
+
+      - name: {% if options["skill_lang"] | default("zh") == "en" %}Run the code language guard{% else %}运行代码语言守卫{% endif %}
+        run: pengj-templates-cli gate check
