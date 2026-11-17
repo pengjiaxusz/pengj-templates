@@ -1,25 +1,25 @@
 //! The `gate` command-line front end.
 //!
 //! The checks themselves live in the library so the integration tests can
-//! call them directly. This module holds only the argument handling, which is
-//! shared by the standalone `gate` binary and by the `gate` subcommand of the
-//! template CLI — both must behave identically, so they share one parser.
+//! call them directly. This module holds only the argument handling, which
+//! the template CLI exposes as `pengj-templates-cli gate ...` — the single
+//! public entry point of the gate.
 
 use crate::config::Mode;
 use crate::{commit, config, fmt, git, hooks, lang_guard};
 
-/// The help text, shared by the binary and the CLI subcommand.
+/// The help text, shown by `pengj-templates-cli gate --help`.
 pub const HELP: &str = "\
-gate - commit gate for Rust repositories
+pengj-templates-cli gate - commit gate for Rust repositories
 
 USAGE
-  gate [audit] [FLAGS] [FILES...]   code-language guard (default: whole repository)
-  gate fmt [FILES...]               rustfmt the given files and re-stage them
-  gate commit-msg FILE              validate a commit message
-  gate hook pre-commit              staged rustfmt + language guard
-  gate hook commit-msg FILE         commit message validation
-  gate hooks install                point core.hooksPath at .githooks
-  gate selftest                     run the built-in rule self-test
+  pengj-templates-cli gate [audit] [FLAGS] [FILES...]   code-language guard (default: whole repository)
+  pengj-templates-cli gate fmt [FILES...]               rustfmt the given files and re-stage them
+  pengj-templates-cli gate commit-msg FILE              validate a commit message
+  pengj-templates-cli gate hook pre-commit              staged rustfmt + language guard
+  pengj-templates-cli gate hook commit-msg FILE         commit message validation
+  pengj-templates-cli gate hooks install                point core.hooksPath at .githooks
+  pengj-templates-cli gate selftest                     run the built-in rule self-test
 
 FLAGS
   --mode=english|chinese   override `.gate.toml` (env: PENGJ_CODE_LANG)
@@ -222,8 +222,8 @@ fn self_test() -> u8 {
 
 /// Run the gate with the given arguments and return the process exit code.
 ///
-/// The standalone `gate` binary and the `gate` subcommand of the template CLI
-/// both call this, so the two entry points can never drift apart.
+/// `pengj-templates-cli gate ...` is the only public entry point, so there is
+/// exactly one parser to keep honest.
 pub fn run(args: &[String]) -> Result<u8, String> {
     let Some(first) = args.first() else {
         return audit_command(&[]);

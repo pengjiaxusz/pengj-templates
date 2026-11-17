@@ -163,11 +163,11 @@ enum Command {
     },
     /// 提交门禁：约定式提交校验、代码语言守卫与 git 钩子安装
     ///
-    /// 参数原样透传给 gate：
+    /// 门禁内置于本 CLI，无独立二进制；参数原样透传：
     /// `audit`（默认）、`fmt`、`commit-msg <文件>`、`hook pre-commit|commit-msg`、
     /// `hooks install`、`selftest`。
     Gate {
-        /// 透传给 gate 的参数
+        /// 透传给门禁的参数
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },

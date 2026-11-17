@@ -1,4 +1,4 @@
-//! Commit gate: one Rust binary for every git-hook check a repository needs.
+//! Commit gate: one Rust library for every git-hook check a repository needs.
 //!
 //! The crate owns three jobs that used to be spread over a node toolchain:
 //! formatting staged Rust files, guarding the code language, and validating
@@ -8,9 +8,10 @@
 //! Switches live in `.gate.toml`, never in the manifest: the template renders
 //! that file for each project and the manifest stays free to change shape.
 //!
-//! The crate is both a library and a binary. The library lets the template
-//! CLI expose the same checks under `pengj-templates-cli gate ...`, so the
-//! gate travels with the tool a project already installs.
+//! The crate is a library only. The gate ships inside `pengj-templates-cli`
+//! and is reachable as `pengj-templates-cli gate ...`, so a project installs
+//! one binary and gets the template engine, the MCP installer and the commit
+//! gate at the same time. There is no separate `gate` binary to keep in sync.
 
 pub mod cli;
 pub mod commit;

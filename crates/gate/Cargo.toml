@@ -4,12 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "提交门禁：git hooks、约定式提交校验与代码语言守卫（无第三方依赖）"
+description = "提交门禁内部库：git hooks、约定式提交校验与代码语言守卫（零第三方依赖，仅由 pengj-templates-cli gate 暴露）"
 
 [lib]
 name = "pengj_gate"
 path = "src/lib.rs"
-
-[[bin]]
-name = "gate"
-path = "src/main.rs"
