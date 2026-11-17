@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.69.0...v0.70.0) (2026-11-17)
+
+
+### Features
+
+* **agent:** 合入 mattpocock 工程与效率技能集 ([b374cf0](https://github.com/pengjiaxusz/pengj-templates/commit/b374cf0109d93966c7b7ccd14258144706ce9e33))
+
 ## [0.69.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.68.0...v0.69.0) (2026-11-17)
 
 
