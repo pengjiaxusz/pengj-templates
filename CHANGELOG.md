@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.4](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.3...v0.62.4) (2026-11-17)
+
+
+### Bug Fixes
+
+* **core:** 受管块注释跟随 skill_lang,消除引擎层英文残留 ([052465b](https://github.com/pengjiaxusz/pengj-templates/commit/052465b5ef5b8245eb5d1519058d3df0c1d846b5))
+
 ## [0.62.3](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.2...v0.62.3) (2026-11-17)
 
 
