@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.65.0...v0.65.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **templates:** 环境自检按实际钩子状态判定激活结果 ([e3167b2](https://github.com/pengjiaxusz/pengj-templates/commit/e3167b2a99936973865cbbf897ce8ae10b907d65))
+
 ## [0.65.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.64.0...v0.65.0) (2026-11-17)
 
 
