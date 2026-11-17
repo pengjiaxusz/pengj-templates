@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.73.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.72.0...v0.73.0) (2026-11-17)
+
+
+### Features
+
+* **agent:** 补齐 workbuddy 链接并把 CLI 缺失判为错误 ([007ed7c](https://github.com/pengjiaxusz/pengj-templates/commit/007ed7c9c28a0a3cd8ae1b3eaeca8f0aebdbb7e0))
+
 ## [0.72.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.71.0...v0.72.0) (2026-11-17)
 
 
