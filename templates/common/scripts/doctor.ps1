@@ -143,28 +143,21 @@ if ($inside) {
     } elseif ($local) {
         Report-Warn "core.hooksPath is '$local', not .githooks; the commit gate is not active here"
     } elseif ($Fix) {
+        # Activate through the first available path, but judge the outcome by
+        # the resulting git state: an informational line failing to print must
+        # not turn a successful activation into an error.
         if ((Test-Path ".githooks/install.sh") -and (Test-Tool sh)) {
-            & sh .githooks/install.sh
-            if ($LASTEXITCODE -eq 0) {
-                Report-Ok "commit hooks activated (core.hooksPath=.githooks)"
-            } else {
-                Report-Fail "could not activate the commit hooks; run: sh .githooks/install.sh"
-            }
+            & sh .githooks/install.sh | Out-Null
         } elseif (Test-Tool pengj-templates-cli) {
             & pengj-templates-cli gate hooks install | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Report-Ok "commit hooks activated (core.hooksPath=.githooks)"
-            } else {
-                Report-Fail "could not activate the commit hooks; run: git config core.hooksPath .githooks"
-            }
         } else {
             & git config core.hooksPath .githooks | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                & git update-index --chmod=+x .githooks/pre-commit .githooks/commit-msg 2>$null | Out-Null
-                Report-Ok "commit hooks activated (core.hooksPath=.githooks)"
-            } else {
-                Report-Fail "could not set core.hooksPath; run: git config core.hooksPath .githooks"
-            }
+        }
+        & git update-index --chmod=+x .githooks/pre-commit .githooks/commit-msg 2>$null | Out-Null
+        if ((& git config --local --get core.hooksPath 2>$null) -eq ".githooks") {
+            Report-Ok "commit hooks activated (core.hooksPath=.githooks)"
+        } else {
+            Report-Fail "could not activate the commit hooks; run: git config core.hooksPath .githooks"
         }
     } elseif ($legacyGlobal) {
         Report-Warn "commit hooks are active through the legacy global dispatcher; run 'pwsh -NoProfile -File scripts/doctor.ps1 --fix' to switch to per-repository activation"

@@ -133,25 +133,23 @@ if have git && git rev-parse --show-toplevel >/dev/null 2>&1; then
     elif [ -n "$local_hooks" ]; then
         warn "core.hooksPath is '$local_hooks', not .githooks; the commit gate is not active here"
     elif [ "$fix" = "1" ]; then
+        # Activate through the first available path, but judge the outcome by
+        # the resulting git state: an informational line failing to print must
+        # not turn a successful activation into an error.
         if [ -f .githooks/install.sh ]; then
-            if sh .githooks/install.sh; then
-                ok "commit hooks activated (core.hooksPath=.githooks)"
-            else
-                fail "could not activate the commit hooks; run: sh .githooks/install.sh"
-            fi
+            sh .githooks/install.sh >/dev/null || true
         elif have pengj-templates-cli; then
-            if pengj-templates-cli gate hooks install >/dev/null; then
-                ok "commit hooks activated (core.hooksPath=.githooks)"
-            else
-                fail "could not activate the commit hooks; run: git config core.hooksPath .githooks"
-            fi
-        elif git config core.hooksPath .githooks; then
-            # Record the mode bit when the hooks are already tracked, so clones
-            # on Unix do not silently skip them.
-            git update-index --chmod=+x .githooks/pre-commit .githooks/commit-msg 2>/dev/null || true
+            pengj-templates-cli gate hooks install >/dev/null 2>&1 || true
+        else
+            git config core.hooksPath .githooks || true
+        fi
+        # Record the mode bit when the hooks are already tracked, so clones on
+        # Unix do not silently skip them.
+        git update-index --chmod=+x .githooks/pre-commit .githooks/commit-msg 2>/dev/null || true
+        if [ "$(git config --local --get core.hooksPath 2>/dev/null || true)" = ".githooks" ]; then
             ok "commit hooks activated (core.hooksPath=.githooks)"
         else
-            fail "could not set core.hooksPath; run: git config core.hooksPath .githooks"
+            fail "could not activate the commit hooks; run: git config core.hooksPath .githooks"
         fi
     elif [ "$legacy_global" = "1" ]; then
         warn "commit hooks are active through the legacy global dispatcher; run 'sh scripts/doctor.sh --fix' to switch to per-repository activation"

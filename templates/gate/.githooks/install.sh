@@ -41,4 +41,10 @@ else
     echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
 fi
 
-echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}the local commit gate is enabled: core.hooksPath=.githooks{% else %}本地提交门禁已启用：core.hooksPath=.githooks{% endif %}"
+configured=$(git config --local --get core.hooksPath 2>/dev/null || true)
+if [ "$configured" = ".githooks" ]; then
+    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}the local commit gate is enabled: core.hooksPath=.githooks{% else %}本地提交门禁已启用：core.hooksPath=.githooks{% endif %}" 2>/dev/null || true
+else
+    echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}could not write core.hooksPath; run: git config core.hooksPath .githooks{% else %}未能写入 core.hooksPath；请手动执行 git config core.hooksPath .githooks{% endif %}" >&2
+    exit 1
+fi
