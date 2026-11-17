@@ -320,28 +320,31 @@ pub fn default_templates_dir() -> Result<PathBuf> {
     ))
 }
 
-/// 平台数据目录下的模板根：Windows `%LOCALAPPDATA%\pengj-templates\templates`，
-/// Unix `$XDG_DATA_HOME`（默认 `~/.local/share`）下的 `pengj-templates/templates`。
+/// 平台数据目录（安装根）：Windows `%LOCALAPPDATA%\pengj-templates`，
+/// Unix `$XDG_DATA_HOME`（默认 `~/.local/share`）下的 `pengj-templates`。
 ///
-/// 安装脚本把可执行文件放进 PATH、把模板放进数据目录时，靠这条找到模板。
+/// 一键安装脚本把可执行文件放进 `<根>/bin`、把模板放进 `<根>/templates`；
+/// CLI 的运行时状态（如更新检查缓存）也落在同一目录，不会散落到系统各处。
 #[cfg(windows)]
-fn platform_data_templates_dir() -> Option<PathBuf> {
+pub fn platform_data_dir() -> Option<PathBuf> {
     let base = env::var_os("LOCALAPPDATA")?;
-    Some(
-        PathBuf::from(base)
-            .join("pengj-templates")
-            .join("templates"),
-    )
+    Some(PathBuf::from(base).join("pengj-templates"))
 }
 
+/// 平台数据目录（安装根），见 [`platform_data_dir`] 的 Windows 版本。
 #[cfg(not(windows))]
-fn platform_data_templates_dir() -> Option<PathBuf> {
+pub fn platform_data_dir() -> Option<PathBuf> {
     let base = env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .or_else(|| {
             env::var_os("HOME").map(|home| PathBuf::from(home).join(".local").join("share"))
         })?;
-    Some(base.join("pengj-templates").join("templates"))
+    Some(base.join("pengj-templates"))
+}
+
+/// 平台数据目录下的模板根；安装脚本把模板放进数据目录时靠这条找到。
+fn platform_data_templates_dir() -> Option<PathBuf> {
+    platform_data_dir().map(|dir| dir.join("templates"))
 }
 
 /// 需要按层累加拼接而非后层覆盖的文件（如 `.gitignore`、`.gitattributes`）。

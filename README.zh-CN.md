@@ -71,6 +71,7 @@ cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # 巡�
 cargo run -p pengj-templates-cli -- check-lang --dir ./my-app           # 校验文案语言轴（en 零汉字；zh 文案含中文）
 cargo run -p pengj-templates-cli -- repo status --dir ./my-app          # 检查工作区链接、Git 配置与子模块
 cargo run -p pengj-templates-cli -- repo init --dir ./my-app            # 创建缺失的工作区链接（幂等，不覆盖）
+cargo run -p pengj-templates-cli -- check-update                       # 查 CLI 自身有没有新版本
 ```
 
 **just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`bque` / `gate` / `rust` / `rust-workspace` 层分别产出 `just/bque.just`、`just/gate.just`、`just/rust.just`、`just/rust-workspace.just`，四层都依赖 `just`；`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾 `bque` 层会自动补齐 `bque` 技能，避免半接入；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。
@@ -80,6 +81,21 @@ cargo run -p pengj-templates-cli -- repo init --dir ./my-app            # 创建
 `agent` 层的技能与规范选项（选 agent 层时生效）：`--skills git-workflow,caveman,grill-me,write-docs,template-sync,subrepo-sync,write-a-skill` 决定生成哪些技能（逗号分隔，默认全部）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）、`--commit-and-push` 要求 Agent 阶段性完工与收尾时自动提交并推送到远端仓库（默认关）。`mcp-bootstrap` 是基线技能：只要有 agent 层就始终附带（显式传空技能列表除外），保证项目离开模板仓库后仍能自行安装与校验 MCP。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `git-workflow`（约定式提交与分支同步）、`template-sync`（模板同步/纳管）、`subrepo-sync`（子仓库同步与升级）、`bque`（编译排队）、`caveman`（超压缩通信）、`grill-me` / `grilling`（设计质询）、`write-docs`（通用文档编写与更新，规则由项目自己决定）、`write-a-skill`（新增技能）、`mcp-bootstrap`（项目内 MCP 安装与握手校验），以及合入的 `engineering`（20 个：`tdd`、`code-review`、`codebase-design`、`diagnosing-bugs`、`domain-modeling`、`grill-with-docs`、`implement`、`implement-spec`、`improve-codebase-architecture`、`pr`、`prototype`、`research`、`retro`、`setup-matt-pocock-skills`、`to-spec`、`to-tickets`、`triage`、`wayfinder`、`wizard`、`ask-matt`）与 `productivity`（`grilling`、`handoff`、`teach`、`to-questionnaire`、`wait-what`、`writing-for-agents`）技能集，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可；模板删掉某个技能后，存量项目 manifest 里遗留的技能名会在 `update` / `add-layer` 时自动清理（输出 `[清理]` 行），不会长期与磁盘实际技能不一致。三条语言选项互相独立：**中文编程**（代码标识符，`chinese_programming`）、**项目文案语言**（`skill_lang`，决定所有层的注释、报错、日志与技能文档）、**提交信息语言**（`commit_zh`，决定门禁的提交主题语言规则与提交规范文档）；技能脚本恒为英文，无选项。全英文项目须同时传 `--skill-lang en --no-commit-zh`，生成后所有文本文件零汉字（有端到端单测保障）。
 
 **技能扩展**：每个技能 = 托管框架 + 项目专属区。`SKILL.md` 的 `PENGJ_TEMPLATE_START/END` 块内是模板框架（`update` 时原位替换），块外归项目所有、永不覆盖——提交前检查的定义、领域判定表、红线全部写在块外；可执行门禁用什么形式（任意语言脚本 / task runner / 纯清单）由项目自定并在块外声明，框架不预设实现。存量全自定义技能纳管时自动接管：模板整页（含 description）直接覆盖，原正文下移到「纳管过渡区」，双流程由用户合并去重。
+
+### 更新检查（CLI 自身版本）
+
+CLI 自带更新检查：每天最多问一次 GitHub「有没有新版本」，有更新就在命令跑完后提示一行升级命令（Release 里每版都带 `install.ps1` / `install.sh`，重跑安装脚本即完成升级——二进制与模板一起换，不会出现「CLI 新、模板旧」）。
+
+```bash
+pengj-templates-cli check-update          # 立即检查（同步联网，退出码不受结果影响）
+pengj-templates-cli check-update --json   # 给脚本用：current / latest / updateAvailable
+```
+
+- **不拖慢命令**：启动时只读一次本地缓存。真到该联网时，把活派给一个独立的隐藏子进程（`__update-check`）——父进程立刻继续干活；子进程不占终端，父进程退出后它照样跑完，把结果写进 `update-check.json`（Windows `%LOCALAPPDATA%\pengj-templates\`，Unix `${XDG_DATA_HOME:-~/.local/share}/pengj-templates/`），供下一次运行提示。
+- **不反复打扰**：联网默认 24 小时一次（`PENGJ_UPDATE_CHECK_INTERVAL=3600` / `12h` / `1d` 可改，`off` 关闭），提示本身也是每天最多一次；发现比上次提示更新的版本时立刻提示。
+- **安静**：提示只写 stderr，且只在 stderr 是终端时出现——管道、脚本、AI agent 调用看不到噪音；`gate` 跑在 git 钩子里，一律不检查；`CI` 环境自动跳过。
+- **关掉**：`--no-update-check`（全局参数）或 `PENGJ_NO_UPDATE_CHECK=1`。
+- **换源**：`PENGJ_UPDATE_API` 把查询地址指到镜像或自建接口（返回 GitHub 同构的 `releases/latest` JSON）。
 
 ### MCP 安装与巡检（`mcp` 子命令）
 

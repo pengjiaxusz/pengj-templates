@@ -49,6 +49,17 @@
 
 > EN: the commit gate has zero third-party dependencies; rules live in config.rs / commit.rs; hooks need `core.hooksPath=.githooks` plus the executable bit recorded in the index; hook files carry the `gate hook` marker; the corpus pins the gate to commitlint's verdicts; the gate is an internal library reached only through `pengj-templates-cli gate ...` — one binary covers the template engine, the MCP installer and the commit gate. There is exactly one implementation: the hooks only locate the CLI and hand over, and block the commit with install instructions when it is missing (the old shell fallback is gone), while the `ci` job runs the same binary behind a required status check.
 
+## 更新检查规范 / Update check (crates/cli/src/update.rs)
+
+- **主流程一次网络调用都不许有**：`begin()` 只读本地缓存；该联网时派生隐藏子进程（`__update-check`）去查，父进程立刻返回。任何把 HTTP 调用放回主线程的改法都是回归。
+- **节奏与文案集中在 `update.rs` 的常量与 `due` / `notice_due`**：联网间隔默认 24h、提示间隔默认 24h，改判定只能改这两个函数，不要在调用点加临时条件。
+- **状态只落平台数据目录**（`pengj_core::platform_data_dir()` 下的 `update-check.json`），原子写（`.tmp` + rename）；禁止写到工作目录或仓库里。
+- **提示只走 stderr 且只在 stderr 是终端时打印**；`gate`（git 钩子）与 `check-update`（自己联网）必须排除在自动检查之外，CI 与 `PENGJ_NO_UPDATE_CHECK` / `--no-update-check` 全关。
+- **提前退出必须走 `update::exit()`**：`main.rs` 里所有 `std::process::exit` 都换成了它，新加的退出路径同样要走，否则提示会随提前退出丢掉。
+- 版本比较是自己实现的简化 semver（`Version`）：预发布比正式版低、数字段按数值比；不要为了「顺手」引第三方 semver 依赖。
+
+> EN: no network call on the main path — `begin()` only reads the local cache and hands a due check to the detached `__update-check` child. Cadence lives in `due` / `notice_due` and the constants above them; state stays in `platform_data_dir()/update-check.json` with atomic writes; the notice is stderr-only and terminal-only, and `gate` / `check-update` / CI / `PENGJ_NO_UPDATE_CHECK` / `--no-update-check` skip the automatic check; every early exit goes through `update::exit()` so the notice is never lost; version comparison is the local simplified semver.
+
 ## 模板层规范 / Template layers (templates/)
 
 - **新增层** = `templates/<layer>/` 目录 + `layer.toml`（`name` / `description` / `depends` / `update_ignore`），自动发现、无需注册。

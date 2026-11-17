@@ -13,6 +13,8 @@ minijinja = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
+# 更新检查只需要一次 HTTPS GET；去掉 gzip/字符集等附加特性，避免拖大依赖树
+ureq = { version = "2", default-features = false, features = ["tls"] }
 sha2 = "0.11"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }

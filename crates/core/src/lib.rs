@@ -16,8 +16,8 @@ pub(crate) mod toml_merge;
 
 pub use engine::{
     add_layers_to_project, adopt_project, audit_project, default_templates_dir, generate,
-    list_workspace_files, sync_workspace_file, update_project, update_project_with_options,
-    Templates,
+    list_workspace_files, platform_data_dir, sync_workspace_file, update_project,
+    update_project_with_options, Templates,
 };
 pub use engine::{
     AddLayersReport, AdoptReport, AuditFileStatus, AuditItem, AuditReport, ConflictInfo,

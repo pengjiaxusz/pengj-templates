@@ -5,6 +5,8 @@ use std::time::Duration;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 
+mod update;
+
 #[derive(Parser)]
 #[command(
     name = "pengj-templates-cli",
@@ -15,6 +17,9 @@ struct Cli {
     /// 模板根目录（默认定位 PENGJ_TEMPLATES > 可执行文件旁 templates > 当前目录 templates）
     #[arg(long, global = true)]
     templates: Option<PathBuf>,
+    /// 跳过 CLI 自身的更新检查（等效于设置环境变量 PENGJ_NO_UPDATE_CHECK=1）
+    #[arg(long = "no-update-check", global = true)]
+    no_update_check: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -193,6 +198,20 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// 立即检查 CLI 是否有新版本（同步联网，不写提示状态之外的任何东西）
+    ///
+    /// 日常运行时由后台异步检查代替，这条命令用于脚本或想立刻知道答案的场合。
+    CheckUpdate {
+        /// 以 JSON 格式输出（供脚本/自动化消费）
+        #[arg(long)]
+        json: bool,
+        /// 联网超时（秒，默认 8）
+        #[arg(long)]
+        timeout: Option<u64>,
+    },
+    /// 后台更新检查本体（内部使用，不由用户直接调用）
+    #[command(name = "__update-check", hide = true)]
+    BackgroundUpdateCheck,
 }
 
 #[derive(Subcommand, Clone)]
@@ -293,6 +312,34 @@ enum RepoCommand {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    // 后台更新检查本体：先于一切分发处理，不加载模板、也不会再触发一次检查
+    if matches!(cli.command, Command::BackgroundUpdateCheck) {
+        std::process::exit(update::run_background());
+    }
+    // 更新检查只影响「提示」这一层，不改变任何命令的行为。
+    // gate 跑在 git 钩子里，要求绝对安静、绝对快，一律跳过；
+    // check-update 自己就会同步联网，不必再派生后台检查。
+    let skip = cli.no_update_check
+        || matches!(
+            cli.command,
+            Command::Gate { .. } | Command::CheckUpdate { .. }
+        );
+    update::begin(skip);
+    let result = run(cli);
+    update::finish();
+    result
+}
+
+fn run(cli: Cli) -> anyhow::Result<()> {
+    // check-update 只查版本，不依赖模板目录，提前分发
+    if let Command::CheckUpdate { json, timeout } = &cli.command {
+        let options = update::CheckOptions {
+            json: *json,
+            timeout: *timeout,
+        };
+        update::run_check(&options)?;
+        return Ok(());
+    }
     // repo 子命令只作用于项目目录，不依赖模板目录，提前分发
     if let Command::Repo { cmd } = &cli.command {
         return cmd_repo(cmd.clone());
@@ -306,7 +353,7 @@ fn main() -> anyhow::Result<()> {
         let code =
             pengj_gate::cli::run(args).map_err(|message| anyhow::anyhow!("[gate] {message}"))?;
         if code != 0 {
-            std::process::exit(i32::from(code));
+            update::exit(i32::from(code));
         }
         return Ok(());
     }
@@ -390,7 +437,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             if any_violations {
-                std::process::exit(1);
+                update::exit(1);
             }
             Ok(())
         }
@@ -403,7 +450,7 @@ fn main() -> anyhow::Result<()> {
             };
             let has_violations = cmd_check_lang(&dir, override_lang, json)?;
             if has_violations {
-                std::process::exit(1);
+                update::exit(1);
             }
             Ok(())
         }
@@ -438,6 +485,8 @@ fn main() -> anyhow::Result<()> {
         Command::Repo { .. } => unreachable!("repo 子命令已在加载模板前分发"),
         Command::Mcp { .. } => unreachable!("mcp 子命令已在加载模板前分发"),
         Command::Gate { .. } => unreachable!("gate 子命令已在加载模板前分发"),
+        Command::CheckUpdate { .. } => unreachable!("check-update 子命令已在加载模板前分发"),
+        Command::BackgroundUpdateCheck => unreachable!("后台更新检查已在入口处分发"),
     }
 }
 
@@ -1078,7 +1127,7 @@ fn cmd_mcp_doctor(
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
         if report.problems() > 0 {
-            std::process::exit(1);
+            update::exit(1);
         }
         return Ok(());
     }
@@ -1139,7 +1188,7 @@ fn cmd_mcp_doctor(
         problems
     );
     if problems > 0 {
-        std::process::exit(1);
+        update::exit(1);
     }
     Ok(())
 }
@@ -1156,7 +1205,7 @@ fn cmd_repo(cmd: RepoCommand) -> anyhow::Result<()> {
             let report = pengj_core::repo_status(&root, &specs)?;
             print_repo_report(&report, json);
             if !report.ok {
-                std::process::exit(1);
+                update::exit(1);
             }
             Ok(())
         }
@@ -1171,7 +1220,7 @@ fn cmd_repo(cmd: RepoCommand) -> anyhow::Result<()> {
             let report = pengj_core::repo_init(&root, &specs, !no_submodules)?;
             print_repo_report(&report, json);
             if !report.ok {
-                std::process::exit(1);
+                update::exit(1);
             }
             Ok(())
         }
