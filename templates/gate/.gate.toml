@@ -1,23 +1,69 @@
-# .gate.toml — {% if options["skill_lang"] | default("zh") == "en" %}the commit gate's configuration{% else %}提交门禁的配置{% endif %}
+# PENGJ_TEMPLATE_START
+{%- if options["skill_lang"] | default("zh") == "en" %}
+# .gate.toml — the commit gate's configuration
 #
-# {% if options["skill_lang"] | default("zh") == "en" %}The gate is a standalone Rust binary with no third-party dependencies, so every switch it understands lives here instead of in the project manifest. The template renders this file at generation time; the project owns it afterwards and may edit it freely.{% else %}门禁是一个零第三方依赖的独立 Rust 二进制，它认识的每一个开关都写在这里，而不是项目清单里。模板在生成时渲染本文件；生成之后归项目所有，可自由修改。{% endif %}
+# [template-managed block] `update` replaces only what sits between START and END; the
+# values below the block belong to this project and are never overwritten. Delete the
+# block and `update` prepends a fresh one and asks you to review the leftover prose.
 #
-# {% if options["skill_lang"] | default("zh") == "en" %}The accepted syntax is a flat TOML subset: `key = value` plus `section.key = value` for grouped settings. Unknown keys are ignored so an older binary keeps working against a newer config, but a malformed value is a hard error — a typo must never silently disable a check.{% else %}可接受的语法是扁平 TOML 子集：`key = value`，分组配置写成 `section.key = value`。未知键会被忽略，这样旧二进制面对新配置仍能工作；但值类型写错是硬错误——一个笔误绝不能悄悄关掉某项检查。{% endif %}
+# The gate is a standalone Rust binary with no third-party dependencies (it ships inside
+# pengj-templates-cli), so every switch it understands lives here rather than in the
+# project manifest. The accepted syntax is a flat TOML subset: `key = value`, with
+# grouped settings written as `section.key = value`. Unknown keys are ignored so an
+# older binary keeps working against a newer config, but a malformed value is a hard
+# error — a typo must never silently disable a check.
+#
+# Keys:
+#   mode                    chinese | english. Drives the code language guard, which
+#                           rejects comments written in the other language.
+#   lang.max_ratio          tolerated share of string violations per file, 0 = none.
+#   lang.max_ident_ratio    tolerated share of identifier violations per file.
+#   commit.subject_lang     subject language: zh | en.
+#   commit.subject_min_han  minimum Han characters in a Chinese subject.
+#   commit.max_header       maximum characters in the header line.
+#   commit.types            allowed conventional-commit types.
+#   commit.scopes           three-state scope policy. Drop the key or set [] to reject
+#                           every scope; ["*"] accepts any scope; a list pins a
+#                           whitelist (a segmented scope like `a/b` must match each part).
+#
+# Editing this block is pointless — the next `update` overwrites it. Edit the values.
+# Only keys below the block: prose sitting outside it would be frozen forever, which is
+# exactly the rot this block exists to avoid. `commit.scopes = ["*"]` ships permissive;
+# tighten it to a crate-name list once the project settles.
+{%- else %}
+# .gate.toml —— 提交门禁的配置
+#
+# 【本块由模板托管】update 只替换 START/END 之间的说明，块以下的配置值归项目所有，
+# 永不被覆盖。若你把本块整段删掉，update 会重新置顶插入一份并提示你复核残留的旧说明。
+#
+# 门禁是一个零第三方依赖的独立 Rust 二进制（随 pengj-templates-cli 一起安装），它认识的
+# 每一个开关都写在这里，而不是项目清单里。可接受的语法是扁平 TOML 子集：`key = value`，
+# 分组配置写成 `section.key = value`。未知键会被忽略，这样旧二进制面对新配置仍能工作；
+# 但值类型写错是硬错误——一个笔误绝不能悄悄关掉某项检查。
+#
+# 键一览：
+#   mode                     chinese | english，驱动代码语言守卫：反向语言的注释会被拦下。
+#   lang.max_ratio           单文件字符串违规的容忍比例，0 表示完全禁止。
+#   lang.max_ident_ratio     单文件标识符违规的容忍比例，0 表示完全禁止。
+#   commit.subject_lang      提交主题语言：zh | en。
+#   commit.subject_min_han   中文主题至少要包含的汉字数。
+#   commit.max_header        标题行字符上限。
+#   commit.types             允许的约定式提交类型。
+#   commit.scopes            scope 三态：整行或整段删掉 = 拒绝所有 scope；["*"] = 放行
+#                            任意 scope；列出条目 = 只放行这些（`a/b` 这类分段 scope
+#                            要求每一段都命中）。
+#
+# 改这一块没有意义——下次 update 会覆盖。要改就改下面的值。
+# 块以下只有键值、没有注释：这是刻意的——说明放在块外就成了永远不更新的冻结文案，
+# 正是本块要根治的那种腐烂。`commit.scopes` 默认放行任意 scope，项目稳定后再收紧成 crate 名列表。
+{%- endif %}
+# PENGJ_TEMPLATE_END
 
-# {% if options["skill_lang"] | default("zh") == "en" %}The code language of the project: `english` or `chinese`. It drives the code language guard, which rejects Chinese comments in English code and English comments in Chinese code.{% else %}项目的代码语言：`english` 或 `chinese`。它驱动代码语言守卫：英文代码里出现中文注释、或中文代码里出现英文注释，都会被拦下。{% endif %}
 {% if options["chinese_programming"] | default(false) %}mode = "chinese"{% else %}mode = "english"{% endif %}
-
-# {% if options["skill_lang"] | default("zh") == "en" %}Per-file tolerance for string violations and identifier violations. `0` forbids them outright.{% else %}单个文件里字符串违规与标识符违规的容忍比例。`0` 表示完全禁止。{% endif %}
 lang.max_ratio = 0.01
 lang.max_ident_ratio = 0.0
-
-# {% if options["skill_lang"] | default("zh") == "en" %}The subject language of a commit message: `zh` or `en`.{% else %}提交信息主题的语言：`zh` 或 `en`。{% endif %}
 {% if options["commit_zh"] | default(false) %}commit.subject_lang = "zh"{% else %}commit.subject_lang = "en"{% endif %}
-# {% if options["skill_lang"] | default("zh") == "en" %}A Chinese subject must carry at least this many Han characters.{% else %}中文主题至少要包含这么多个汉字。{% endif %}
 commit.subject_min_han = 2
-# {% if options["skill_lang"] | default("zh") == "en" %}The header may not exceed this many characters.{% else %}标题行不得超过这么多个字符。{% endif %}
 commit.max_header = 100
-# {% if options["skill_lang"] | default("zh") == "en" %}The allowed conventional-commit types.{% else %}允许的约定式提交类型。{% endif %}
 commit.types = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore", "revert"]
-# {% if options["skill_lang"] | default("zh") == "en" %}The allowed scopes. Leave this key out or keep the list empty to reject every scope; use ["*"] to allow any scope; list crate names to pin a whitelist.{% else %}允许的 scope 白名单。省略本行或留空列表表示拒绝任何 scope；填入 ["*"] 放行所有；填入 crate 名则只放行列出的 scope。{% endif %}
-commit.scopes = []
+commit.scopes = ["*"]
