@@ -39,6 +39,17 @@ pub const MIGRATIONS: &[MigrationNote] = &[
                  机器上没有 CLI 时先跑 `just doctor --install-cli`（或其提示里的安装命令），\
                  重开终端后再跑一次 doctor",
     },
+    MigrationNote {
+        version: "0.74.0",
+        summary: "模板产物从项目根收敛到 `.pengj-templates/`：清单 `.pengj-templates.json` → \
+                  `.pengj-templates/manifest.json`、门禁配置 `.gate.toml` → `.pengj-templates/gate.toml`、\
+                  自检脚本 `scripts/doctor*` → `.pengj-templates/scripts/`、配方模块 `just/*.just` → \
+                  `.pengj-templates/just/`。根目录只保留 `justfile` 与 `.githooks/`",
+        action: "先 `git mv .pengj-templates.json .pengj-templates/manifest.json`，再跑 update：\
+                 新版把其余产物写到新路径并删除根上的旧副本；根 `scripts/` 里项目自有的脚本留在原处。\
+                 `.gate.toml` 的配置值要手工搬进 `.pengj-templates/gate.toml`（该文件归项目所有，\
+                 update 只刷新说明块、不覆盖值），搬完删掉根上的旧文件再跑一次 update 清账本",
+    },
 ];
 
 /// 当前工具的版本（crate 版本即发布版本）
