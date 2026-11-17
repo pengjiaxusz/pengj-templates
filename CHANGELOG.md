@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.3](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.2...v0.62.3) (2026-11-17)
+
+
+### Bug Fixes
+
+* **templates:** 补齐模板层漏掉的 skill_lang 双语分支 ([f75ca89](https://github.com/pengjiaxusz/pengj-templates/commit/f75ca891decd0ec8d295612e8389ea51f4590db8))
+
 ## [0.62.2](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.1...v0.62.2) (2026-11-17)
 
 
