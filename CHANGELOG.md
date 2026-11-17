@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.67.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.66.0...v0.67.0) (2026-11-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **gate:** commit.scopes 空列表从放行所有改为拒绝所有，老项目需设 ["*"] 恢复旧行为
+
+### Features
+
+* **gate:** scope 白名单改为拒绝优先的三态策略 ([991a777](https://github.com/pengjiaxusz/pengj-templates/commit/991a77799cf543eea7811ee478ee9aac6b6f1579))
+
 ## [0.66.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.65.3...v0.66.0) (2026-11-17)
 
 
