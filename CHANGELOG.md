@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.65.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.64.0...v0.65.0) (2026-11-17)
+
+
+### Features
+
+* **templates:** 新增统一 doctor 并按项目激活门禁钩子 ([045d800](https://github.com/pengjiaxusz/pengj-templates/commit/045d8007965bb1276ca81087751fbfee8e5a3690))
+
 ## [0.64.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.63.1...v0.64.0) (2026-11-17)
 
 
