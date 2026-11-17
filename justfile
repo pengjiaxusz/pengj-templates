@@ -27,9 +27,9 @@ default:
 # justfile for pengj-templates
 # 设置默认 shell 为 pwsh 7（本机默认）
 
-# 克隆后一键初始化：构建 gate、安装 git 钩子并验证编译
+# 克隆后一键初始化：构建 CLI、安装 git 钩子并验证编译
 setup:
-    cargo build -p pengj-gate
+    cargo build -p pengj-templates-cli
     cargo run -q -p pengj-templates-cli -- gate hooks install
     cargo check --workspace
 

@@ -5,34 +5,24 @@
 #   1. 用 rustfmt 格式化暂存区里的 Rust 文件；
 #   2. 代码语言守卫按 `.gate.toml` 检查暂存的文件。
 #
-# 门禁是一个零第三方依赖的独立 Rust 二进制。本钩子按以下顺序定位它：
-#   1. $PENGJ_GATE          —— 显式指定的二进制路径；
-#   2. `gate`               —— PATH 上的独立安装；
-#   3. `pengj-templates-cli` —— CLI 自带 gate 子命令；
-#   4. `crates/gate`        —— 本工作区里内置的一份。
+# 门禁内置在 pengj-templates-cli 里。本钩子优先用 PATH 上的 CLI；
+# 本仓库（模板自身）尚未安装发行版时，退回 cargo run 走工作区源码。
 
 set -e
 
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-if [ -n "${PENGJ_GATE:-}" ]; then
-    exec "${PENGJ_GATE}" hook pre-commit
-fi
-
-if command -v gate >/dev/null 2>&1; then
-    exec gate hook pre-commit
-fi
-
 if command -v pengj-templates-cli >/dev/null 2>&1; then
     exec pengj-templates-cli gate hook pre-commit
 fi
 
-if [ -f "crates/gate/Cargo.toml" ]; then
-    exec cargo run --quiet --manifest-path "crates/gate/Cargo.toml" -- hook pre-commit
+if [ -f "crates/cli/Cargo.toml" ]; then
+    exec cargo run --quiet -p pengj-templates-cli -- gate hook pre-commit
 fi
 
-echo "[gate] the gate binary was not found." >&2
-echo "[gate] point PENGJ_GATE at it, or install it with:" >&2
-echo "[gate]   cargo install --git <repository-url> --bin gate" >&2
+echo "[gate] pengj-templates-cli was not found on PATH." >&2
+echo "[gate] install it once and the commit gate comes with it:" >&2
+echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
+echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
 exit 2
