@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.62.2](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.1...v0.62.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* **core:** 技能路径断言改用平台原生分隔符 ([391de7a](https://github.com/pengjiaxusz/pengj-templates/commit/391de7aaa85b59b145f7743b894a8d7a36e8289b))
+
 ## [0.62.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.62.0...v0.62.1) (2026-11-17)
 
 
