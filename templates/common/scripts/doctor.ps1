@@ -5,8 +5,11 @@
 # every custom check in scripts/doctor.d/*.ps1 in sorted order.
 #
 # Usage:
-#   pwsh -NoProfile -File scripts/doctor.ps1          report only
-#   pwsh -NoProfile -File scripts/doctor.ps1 --fix    also activate the commit hooks
+#   pwsh -NoProfile -File scripts/doctor.ps1                  report only
+#   pwsh -NoProfile -File scripts/doctor.ps1 --fix            also activate the commit hooks
+#   pwsh -NoProfile -File scripts/doctor.ps1 --install-cli    download and install pengj-templates-cli
+#                                                            (the only step that touches the network;
+#                                                            it is never implied by --fix)
 #   (the just recipe forwards `just doctor --fix` unchanged on both platforms)
 #
 # Custom checks: drop *.ps1 files into scripts/doctor.d/. Each script runs from
@@ -17,8 +20,10 @@
 # 下的所有自定义检查。
 #
 # 用法：
-#   pwsh -NoProfile -File scripts/doctor.ps1          仅输出报告
-#   pwsh -NoProfile -File scripts/doctor.ps1 --fix    同时激活提交钩子
+#   pwsh -NoProfile -File scripts/doctor.ps1                  仅输出报告
+#   pwsh -NoProfile -File scripts/doctor.ps1 --fix            同时激活提交钩子
+#   pwsh -NoProfile -File scripts/doctor.ps1 --install-cli    下载并安装 pengj-templates-cli
+#                                                             （唯一会联网的步骤；不会被 --fix 隐含）
 #   （just 配方在两个平台上都原样转发 `just doctor --fix`）
 #
 # 自定义检查：把 *.ps1 放进 scripts/doctor.d/。每个脚本从项目根目录运行，
@@ -27,16 +32,19 @@
 {%- endif %}
 
 $Fix = $false
+$InstallCli = $false
 foreach ($arg in $args) {
     switch ($arg.ToLowerInvariant()) {
         "--fix" { $Fix = $true }
         "-fix" { $Fix = $true }
+        "--install-cli" { $InstallCli = $true }
+        "-installcli" { $InstallCli = $true }
         "-h" {
-            Write-Host "{% if options["skill_lang"] | default("zh") == "en" %}usage: pwsh -NoProfile -File scripts/doctor.ps1 [--fix]{% else %}用法：pwsh -NoProfile -File scripts/doctor.ps1 [--fix]{% endif %}"
+            Write-Host "{% if options["skill_lang"] | default("zh") == "en" %}usage: pwsh -NoProfile -File scripts/doctor.ps1 [--fix] [--install-cli]{% else %}用法：pwsh -NoProfile -File scripts/doctor.ps1 [--fix] [--install-cli]{% endif %}"
             exit 0
         }
         "--help" {
-            Write-Host "{% if options["skill_lang"] | default("zh") == "en" %}usage: pwsh -NoProfile -File scripts/doctor.ps1 [--fix]{% else %}用法：pwsh -NoProfile -File scripts/doctor.ps1 [--fix]{% endif %}"
+            Write-Host "{% if options["skill_lang"] | default("zh") == "en" %}usage: pwsh -NoProfile -File scripts/doctor.ps1 [--fix] [--install-cli]{% else %}用法：pwsh -NoProfile -File scripts/doctor.ps1 [--fix] [--install-cli]{% endif %}"
             exit 0
         }
         default {
@@ -123,10 +131,54 @@ if (Test-Tool bque) {
 {% endif %}
 
 {% if 'gate' in layers or 'agent' in layers %}
+# --- pengj-templates-cli ---------------------------------------------------
+{% if options["skill_lang"] | default("zh") == "en" -%}
+# The commit gate needs it, and the agent-layer workspace links are created by
+# its `repo init`, so both layers require it: missing is an error, not a warning.
+# Installing is the only network access and needs the explicit --install-cli;
+# `--fix` never touches the network.
+{%- else -%}
+# 提交门禁要它跑检查，agent 层的工作区链接由它的 `repo init` 创建，所以两层都
+# 缺不了它：缺失是错误而不是警告。安装是唯一会联网的动作，只由 --install-cli
+# 显式触发——`--fix` 永远不联网。
+{%- endif %}
+$CliReleaseBase = "https://github.com/pengjiaxusz/pengj-templates/releases/latest/download"
+$CliHint = "irm $CliReleaseBase/install.ps1 | iex"
+
+function Install-CliTool {
+{% if options["skill_lang"] | default("zh") == "en" -%}
+    # Run the installer in a child process: it exits on its own, and that must
+    # not take doctor down with it.
+{%- else -%}
+    # 装到独立进程里跑：安装器自己会 exit，不能把 doctor 一起带走。
+{%- endif %}
+    $installer = Join-Path ([System.IO.Path]::GetTempPath()) "pengj-install-$PID.ps1"
+    try {
+        Invoke-RestMethod -Uri "$CliReleaseBase/install.ps1" -OutFile $installer -ErrorAction Stop
+    } catch {
+        Remove-Item $installer -ErrorAction SilentlyContinue
+        return $false
+    }
+    & pwsh -NoProfile -File $installer
+    $code = $LASTEXITCODE
+    Remove-Item $installer -ErrorAction SilentlyContinue
+    return ($code -eq 0)
+}
+
 if (Test-Tool pengj-templates-cli) {
     Report-Ok "pengj-templates-cli $((& pengj-templates-cli --version 2>$null | Select-Object -First 1))"
+} elseif ($InstallCli) {
+    if (Install-CliTool) {
+        if (Test-Tool pengj-templates-cli) {
+            Report-Ok "pengj-templates-cli $((& pengj-templates-cli --version 2>$null | Select-Object -First 1))"
+        } else {
+            Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli is installed but this shell's PATH is stale; reopen the terminal and run doctor again{% else %}pengj-templates-cli 已安装，但当前终端的 PATH 还没刷新；重开终端后再跑一次 doctor{% endif %}"
+        }
+    } else {
+        Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}could not install pengj-templates-cli automatically; install manually: $CliHint{% else %}无法自动安装 pengj-templates-cli；请手动安装：$CliHint{% endif %}"
+    }
 } else {
-    Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; install: irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex{% else %}未找到 pengj-templates-cli；安装命令：irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex{% endif %}"
+    Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; the commit gate and the agent workspace links both need it. Install: $CliHint (or run this script with --install-cli){% else %}未找到 pengj-templates-cli；提交门禁与 agent 工作区链接都依赖它。安装：$CliHint（或给本脚本加 --install-cli）{% endif %}"
 }
 {% endif %}
 
@@ -194,10 +246,10 @@ if (Test-Path ".agents") {
                 Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}could not create the workspace links; run: pengj-templates-cli repo init{% else %}无法创建工作区链接；请运行：pengj-templates-cli repo init{% endif %}"
             }
         } else {
-            Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}workspace links are not ready; run 'just doctor --fix'{% else %}工作区链接未就绪；请运行 'just doctor --fix'{% endif %}"
+            Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}workspace links are not ready; run 'just doctor --fix'{% else %}工作区链接未就绪；请运行 'just doctor --fix'{% endif %}"
         }
     } else {
-        Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; skipping the workspace link check{% else %}未找到 pengj-templates-cli；跳过工作区链接检查{% endif %}"
+        Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; the workspace links cannot be checked or created without it{% else %}未找到 pengj-templates-cli；没有它无法检查或创建工作区链接{% endif %}"
     }
 }
 {% endif %}

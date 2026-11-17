@@ -67,6 +67,12 @@ pub struct RepoReport {
 }
 
 /// 默认工作区链接：仅在项目包含 `.agents` 时启用（agent 层产物）。
+///
+/// 分两类：
+/// - `.trae` 整目录链：Trae 同时读 `rules/`、`skills/` 与 `mcp.json`，只链技能不够；
+///   它写进 `.agents/` 的 `specs|plans|documents` 由模板随附的 `.agents/.gitignore` 挡住。
+/// - `.claude/skills`、`.workbuddy/skills` 点路径链：这两个客户端目录里还有自己的状态
+///   （Claude 的 settings、WorkBuddy 的 memory/_inbox），整目录链会把状态搬进受管目录。
 pub fn default_links(root: &Path) -> Vec<LinkSpec> {
     if !root.join(".agents").is_dir() {
         return Vec::new();
@@ -78,6 +84,10 @@ pub fn default_links(root: &Path) -> Vec<LinkSpec> {
         },
         LinkSpec {
             link: ".claude/skills".to_string(),
+            target: ".agents/skills".to_string(),
+        },
+        LinkSpec {
+            link: ".workbuddy/skills".to_string(),
             target: ".agents/skills".to_string(),
         },
     ]
@@ -516,9 +526,10 @@ mod tests {
         assert!(default_links(&root).is_empty());
         fs::create_dir_all(root.join(".agents/skills")).unwrap();
         let links = default_links(&root);
-        assert_eq!(links.len(), 2);
+        assert_eq!(links.len(), 3);
         assert_eq!(links[0].link, ".trae");
         assert_eq!(links[1].link, ".claude/skills");
+        assert_eq!(links[2].link, ".workbuddy/skills");
         fs::remove_dir_all(&root).ok();
     }
 
@@ -526,7 +537,11 @@ mod tests {
     fn init_creates_links_and_is_idempotent() {
         let root = temp_root("init");
         fs::create_dir_all(root.join(".agents/skills")).unwrap();
-        fs::write(root.join(".gitignore"), "/.trae\n/.claude/skills\n").unwrap();
+        fs::write(
+            root.join(".gitignore"),
+            "/.trae\n/.claude/skills\n/.workbuddy\n",
+        )
+        .unwrap();
         git_init(&root);
 
         let links = default_links(&root);
@@ -534,6 +549,8 @@ mod tests {
         assert!(report.ok, "{report:?}");
         assert!(root.join(".trae").exists());
         assert!(root.join(".claude/skills").exists());
+        // `.workbuddy` 事先不存在：父目录要由 init 自己补出来。
+        assert!(root.join(".workbuddy/skills").exists());
 
         let again = repo_init(&root, &links, false).unwrap();
         assert!(again.ok, "{again:?}");
@@ -552,7 +569,11 @@ mod tests {
         fs::create_dir_all(root.join(".agents/skills")).unwrap();
         fs::create_dir_all(root.join(".trae")).unwrap();
         fs::write(root.join(".trae/keep.txt"), "keep").unwrap();
-        fs::write(root.join(".gitignore"), "/.trae\n/.claude/skills\n").unwrap();
+        fs::write(
+            root.join(".gitignore"),
+            "/.trae\n/.claude/skills\n/.workbuddy\n",
+        )
+        .unwrap();
         git_init(&root);
 
         let links = default_links(&root);
@@ -563,6 +584,27 @@ mod tests {
             .items
             .iter()
             .any(|item| item.name == ".trae" && item.status == RepoStatus::Conflict));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn init_keeps_client_state_when_linking_into_it() {
+        let root = temp_root("client-state");
+        fs::create_dir_all(root.join(".agents/skills")).unwrap();
+        // 客户端自己已经在 `.workbuddy` 里写了状态，链接只能补在里面。
+        fs::create_dir_all(root.join(".workbuddy/memory")).unwrap();
+        fs::write(root.join(".workbuddy/memory/MEMORY.md"), "keep").unwrap();
+        fs::write(
+            root.join(".gitignore"),
+            "/.trae\n/.claude/skills\n/.workbuddy\n",
+        )
+        .unwrap();
+        git_init(&root);
+
+        let report = repo_init(&root, &default_links(&root), false).unwrap();
+        assert!(report.ok, "{report:?}");
+        assert!(root.join(".workbuddy/skills").exists());
+        assert!(root.join(".workbuddy/memory/MEMORY.md").exists());
         fs::remove_dir_all(&root).ok();
     }
 

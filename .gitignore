@@ -1,6 +1,5 @@
 /target
 /.omo
-/.workbuddy
 
 # PENGJ_TEMPLATE_START
 # --- common 层 ---
@@ -22,4 +21,5 @@
 # 由 `pengj-templates-cli repo init` 创建的 agent 客户端工作区链接
 /.trae
 /.claude/skills
+/.workbuddy
 # PENGJ_TEMPLATE_END

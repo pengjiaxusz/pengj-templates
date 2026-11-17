@@ -9,7 +9,7 @@
 {%- if options["commit_and_push"] %}
 - After changes pass verification, commit and push before replying. Skip only for pure Q&A or when reporting failing builds/tests.
 {%- endif %}
-- After cloning, run `just doctor --fix` (or `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix` when `just` is unavailable): it checks the toolchain, activates the commit hooks, creates the agent-client workspace links (`.trae` / `.claude/skills`), and runs the project fixes in `scripts/doctor.d/`.
+- After cloning, run `just doctor --fix` (or `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix` when `just` is unavailable): it checks the toolchain, activates the commit hooks, creates the agent-client workspace links (`.trae` / `.claude/skills` / `.workbuddy/skills`), and runs the project fixes in `scripts/doctor.d/`. A missing `pengj-templates-cli` is an error, not a warning — the gate and the links both need it — and `--install-cli` is the only step that touches the network (`--fix` never does).
 {%- if options["commit_zh"] %}
 - Commit subjects MUST be Chinese (at least 2 CJK characters); type/scope stay English. Every commit entry point (including /commit commands) follows this rule — the commit-msg hook rejects pure-English subjects.
 {%- else %}
@@ -46,7 +46,7 @@
 {%- if options["commit_and_push"] %}
 - 完成修改并通过验证后，先 commit & push 再回复；纯问答或构建/测试失败待排查时除外。
 {%- endif %}
-- 克隆后跑 `just doctor --fix`（没有 just 时用 `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix`）：检查工具链、激活提交钩子、创建 agent 客户端工作区链接（`.trae` / `.claude/skills`），并执行 `scripts/doctor.d/` 下的项目自检与修复。
+- 克隆后跑 `just doctor --fix`（没有 just 时用 `sh scripts/doctor.sh --fix` / `pwsh -NoProfile -File scripts/doctor.ps1 -Fix`）：检查工具链、激活提交钩子、创建 agent 客户端工作区链接（`.trae` / `.claude/skills` / `.workbuddy/skills`），并执行 `scripts/doctor.d/` 下的项目自检与修复。缺 `pengj-templates-cli` 是**错误**而不是警告（门禁与链接都依赖它），唯一的联网入口是 `--install-cli`，`--fix` 永不联网。
 {%- if options["commit_zh"] %}
 - 提交标题必须用中文（至少 2 个汉字），type/scope 用英文；任何提交入口（含 /commit 命令）都不得写纯英文标题，commit-msg 钩子会拦截。
 {%- else %}

@@ -6,8 +6,11 @@
 # every custom check in scripts/doctor.d/*.sh in sorted order.
 #
 # Usage:
-#   sh scripts/doctor.sh          report only
-#   sh scripts/doctor.sh --fix    also activate the commit hooks and fix modes
+#   sh scripts/doctor.sh                 report only
+#   sh scripts/doctor.sh --fix           also activate the commit hooks and fix modes
+#   sh scripts/doctor.sh --install-cli   download and install pengj-templates-cli
+#                                        (the only step that touches the network;
+#                                        it is never implied by --fix)
 #
 # Custom checks: drop *.sh files into scripts/doctor.d/. Each script runs from
 # the project root with DOCTOR_ROOT set to the project root and DOCTOR_FIX=1
@@ -17,8 +20,10 @@
 # 下的所有自定义检查。
 #
 # 用法：
-#   sh scripts/doctor.sh          仅输出报告
-#   sh scripts/doctor.sh --fix    同时激活提交钩子并修正相关模式
+#   sh scripts/doctor.sh                 仅输出报告
+#   sh scripts/doctor.sh --fix           同时激活提交钩子并修正相关模式
+#   sh scripts/doctor.sh --install-cli   下载并安装 pengj-templates-cli
+#                                        （唯一会联网的步骤；不会被 --fix 隐含）
 #
 # 自定义检查：把 *.sh 放进 scripts/doctor.d/。每个脚本从项目根目录运行，
 # DOCTOR_ROOT 指向项目根目录，带 --fix 时设置 DOCTOR_FIX=1。
@@ -28,11 +33,13 @@
 set -u
 
 fix=0
+install_cli=0
 for arg in "$@"; do
     case "$arg" in
         --fix) fix=1 ;;
+        --install-cli) install_cli=1 ;;
         -h|--help)
-            echo "{% if options["skill_lang"] | default("zh") == "en" %}usage: sh scripts/doctor.sh [--fix]{% else %}用法：sh scripts/doctor.sh [--fix]{% endif %}"
+            echo "{% if options["skill_lang"] | default("zh") == "en" %}usage: sh scripts/doctor.sh [--fix] [--install-cli]{% else %}用法：sh scripts/doctor.sh [--fix] [--install-cli]{% endif %}"
             exit 0
             ;;
         *)
@@ -113,10 +120,57 @@ fi
 {% endif %}
 
 {% if 'gate' in layers or 'agent' in layers %}
+# --- pengj-templates-cli ---------------------------------------------------
+{% if options["skill_lang"] | default("zh") == "en" -%}
+# The commit gate needs it, and the agent-layer workspace links are created by
+# its `repo init`, so both layers require it: missing is an error, not a warning.
+# Installing is the only network access and needs the explicit --install-cli;
+# `--fix` never touches the network.
+{%- else -%}
+# 提交门禁要它跑检查，agent 层的工作区链接由它的 `repo init` 创建，所以两层都
+# 缺不了它：缺失是错误而不是警告。安装是唯一会联网的动作，只由 --install-cli
+# 显式触发——`--fix` 永远不联网。
+{%- endif %}
+cli_release_base='https://github.com/pengjiaxusz/pengj-templates/releases/latest/download'
+if is_windows; then
+    cli_hint="irm $cli_release_base/install.ps1 | iex"
+else
+    cli_hint="curl -fsSL $cli_release_base/install.sh | sh"
+fi
+install_cli_tool() {
+    installer="${TMPDIR:-/tmp}/pengj-install-$$.sh"
+    if is_windows; then
+        have pwsh || return 1
+        pwsh -NoProfile -Command "irm $cli_release_base/install.ps1 | iex"
+        return $?
+    fi
+    if have curl; then
+        curl -fLs --connect-timeout 15 --max-time 120 -o "$installer" "$cli_release_base/install.sh" || return 1
+    elif have wget; then
+        wget -q --timeout=30 -O "$installer" "$cli_release_base/install.sh" || return 1
+    else
+        return 1
+    fi
+    sh "$installer"
+    installer_status=$?
+    rm -f "$installer"
+    return $installer_status
+}
+
 if have pengj-templates-cli; then
     ok "pengj-templates-cli $(pengj-templates-cli --version 2>/dev/null | head -n 1)"
+elif [ "$install_cli" = "1" ]; then
+    if install_cli_tool; then
+        if have pengj-templates-cli; then
+            ok "pengj-templates-cli $(pengj-templates-cli --version 2>/dev/null | head -n 1)"
+        else
+            warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli is installed but this shell's PATH is stale; reopen the terminal and run doctor again{% else %}pengj-templates-cli 已安装，但当前终端的 PATH 还没刷新；重开终端后再跑一次 doctor{% endif %}"
+        fi
+    else
+        fail "{% if options["skill_lang"] | default("zh") == "en" %}could not install pengj-templates-cli automatically; install manually: {% raw %}{{ cli_hint }}{% endraw %}{% else %}无法自动安装 pengj-templates-cli；请手动安装：{% raw %}{{ cli_hint }}{% endraw %}{% endif %}"
+    fi
 else
-    warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; install: curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh{% else %}未找到 pengj-templates-cli；安装命令：curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh{% endif %}"
+    fail "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; the commit gate and the agent workspace links both need it. Install: {% raw %}{{ cli_hint }}{% endraw %} (or run this script with --install-cli){% else %}未找到 pengj-templates-cli；提交门禁与 agent 工作区链接都依赖它。安装：{% raw %}{{ cli_hint }}{% endraw %}（或给本脚本加 --install-cli）{% endif %}"
 fi
 {% endif %}
 
@@ -190,10 +244,10 @@ if [ -d .agents ]; then
         elif [ "$fix" = "1" ]; then
             fail "{% if options["skill_lang"] | default("zh") == "en" %}could not create the workspace links; run: pengj-templates-cli repo init{% else %}无法创建工作区链接；请运行：pengj-templates-cli repo init{% endif %}"
         else
-            warn "{% if options["skill_lang"] | default("zh") == "en" %}workspace links are not ready; run 'just doctor --fix'{% else %}工作区链接未就绪；请运行 'just doctor --fix'{% endif %}"
+            fail "{% if options["skill_lang"] | default("zh") == "en" %}workspace links are not ready; run 'just doctor --fix'{% else %}工作区链接未就绪；请运行 'just doctor --fix'{% endif %}"
         fi
     else
-        warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; skipping the workspace link check{% else %}未找到 pengj-templates-cli；跳过工作区链接检查{% endif %}"
+        warn "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; the workspace links cannot be checked or created without it{% else %}未找到 pengj-templates-cli；没有它无法检查或创建工作区链接{% endif %}"
     fi
 fi
 {% endif %}

@@ -22,13 +22,24 @@ pub struct MigrationNote {
 ///
 /// 只收录**语义反转 / 必然导致旧项目行为改变**的条目；能自动迁移的（层名别名、
 /// 技能合并）不在此列——它们由引擎直接处理，不需要人看。
-pub const MIGRATIONS: &[MigrationNote] = &[MigrationNote {
-    version: "0.67.0",
-    summary: "commit.scopes 的语义从「空列表 = 放行所有 scope」反转为「拒绝优先的三态策略」：\
-              缺省或 [] 拒绝所有 scope，[\"*\"] 放行任意 scope，列表则收窄为白名单",
-    action: "没有 scope 白名单的项目请在 .gate.toml 设 commit.scopes = [\"*\"] 恢复旧行为；\
-             已经维护白名单的项目无需改动，但请留意 .gate.toml 里的旧说明已过期",
-}];
+pub const MIGRATIONS: &[MigrationNote] = &[
+    MigrationNote {
+        version: "0.67.0",
+        summary: "commit.scopes 的语义从「空列表 = 放行所有 scope」反转为「拒绝优先的三态策略」：\
+                  缺省或 [] 拒绝所有 scope，[\"*\"] 放行任意 scope，列表则收窄为白名单",
+        action: "没有 scope 白名单的项目请在 .gate.toml 设 commit.scopes = [\"*\"] 恢复旧行为；\
+                 已经维护白名单的项目无需改动，但请留意 .gate.toml 里的旧说明已过期",
+    },
+    MigrationNote {
+        version: "0.73.0",
+        summary: "agent 层的默认工作区链接从 2 条变 3 条（新增 `.workbuddy/skills` → `.agents/skills`），\
+                  且 doctor 在 gate/agent 层项目里把「缺 pengj-templates-cli」从警告改判为错误——\
+                  存量项目 update 后第一次跑 doctor 会报错，直到链接补齐",
+        action: "跑一次 `just doctor --fix`（或 `pengj-templates-cli repo init --dir .`）补出链接；\
+                 机器上没有 CLI 时先跑 `just doctor --install-cli`（或其提示里的安装命令），\
+                 重开终端后再跑一次 doctor",
+    },
+];
 
 /// 当前工具的版本（crate 版本即发布版本）
 pub fn current_version() -> &'static str {

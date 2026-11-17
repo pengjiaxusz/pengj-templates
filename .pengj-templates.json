@@ -1,6 +1,6 @@
 {
   "tool": "pengj-templates",
-  "version": "0.20.2-beta.1",
+  "version": "0.72.0",
   "project_name": "pengj-templates",
   "layers": [
     "common",
@@ -59,6 +59,7 @@
   },
   "generated_at": "2026-08-28T04:39:43Z",
   "files": {
+    ".agents\\.gitignore": "b765ef8965f8923b4a9d4a239cda9b4c3434d23de79b843f77fded4a03fccfb7",
     ".agents\\skills\\ask-matt\\PHASE-BOUNDARIES.md": "438ab657c2c15c2fe05fa2f53769bb3e31c123ef8bb25ba549264a38b6123bf5",
     ".agents\\skills\\ask-matt\\SKILL.md": "7c49491f14e3dfadc8eea7e5938d3948666a688cebc7bab3f9ac294887f6b692",
     ".agents\\skills\\bque\\SKILL.md": "1abc428afba2f6cb288f7aa52860ba0a60158a64781c2d34d334a255ac3c0427",
@@ -137,15 +138,15 @@
     ".agents\\skills\\writing-for-agents\\SKILL.md": "97ab5dc50277c8eb78cb83cd36c7b08bd997969fcb7efebcb2cb82f2592e580e",
     ".cargo\\config.toml": "c2b8603537f1a91b6871cae0699bfdc8ec9820b46bf561fedf6e50dabb763bb1",
     ".gitattributes": "b3acc75b126846fb00541b2ffff9b9212b1cff09fafa7a75312b731200deab95",
-    ".gitignore": "398f6faff3597c7f5cb5e07f09c002bb67283fc0e9c53e7aa54ea8ed6f8440bd",
-    "AGENTS.md": "46d87b46d44a1d805758574c9b15d00be63344a6cf5fa7b6e2cde9d92392087b",
+    ".gitignore": "0c7a5aaf231aa9d7fcaa5a6f5aa0a72d9b1f27a98e3e1517f27abe6ba03a2afd",
+    "AGENTS.md": "07ab7a7decd2016fa45b40fed4c613ebeffda1d0b44b35964f310aefe12d686b",
     "Cargo.toml": "53130b1a688cbae224b0ebe55f910c099580b36f7390b690783b298a27bf3cb2",
     "just\\bque.just": "3dbd61b295460de3e4773bdeaacd439d8c3fcfc3b1d9570841c9df9a2a1a854e",
     "just\\rust-workspace.just": "5aae64c139f55f40f3cc65705d436ee549fb650d84038ef885f7d4d07f5fb87c",
     "justfile": "9fc7517a76463da9a84b955b4bad2faf9c9f4586f475ac336b7d0839820fd45e",
     "rust-toolchain.toml": "7271c211635386654befb235ed54aef12efe46376c4fe41c497c8d23bc1572ec",
     "scripts\\doctor.d\\README.md": "28cc1cc72b41f724b8ad2daf0f2d236777b7390e31505ca8240a68bfeeba6057",
-    "scripts\\doctor.ps1": "b0936b2097ce7fa9d771e0ccd526e6abee3ce4a694f78fab85d7f9a1b0208666",
-    "scripts\\doctor.sh": "7ea60114be26eef0baf1e7857954eba8535734307eb8a2ab461e276f5dd6dde2"
+    "scripts\\doctor.ps1": "9f3fe74a9cc945a11fb0252a1aa97a9a678fee8833fb5b20f7889a623ca44cf7",
+    "scripts\\doctor.sh": "17475bf5ce6f4f19896835e5a0c2f6f35bdde73de8e9f9c323006250cf931f9c"
   }
 }
