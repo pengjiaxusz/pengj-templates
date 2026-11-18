@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.75.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.74.0...v0.75.0) (2026-11-18)
+
+
+### Features
+
+* **cli:** 新增子仓库与工作树子命令 ([4c19c26](https://github.com/pengjiaxusz/pengj-templates/commit/4c19c26dd06750e30a5a632c009fe613e6b85e54))
+* **core:** 新增子仓库登记表与共享编译目录核心模块 ([e6e8ab7](https://github.com/pengjiaxusz/pengj-templates/commit/e6e8ab726dc9a6396e77bda804162968cb17c3b3))
+* **templates:** 新增子仓库与工作树两个可独立勾选的层 ([74bcbc1](https://github.com/pengjiaxusz/pengj-templates/commit/74bcbc1fd48b5fa9097afed19c6382b92c7e4386))
+
 ## [0.74.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.73.0...v0.74.0) (2026-11-17)
 
 
