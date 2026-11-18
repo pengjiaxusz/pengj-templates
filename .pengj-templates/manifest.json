@@ -110,7 +110,7 @@
     ".agents\\skills\\setup-matt-pocock-skills\\triage-labels.md": "c0ef9baacc2107273e8549923e0eb258272ef54a722ac5457a186d00bd6da5c3",
     ".agents\\skills\\subrepo-sync\\EXAMPLES.md": "abd6da499bd8068464ceed746b539aceb918d04af766b3ccfc9b32bbc89d38ff",
     ".agents\\skills\\subrepo-sync\\REFERENCE.md": "64d4b665bb4ec3dc9d0dee8fe54d6b82b121f8b48b4c0b5708d7064b9c78a211",
-    ".agents\\skills\\subrepo-sync\\SKILL.md": "444d1ea1e1c56a5bcf43bb208a16f7b1ed31e11bfbd3a9e3431591a73669600d",
+    ".agents\\skills\\subrepo-sync\\SKILL.md": "7539b4611500d1ed26f75b457c4d1579fb769a93460b4fd6c74fe4a0566d1af6",
     ".agents\\skills\\subrepo-sync\\scripts\\show-unapplied-commits.ps1": "a78a5dcee485507105820ed2977942c7f6b452831e52342e74aca1b875537ec4",
     ".agents\\skills\\tdd\\SKILL.md": "bb4d93d13303e61e2bd581756c1f9726445030494baf84b63cc141c0280b5bcf",
     ".agents\\skills\\tdd\\mocking.md": "8b2b30806fca54a45602c4096488ea0bf49c869b5e83b1eb8e7ef46d6c87a6df",
@@ -144,7 +144,7 @@
     ".pengj-templates\\scripts\\doctor.d\\README.md": "ad85d611af101327951a12b7bd1c186bdc6cf4da2ddd781b5fdbe4e9fc4361f6",
     ".pengj-templates\\scripts\\doctor.ps1": "21a98ed66f0d217e496050b13741f4258367f0f7f05bafe86cd23f51c761859e",
     ".pengj-templates\\scripts\\doctor.sh": "3eec841825b99ccad572e6b5584ec28a5ca946d18587a3cad6ce24a91bbee9b0",
-    "AGENTS.md": "9ea1bec5eecda92af3c19f88b4c3ed74c40892cdd7e8df3ee847a6961cc0630f",
+    "AGENTS.md": "64314d54cda425282e212e5581a96de7b109630206536fafc307d7bfeea1c295",
     "Cargo.toml": "53130b1a688cbae224b0ebe55f910c099580b36f7390b690783b298a27bf3cb2",
     "justfile": "6875b5f534779b4f81c65b765841bf22467fb0c461c17b3802b6f3df4fecd2de",
     "rust-toolchain.toml": "7271c211635386654befb235ed54aef12efe46376c4fe41c497c8d23bc1572ec"
