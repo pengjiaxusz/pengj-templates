@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.76.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.75.1...v0.76.0) (2026-11-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** target-dir 不再指向平台数据目录，--json 的 project_key 改为 main_worktree
+
+### Features
+
+* **core:** 共享编译目录改为主工作树的 target ([820058d](https://github.com/pengjiaxusz/pengj-templates/commit/820058d8c46d2ad0f3270c6489546ac0e391daf2))
+
 ## [0.75.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.75.0...v0.75.1) (2026-11-18)
 
 
