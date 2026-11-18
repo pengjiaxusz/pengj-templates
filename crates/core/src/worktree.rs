@@ -148,14 +148,23 @@ pub fn conflicting_override(target: &SharedTarget) -> Option<String> {
         return None;
     }
     let given = PathBuf::from(&text);
-    let same = given
-        .canonicalize()
-        .map(|resolved| resolved == target.path)
-        .unwrap_or_else(|_| same_path(&given, &target.path));
-    if same {
+    if paths_equal(&given, &target.path) {
         None
     } else {
         Some(text)
+    }
+}
+
+/// 两条路径是否指向同一处。
+///
+/// **两侧一起**规范化：只规范化其中一侧会制造假警报——Windows 的
+/// `canonicalize` 返回带 `\\?\` 前缀的字面量，与未规范化的推导值永不相等，
+/// 于是「用户把环境变量指向本机推导的同一个目录」会被判成指向别处。
+/// 规范化失败（目录还不存在）时退回按分隔符归一的字面量比较。
+fn paths_equal(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => same_path(a, b),
     }
 }
 
@@ -344,5 +353,36 @@ mod tests {
         // 不存在的路径无法 canonicalize，走退路比较
         assert!(same_path(&left, &right));
         assert!(!same_path(&left, &PathBuf::from("C:/work/other")));
+    }
+
+    #[test]
+    fn 同一位置的规范化字面量判为相同() {
+        let dir = temp_dir("equal");
+        // Windows 上 canonicalize 会加 `\\?\` 前缀；两侧只规范化一侧就会误判「指向别处」
+        let canonical = dir.canonicalize().expect("临时目录应可规范化");
+        assert!(
+            paths_equal(&dir, &canonical),
+            "同一目录的两种字面量必须判等: {} vs {}",
+            dir.display(),
+            canonical.display()
+        );
+        // 反方向同样要判等：真实调用里「环境变量值」与「推导值」谁带前缀并不固定
+        assert!(
+            paths_equal(&canonical, &dir),
+            "同一目录的两种字面量必须判等（反向）: {} vs {}",
+            canonical.display(),
+            dir.display()
+        );
+        assert!(paths_equal(&dir, &dir));
+
+        let other = temp_dir("equal-other");
+        assert!(
+            !paths_equal(&dir, &other),
+            "不同目录不得判等: {} vs {}",
+            dir.display(),
+            other.display()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&other);
     }
 }
