@@ -19,6 +19,8 @@
 | `vscode` | VS Code 工作区配置：推荐扩展、中文编程下 rust 检查走 clippy | 使用 VS Code 开发 |
 | `rust` | Rust 仓库专属：`Cargo.toml`、clippy/rustfmt、可选 sccache、`.pengj-templates/just/rust.just` | Rust 项目 |
 | `rust-workspace` | Rust 多 crate 工作区：工作区 `Cargo.toml`、可选 sccache/lld、`.pengj-templates/just/rust-workspace.just` | Rust workspace |
+| `subrepo` | 子仓库登记与校验：机器可读的 `.pengj-templates/subrepo.toml`（名称、相对路径、依赖模式、上游分支、是否自带工作区定义）与 `.pengj-templates/just/subrepo.just`，带走 `subrepo-sync` 技能 | 依赖外部仓库（子模块 / FetchContent / 本地同级目录）的项目 |
+| `worktree` | 多工作树**与**共享编译目录：`.pengj-templates/just/worktree.just`（`wt-target` / `wt-check` / `wt-fix` / `wt-create`），`CARGO_TARGET_DIR` 按机器推导并由构建配方注入，新建工作树时补齐子模块，带走 `worktree` 技能 | 需要并行开多个 git 工作树的项目 |
 | ... | 按需扩展（新增目录 + `layer.toml` 即可） | ... |
 
 模板文件支持 minijinja 占位符（`{{ project_name }}`、`{{ project_slug }}`、`{{ year }}`）。
@@ -71,14 +73,21 @@ cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # 巡�
 cargo run -p pengj-templates-cli -- check-lang --dir ./my-app           # 校验文案语言轴（en 零汉字；zh 文案含中文）
 cargo run -p pengj-templates-cli -- repo status --dir ./my-app          # 检查工作区链接、Git 配置与子模块
 cargo run -p pengj-templates-cli -- repo init --dir ./my-app            # 创建缺失的工作区链接（幂等，不覆盖）
+cargo run -p pengj-templates-cli -- subrepo list --dir ./my-app         # 把机器可读的子仓库登记表渲染成清单
+cargo run -p pengj-templates-cli -- subrepo check --dir ./my-app        # 子仓库体检（退出码 0 通过 / 1 有失败 / 2 仅警告）
+cargo run -p pengj-templates-cli -- worktree target-dir --dir ./my-app  # 打印本机推导出的共享编译目录
+cargo run -p pengj-templates-cli -- worktree check --dir ./my-app --fix # 校验（并创建）共享编译目录
+cargo run -p pengj-templates-cli -- worktree create feature-a --dir ./my-app  # 新建工作树：分支 + 同级目录 + 共享编译目录 + 子模块补齐
 cargo run -p pengj-templates-cli -- check-update                       # 查 CLI 自身有没有新版本
 ```
 
-**just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`bque` / `gate` / `rust` / `rust-workspace` 层分别产出 `.pengj-templates/just/bque.just`、`.pengj-templates/just/gate.just`、`.pengj-templates/just/rust.just`、`.pengj-templates/just/rust-workspace.just`，四层都依赖 `just`；`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾 `bque` 层会自动补齐 `bque` 技能，避免半接入；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。
+**just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`bque` / `gate` / `rust` / `rust-workspace` / `subrepo` / `worktree` 层分别产出 `.pengj-templates/just/bque.just`、`gate.just`、`rust.just`、`rust-workspace.just`、`subrepo.just`、`worktree.just`，全部依赖 `just`；`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾某个层会自动带上它在 `layer.toml` 里声明的配套技能（`skills = [...]`），层不会孤零零落地而没有文档：`bque` → `bque`、`subrepo` → `subrepo-sync`、`worktree` → `worktree`；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。
+
+**子仓库与工作树**：`subrepo` 层只产出一份机器可读的登记表（`.pengj-templates/subrepo.toml`，托管说明块 + 归项目的 `[[subrepo]]` 条目），技能、配方与体检命令读的都是它，因此三方对「有哪些外部子仓库」永远不会分歧。`worktree` 层由构建配方注入 `CARGO_TARGET_DIR`，指向按机器推导出来的目录（平台数据目录 + 仓库 git common-dir 的哈希）——推导只有一份，配方与 `just wt-check` 读同一个值。共享的只有中间产物：最终二进制在该目录里路径固定，并行工作树会互相覆盖，运行产物的隔离仍归项目自理。两层都**不**往 `.cargo/config.toml` 里写 `target-dir`：那个文件走结构化合并，重复的表头会让整文件不予写盘。
 
 `create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2024）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--sccache` 开启编译缓存（默认关）、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates/manifest.json`，`update` 同步时按各项目当年的选项重新渲染。
 
-`agent` 层的技能与规范选项（选 agent 层时生效）：`--skills git-workflow,caveman,grill-me,write-docs,template-sync,subrepo-sync,write-a-skill` 决定生成哪些技能（逗号分隔，默认全部）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）、`--commit-and-push` 要求 Agent 阶段性完工与收尾时自动提交并推送到远端仓库（默认关）。`mcp-bootstrap` 是基线技能：只要有 agent 层就始终附带（显式传空技能列表除外），保证项目离开模板仓库后仍能自行安装与校验 MCP。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `git-workflow`（约定式提交与分支同步）、`template-sync`（模板同步/纳管）、`subrepo-sync`（子仓库同步与升级）、`bque`（编译排队）、`caveman`（超压缩通信）、`grill-me` / `grilling`（设计质询）、`write-docs`（通用文档编写与更新，规则由项目自己决定）、`write-a-skill`（新增技能）、`mcp-bootstrap`（项目内 MCP 安装与握手校验），以及合入的 `engineering`（20 个：`tdd`、`code-review`、`codebase-design`、`diagnosing-bugs`、`domain-modeling`、`grill-with-docs`、`implement`、`implement-spec`、`improve-codebase-architecture`、`pr`、`prototype`、`research`、`retro`、`setup-matt-pocock-skills`、`to-spec`、`to-tickets`、`triage`、`wayfinder`、`wizard`、`ask-matt`）与 `productivity`（`grilling`、`handoff`、`teach`、`to-questionnaire`、`wait-what`、`writing-for-agents`）技能集，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可；模板删掉某个技能后，存量项目 manifest 里遗留的技能名会在 `update` / `add-layer` 时自动清理（输出 `[清理]` 行），不会长期与磁盘实际技能不一致。三条语言选项互相独立：**中文编程**（代码标识符，`chinese_programming`）、**项目文案语言**（`skill_lang`，决定所有层的注释、报错、日志与技能文档）、**提交信息语言**（`commit_zh`，决定门禁的提交主题语言规则与提交规范文档）；技能脚本恒为英文，无选项。全英文项目须同时传 `--skill-lang en --no-commit-zh`，生成后所有文本文件零汉字（有端到端单测保障）。
+`agent` 层的技能与规范选项（选 agent 层时生效）：`--skills git-workflow,caveman,grill-me,write-docs,template-sync,subrepo-sync,write-a-skill` 决定生成哪些技能（逗号分隔，默认全部）、`--skill-lang zh|en` 决定技能文档书写语言（默认 zh）、`--no-commit-zh` 让提交信息用英文（默认中文）、`--commit-and-push` 要求 Agent 阶段性完工与收尾时自动提交并推送到远端仓库（默认关）。`mcp-bootstrap` 是基线技能：只要有 agent 层就始终附带（显式传空技能列表除外），保证项目离开模板仓库后仍能自行安装与校验 MCP。技能生成到 `.agents/skills/<name>/SKILL.md`，目前有 `git-workflow`（约定式提交与分支同步）、`template-sync`（模板同步/纳管）、`subrepo-sync`（子仓库同步与升级）、`bque`（编译排队）、`caveman`（超压缩通信）、`grill-me` / `grilling`（设计质询）、`write-docs`（通用文档编写与更新，规则由项目自己决定）、`write-a-skill`（新增技能）、`mcp-bootstrap`（项目内 MCP 安装与握手校验），以及合入的 `engineering`（20 个：`tdd`、`code-review`、`codebase-design`、`diagnosing-bugs`、`domain-modeling`、`grill-with-docs`、`implement`、`implement-spec`、`improve-codebase-architecture`、`pr`、`prototype`、`research`、`retro`、`setup-matt-pocock-skills`、`to-spec`、`to-tickets`、`triage`、`wayfinder`、`wizard`、`ask-matt`）与 `productivity`（`grilling`、`handoff`、`teach`、`to-questionnaire`、`wait-what`、`writing-for-agents`）技能集，新增技能只需在 `templates/agent/.agents/skills/` 下加目录即可（层专属技能也可以放在该层自己目录下，例如 `templates/worktree/.agents/skills/worktree/`，这样只有勾选该层才会下发）；模板删掉某个技能后，存量项目 manifest 里遗留的技能名会在 `update` / `add-layer` 时自动清理（输出 `[清理]` 行），不会长期与磁盘实际技能不一致。三条语言选项互相独立：**中文编程**（代码标识符，`chinese_programming`）、**项目文案语言**（`skill_lang`，决定所有层的注释、报错、日志与技能文档）、**提交信息语言**（`commit_zh`，决定门禁的提交主题语言规则与提交规范文档）；技能脚本恒为英文，无选项。全英文项目须同时传 `--skill-lang en --no-commit-zh`，生成后所有文本文件零汉字（有端到端单测保障）。
 
 **技能扩展**：每个技能 = 托管框架 + 项目专属区。`SKILL.md` 的 `PENGJ_TEMPLATE_START/END` 块内是模板框架（`update` 时原位替换），块外归项目所有、永不覆盖——提交前检查的定义、领域判定表、红线全部写在块外；可执行门禁用什么形式（任意语言脚本 / task runner / 纯清单）由项目自定并在块外声明，框架不预设实现。存量全自定义技能纳管时自动接管：模板整页（含 description）直接覆盖，原正文下移到「纳管过渡区」，双流程由用户合并去重。
 
@@ -204,7 +213,8 @@ gh api -X POST "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/rul
 | `.pengj-templates/manifest.json` | 引擎写入的项目清单：层列表、选项与模板托管文件哈希 |
 | `.pengj-templates/gate.toml` | `gate` 层产出的门禁配置（列入 `update_ignore`：配置值归项目所有） |
 | `.pengj-templates/scripts/doctor.sh` / `.ps1` + `doctor.d/` | `common` 层的环境自检本体与自定义检查扩展点 |
-| `.pengj-templates/just/*.just` | `bque` / `gate` / `rust` / `rust-workspace` 层产出的配方模块，由根 `justfile` 条件 import |
+| `.pengj-templates/just/*.just` | `bque` / `gate` / `rust` / `rust-workspace` / `subrepo` / `worktree` 层产出的配方模块，由根 `justfile` 条件 import |
+| `.pengj-templates/subrepo.toml` | `subrepo` 层的机器可读登记表（托管说明块 + 归项目的条目） |
 | `.githooks/` | `gate` 层的 git 钩子，`core.hooksPath` 指向它 |
 
 `.pengj-templates/` 下的文件都是模板托管资产，手改等于改模板（`update` 会照模板覆盖，`gate.toml` 的配置值除外）。因此根的 `scripts/`、`just/` 现在完全空出来归项目自己用。

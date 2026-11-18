@@ -19,12 +19,18 @@
 ## just / bque 排队装配
 
 - `just` 层产出**唯一的**根 `justfile`：框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的「项目专属区」归项目所有，`update` 只替换块内，不再整页覆盖。
-- `bque` 层产出 `.pengj-templates/just/bque.just`（`queue-*` / `queue-doctor` / `q-run` / `q-bench`）；`gate` 层产出 `.pengj-templates/just/gate.just`（`gate-check` / `gate-hooks-local` / `gate-selftest`）；`rust` 与 `rust-workspace` 层分别产出 `.pengj-templates/just/rust.just` / `.pengj-templates/just/rust-workspace.just`。主 justfile 在选中 `just` 层时按 `layers` 条件 import；`bque` / `rust` / `rust-workspace` 的 `depends` 含 `just`，`gate` 只依赖 `common`——未选 just 时它的模块不被 import，门禁仍由 `.githooks` 与 `.pengj-templates/scripts/doctor.sh` 提供。
+- `bque` 层产出 `.pengj-templates/just/bque.just`（`queue-*` / `queue-doctor` / `q-run` / `q-bench`）；`gate` 层产出 `.pengj-templates/just/gate.just`（`gate-check` / `gate-hooks-local` / `gate-selftest`）；`rust` 与 `rust-workspace` 层分别产出 `.pengj-templates/just/rust.just` / `.pengj-templates/just/rust-workspace.just`；`subrepo` 层产出 `.pengj-templates/just/subrepo.just`（`subrepo-list` / `subrepo-check`）；`worktree` 层产出 `.pengj-templates/just/worktree.just`（`wt-target` / `wt-check` / `wt-fix` / `wt-create`）。主 justfile 在选中 `just` 层时按 `layers` 条件 import；`bque` / `rust` / `rust-workspace` / `subrepo` / `worktree` 的 `depends` 含 `just`，`gate` 只依赖 `common`——未选 just 时它的模块不被 import，门禁仍由 `.githooks` 与 `.pengj-templates/scripts/doctor.sh` 提供。
 - `common` 层产出 `.pengj-templates/scripts/doctor.sh` / `.pengj-templates/scripts/doctor.ps1`，`just` 层在根 justfile 里提供 `doctor` 配方。`just doctor --fix` 是生成项目**唯一的初始化入口**（不提供独立的 setup 配方）：doctor 检查已选层实际用到的工具（`just` / `pwsh` / `cargo` / `bque` / `pengj-templates-cli` / `node`）与 gate 钩子激活状态；`--fix` 优先调用 `.githooks/install.sh`（零依赖）激活钩子，并在 `agent` 层项目里调用 `pengj-templates-cli repo init` 创建 `.trae` / `.claude/skills` / `.workbuddy/skills` 工作区链接（`.trae` 整目录链到 `.agents`，另两条只链 `skills`，因为 `.claude` / `.workbuddy` 里还有客户端自己的状态；链接路径由 agent 层的 `.gitignore` 忽略，Trae 写进 `.agents/` 的 `specs|plans|documents` 由随附的 `.agents/.gitignore` 挡住）。`gate` / `agent` 层项目里缺 `pengj-templates-cli` 记为**错误**（门禁与链接都依赖它），安装是唯一会联网的动作，只能由显式 `--install-cli` 触发，`--fix` 永不联网。`repo init` 还会补齐仓库级 Git 配置（存在 `.gitmodules` 时开启 `submodule.recurse`，跟踪符号链接时开启 `core.symlinks`）并只初始化尚未初始化的子模块。用户把自定义检查与修复脚本放进 `.pengj-templates/scripts/doctor.d/` 即可扩展（退出码非 0 记为失败），契约见该目录的 `README.md`。
 - `options["just_recipes"]`：`"rust"` / `"workspace"` 显式指定语言配方；`"none"` 关闭语言配方导入（已有自定义编排的项目只接入排队基础设施）；未设置时按所选层自动推断。
-- 勾 `bque` 层时会自动把 `bque` 技能并入 `options["skills"]`，避免「有配方没文档」的半接入；勾 `gate` 层时会自动并入 `ci` 层，保证「未装 CLI 的机器由服务端 CI 兜底」始终成立；`audit` 对半接入、以及缺少 justfile 托管块的项目给出配置提示。
+- 层与技能的联动是**声明式**的：在 `layer.toml` 里写 `skills = [...]`，勾该层时这些技能会自动并入 `options["skills"]`（生成 / 纳管 / 更新 / 增量加层四个入口一致），避免「有配方没文档」的半接入（`bque` → `bque`、`subrepo` → `subrepo-sync`、`worktree` → `worktree`；显式空技能列表仍然不注入任何技能）；勾 `gate` 层时会自动并入 `ci` 层，保证「未装 CLI 的机器由服务端 CI 兜底」始终成立；`audit` 对半接入、以及缺少 justfile 托管块的项目给出配置提示。
 - 存量项目加层走 `add-layer --dir <项目> --layers just,bque`：只合并层清单并重跑 `update`，不做全量重纳管。
 - bque 是 Windows 全局锁；`[unix]` 分支的同一批配方直接透传，CI 与 Unix 裸跑属预期行为。
+
+## 子仓库与工作树
+
+- `subrepo` 层只产出一份**机器可读**的登记表 `.pengj-templates/subrepo.toml`（受管说明块 + 归项目的 `[[subrepo]]` 条目，列为 `update_ignore`：条目冻结、说明随模板刷新）。依赖模式是封闭枚举 `submodule` / `fetch` / `local`，未知值或缺必填字段是硬错误。技能、配方与 `pengj-templates-cli subrepo check` 读的是同一份文件，所以三方对「有哪些子仓库」永远一致。体检覆盖嵌套工作区红线（自带工作区定义却没进宿主 `[workspace] exclude`）、子模块就绪与指针漂移；检查逻辑只在 CLI 里实现一份，doctor 只做转发。
+- `worktree` 层由构建配方注入 `CARGO_TARGET_DIR`，指向**仓库外**按机器推导的共享编译目录（`platform_data_dir()` + 仓库 git common-dir 哈希，推导逻辑只在 `crates/core/src/worktree.rs`）。配方通过 `pengj-templates-cli worktree target-dir` 取值，不自己拼路径；**不要**把 `target-dir` 写进 `.cargo/config.toml`（结构化合并遇到同名表头会整文件不写盘）。共享的只有中间产物：最终二进制跨工作树互相覆盖，隔离由项目自理（写进 AGENTS.md 红线，模板不实现）。`just wt-create <name>` 建在主工作树同级并复用 `repo init` 补子模块。
+- 两个层互不依赖，各自只在被勾选时产出；层专属技能可以放在该层自己的 `.agents/skills/<name>/`（如 `templates/worktree/.agents/skills/worktree/`），不勾该层就零影响。
 
 ## 语言轴 / Language axes
 
