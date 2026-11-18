@@ -33,6 +33,7 @@
 | [`docs/adr/0001-shared-build-dir-via-env-injection.md`](../adr/0001-shared-build-dir-via-env-injection.md) | 共享编译目录用 `CARGO_TARGET_DIR` 注入而非目录链接 / `target-dir`：链接状态无法被自动校验，且手工方案已静默退化 | — | 【权威规范】 |
 | [`docs/adr/0002-subrepo-and-worktree-as-separate-layers.md`](../adr/0002-subrepo-and-worktree-as-separate-layers.md) | 子仓库能力与多工作树能力拆成两个独立层：机制正交，交汇点交由仓库初始化入口承接 | — | 【权威规范】 |
 | [`docs/adr/0003-machine-readable-subrepo-registry.md`](../adr/0003-machine-readable-subrepo-registry.md) | 子仓库登记表用机器可读格式而非 Markdown 表格：表格方案无法被可靠解析且失效是静默的 | — | 【权威规范】 |
+| [`docs/adr/0004-shared-target-is-main-worktree-target.md`](../adr/0004-shared-target-is-main-worktree-target.md) | 共享编译目录落在**主工作树的 `target/`**：产物跟着项目走、主工作树裸构建天然命中；代价是 `cargo clean` 波及所有工作树（取代 ADR 0001 的落点结论） | `crates/core/src/worktree.rs::shared_target_dir` | 【权威规范】 |
 | [`docs/spec/subrepo-worktree-layers.md`](../spec/subrepo-worktree-layers.md) | `subrepo` 与 `worktree` 两个新层的规格：问题陈述、用户故事、实现决策、测试决策、范围之外 | — | 【规格】 |
 
 ## 4. 关联设计草稿与探索（非权威，仅供参考）

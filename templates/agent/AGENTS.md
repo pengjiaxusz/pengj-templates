@@ -47,7 +47,7 @@
 - 编译/检查/测试/跑分统一走 `just`（`just check`、`just test`、`just q-run <cmd>`），不裸跑 `cargo`/`ninja`/`cmake`；详见 `.agents/skills/bque/SKILL.md`。
 {%- endif %}
 {%- if 'worktree' in layers %}
-- 多个并行工作树共享**同一份**仓库外编译目录（`CARGO_TARGET_DIR`，由 `just` 配方注入）：依赖只编译一次，不必每个工作树各编一遍。共享的只有中间产物——**最终二进制在该目录里路径固定，并发的工作树会互相覆盖产物**。运行产物请按工作树自己隔离（复制出去，或另设输出目录），模板刻意不实现隔离机制。新建工作树用 `just wt-create <名称>`，校验用 `just wt-check`。详见 `.agents/skills/worktree/SKILL.md`。
+- 多个并行工作树共享**同一份**编译目录，它就是**主工作树的 `target/`**（链接工作树由 `just` 配方注入 `CARGO_TARGET_DIR` 指过去）：依赖只编译一次，不必每个工作树各编一遍。共享的只有中间产物——**最终二进制在该目录里路径固定，并发的工作树会互相覆盖产物**。运行产物请按工作树自己隔离（复制出去，或另设输出目录），模板刻意不实现隔离机制。因为目录在主工作树里，那里跑 `cargo clean` 会一并清掉所有工作树的中间产物。新建工作树用 `just wt-create <名称>`，校验用 `just wt-check`。详见 `.agents/skills/worktree/SKILL.md`。
 {%- endif %}
 {%- if options["commit_and_push"] %}
 - 完成修改并通过验证后，先 commit & push 再回复；纯问答或构建/测试失败待排查时除外。

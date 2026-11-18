@@ -29,7 +29,7 @@
 ## 子仓库与工作树
 
 - `subrepo` 层只产出一份**机器可读**的登记表 `.pengj-templates/subrepo.toml`（受管说明块 + 归项目的 `[[subrepo]]` 条目，列为 `update_ignore`：条目冻结、说明随模板刷新）。依赖模式是封闭枚举 `submodule` / `fetch` / `local`，未知值或缺必填字段是硬错误。技能、配方与 `pengj-templates-cli subrepo check` 读的是同一份文件，所以三方对「有哪些子仓库」永远一致。体检覆盖嵌套工作区红线（自带工作区定义却没进宿主 `[workspace] exclude`）、子模块就绪与指针漂移；检查逻辑只在 CLI 里实现一份，doctor 只做转发。
-- `worktree` 层由构建配方注入 `CARGO_TARGET_DIR`，指向**仓库外**按机器推导的共享编译目录（`platform_data_dir()` + 仓库 git common-dir 哈希，推导逻辑只在 `crates/core/src/worktree.rs`）。配方通过 `pengj-templates-cli worktree target-dir` 取值，不自己拼路径；**不要**把 `target-dir` 写进 `.cargo/config.toml`（结构化合并遇到同名表头会整文件不写盘）。共享的只有中间产物：最终二进制跨工作树互相覆盖，隔离由项目自理（写进 AGENTS.md 红线，模板不实现）。`just wt-create <name>` 建在主工作树同级并复用 `repo init` 补子模块。
+- `worktree` 层把共享编译目录定为**主工作树的 `target/`**（`git worktree list --porcelain` 的第一条，同一仓库的所有工作树推出同一个值，推导逻辑只在 `crates/core/src/worktree.rs`），并由构建配方注入 `CARGO_TARGET_DIR` 到链接工作树。配方通过 `pengj-templates-cli worktree target-dir` 取值，不自己拼路径；**不要**把 `target-dir` 写进 `.cargo/config.toml`（结构化合并遇到同名表头会整文件不写盘）。共享的只有中间产物：最终二进制跨工作树互相覆盖，隔离由项目自理（写进 AGENTS.md 红线，模板不实现）；在主工作树里 `cargo clean` 会清掉所有工作树的中间产物（ADR 0004）。`just wt-create <name>` 建在主工作树同级并复用 `repo init` 补子模块。
 - 两个层互不依赖，各自只在被勾选时产出；层专属技能可以放在该层自己的 `.agents/skills/<name>/`（如 `templates/worktree/.agents/skills/worktree/`），不勾该层就零影响。
 
 ## 语言轴 / Language axes

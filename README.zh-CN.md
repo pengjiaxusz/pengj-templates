@@ -20,7 +20,7 @@
 | `rust` | Rust 仓库专属：`Cargo.toml`、clippy/rustfmt、可选 sccache、`.pengj-templates/just/rust.just` | Rust 项目 |
 | `rust-workspace` | Rust 多 crate 工作区：工作区 `Cargo.toml`、可选 sccache/lld、`.pengj-templates/just/rust-workspace.just` | Rust workspace |
 | `subrepo` | 子仓库登记与校验：机器可读的 `.pengj-templates/subrepo.toml`（名称、相对路径、依赖模式、上游分支、是否自带工作区定义）与 `.pengj-templates/just/subrepo.just`，带走 `subrepo-sync` 技能 | 依赖外部仓库（子模块 / FetchContent / 本地同级目录）的项目 |
-| `worktree` | 多工作树**与**共享编译目录：`.pengj-templates/just/worktree.just`（`wt-target` / `wt-check` / `wt-fix` / `wt-create`），`CARGO_TARGET_DIR` 按机器推导并由构建配方注入，新建工作树时补齐子模块，带走 `worktree` 技能 | 需要并行开多个 git 工作树的项目 |
+| `worktree` | 多工作树**与**共享编译目录：`.pengj-templates/just/worktree.just`（`wt-target` / `wt-check` / `wt-fix` / `wt-create`），共享目录就是主工作树的 `target/`，由构建配方注入 `CARGO_TARGET_DIR` 到链接工作树，新建工作树时补齐子模块，带走 `worktree` 技能 | 需要并行开多个 git 工作树的项目 |
 | ... | 按需扩展（新增目录 + `layer.toml` 即可） | ... |
 
 模板文件支持 minijinja 占位符（`{{ project_name }}`、`{{ project_slug }}`、`{{ year }}`）。
@@ -83,7 +83,7 @@ cargo run -p pengj-templates-cli -- check-update                       # 查 CLI
 
 **just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`bque` / `gate` / `rust` / `rust-workspace` / `subrepo` / `worktree` 层分别产出 `.pengj-templates/just/bque.just`、`gate.just`、`rust.just`、`rust-workspace.just`、`subrepo.just`、`worktree.just`，全部依赖 `just`；`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾某个层会自动带上它在 `layer.toml` 里声明的配套技能（`skills = [...]`），层不会孤零零落地而没有文档：`bque` → `bque`、`subrepo` → `subrepo-sync`、`worktree` → `worktree`；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。
 
-**子仓库与工作树**：`subrepo` 层只产出一份机器可读的登记表（`.pengj-templates/subrepo.toml`，托管说明块 + 归项目的 `[[subrepo]]` 条目），技能、配方与体检命令读的都是它，因此三方对「有哪些外部子仓库」永远不会分歧。`worktree` 层由构建配方注入 `CARGO_TARGET_DIR`，指向按机器推导出来的目录（平台数据目录 + 仓库 git common-dir 的哈希）——推导只有一份，配方与 `just wt-check` 读同一个值。共享的只有中间产物：最终二进制在该目录里路径固定，并行工作树会互相覆盖，运行产物的隔离仍归项目自理。两层都**不**往 `.cargo/config.toml` 里写 `target-dir`：那个文件走结构化合并，重复的表头会让整文件不予写盘。
+**子仓库与工作树**：`subrepo` 层只产出一份机器可读的登记表（`.pengj-templates/subrepo.toml`，托管说明块 + 归项目的 `[[subrepo]]` 条目），技能、配方与体检命令读的都是它，因此三方对「有哪些外部子仓库」永远不会分歧。`worktree` 层把共享编译目录定为**主工作树的 `target/`**，由构建配方注入 `CARGO_TARGET_DIR` 到链接工作树——推导只有一份，配方与 `just wt-check` 读同一个值。共享的只有中间产物：最终二进制在该目录里路径固定，并行工作树会互相覆盖，运行产物的隔离仍归项目自理；同时因为目录在主工作树里，`cargo clean` 会一并清掉所有工作树的中间产物（ADR 0004）。两层都**不**往 `.cargo/config.toml` 里写 `target-dir`：那个文件走结构化合并，重复的表头会让整文件不予写盘。
 
 `create` 的 Rust 选项（仅 rust 层生效）：`--edition 2015|2018|2021|2024`（默认 2024）、`--channel stable|beta|nightly|<版本>`（默认 stable）、`--sccache` 开启编译缓存（默认关）、`--no-lld` 关闭 lld 链接、`--chinese` 开启中文编程（允许中文标识符、关闭相关命名 lint）。选择在生成时固化进 `.pengj-templates/manifest.json`，`update` 同步时按各项目当年的选项重新渲染。
 
