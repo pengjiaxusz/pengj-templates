@@ -11,6 +11,8 @@ import '.pengj-templates/just/bque.just'
 
 
 
+import '.pengj-templates/just/worktree.just'
+
 
 
 
@@ -35,6 +37,13 @@ doctor *ARGS:
 
 # justfile for pengj-templates
 # 设置默认 shell 为 pwsh 7（本机默认）
+
+# ---------- 共享编译目录（worktree 层） ----------
+
+# 多工作树复用同一份编译产物：路径由 CLI 按机器推导（平台数据目录 + git common-dir 项目标识），
+# 配方与 `just wt-check` 读同一个值——推导逻辑只有 CLI 一份，本仓库不另写一套。
+# 项目专属区的配方（build/check/clippy/test/bench）都吃这个导出值，bque 子进程同样继承。
+export CARGO_TARGET_DIR := `pengj-templates-cli worktree target-dir --dir .`
 
 # ---------- 提交门禁（crates/gate） ----------
 
