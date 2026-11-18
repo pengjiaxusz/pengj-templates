@@ -135,3 +135,17 @@
 - 提交标题必须用中文（至少 2 个汉字），type/scope 用英文；任何提交入口（含 /commit 命令）都不得写纯英文标题，commit-msg 钩子会拦截。
 - 改动涉及模块边界、公共 API、数据流、生命周期或新增模块/子系统时，同步更新对应的架构/设计文档再提交。
 <!-- PENGJ_TEMPLATE_END -->
+
+## Agent skills
+
+### Issue tracker
+
+Issue 存放在本仓库的 GitHub Issues（`pengjiaxusz/pengj-templates`），统一用 `gh` CLI 操作。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用默认五标签词汇表：`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+single-context 布局：仓库根目录 `GLOSSARY.md` + `docs/adr/`。详见 `docs/agents/domain.md`。
