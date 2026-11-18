@@ -254,6 +254,49 @@ if (Test-Path ".agents") {
 }
 {% endif %}
 
+{%- if 'subrepo' in layers %}
+# --- sub-repository health check -------------------------------------------
+
+# The check logic lives in the CLI (one implementation, like the commit gate);
+# this script only hands the work over. The CLI is required, not optional:
+# a sub-repository project cannot be verified without it.
+if (Test-Tool pengj-templates-cli) {
+    & pengj-templates-cli subrepo check --dir . 2>$null | Out-Null
+    $subrepoCode = $LASTEXITCODE
+    if ($subrepoCode -eq 0) {
+        Report-Ok "{% if options["skill_lang"] | default("zh") == "en" %}sub-repository health check passed{% else %}子仓库体检通过{% endif %}"
+    } elseif ($subrepoCode -eq 2) {
+        Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}sub-repository health check reported warnings; run: pengj-templates-cli subrepo check --dir .{% else %}子仓库体检有警告；请运行：pengj-templates-cli subrepo check --dir .{% endif %}"
+    } else {
+        Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}sub-repository health check failed; run: pengj-templates-cli subrepo check --dir .{% else %}子仓库体检未通过；请运行：pengj-templates-cli subrepo check --dir .{% endif %}"
+    }
+} else {
+    Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; the sub-repository health check needs it. Install: irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex{% else %}未找到 pengj-templates-cli；子仓库体检依赖它。安装：irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex{% endif %}"
+}
+{% endif %}
+
+{%- if 'worktree' in layers %}
+# --- shared build directory ------------------------------------------------
+#
+# The shared directory is derived by the CLI, so the build recipes and this
+# check read the same value. Missing or unwritable is an error: silently
+# falling back to a per-worktree target/ is exactly the failure mode this
+# layer exists to kill. Exit 2 means the directory is fine but some
+# CARGO_TARGET_DIR in the environment points elsewhere.
+if (Test-Tool pengj-templates-cli) {
+    $worktreeArgs = @("worktree", "check", "--dir", ".")
+    if ($Fix) { $worktreeArgs += "--fix" }
+    & pengj-templates-cli @worktreeArgs 2>$null | Out-Null
+    switch ($LASTEXITCODE) {
+        0 { Report-Ok "{% if options["skill_lang"] | default("zh") == "en" %}shared build directory ready (worktrees reuse one build directory){% else %}共享编译目录就绪（各工作树复用同一份编译目录）{% endif %}" }
+        2 { Report-Warn "{% if options["skill_lang"] | default("zh") == "en" %}shared build directory is ready, but CARGO_TARGET_DIR in this environment points elsewhere; raw cargo runs land in another directory. Run: pengj-templates-cli worktree check --dir .{% else %}共享编译目录就绪，但环境里的 CARGO_TARGET_DIR 指向别处；裸跑 cargo 会落到另一个目录。请运行：pengj-templates-cli worktree check --dir .{% endif %}" }
+        default { Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}shared build directory is missing or not writable; run: pengj-templates-cli worktree check --dir . --fix{% else %}共享编译目录缺失或不可写；请运行：pengj-templates-cli worktree check --dir . --fix{% endif %}" }
+    }
+} else {
+    Report-Fail "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; the shared build directory cannot be derived or checked without it. Install: irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex{% else %}未找到 pengj-templates-cli；没有它无法推导或校验共享编译目录。安装：irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex{% endif %}"
+}
+{% endif %}
+
 # --- custom checks ---------------------------------------------------------
 
 $custom = 0

@@ -252,6 +252,63 @@ if [ -d .agents ]; then
 fi
 {% endif %}
 
+{%- if 'subrepo' in layers %}
+# --- sub-repository health check -------------------------------------------
+
+# The check logic lives in the CLI (one implementation, like the commit gate);
+# this script only hands the work over. The CLI is required, not optional:
+# a sub-repository project cannot be verified without it.
+if have pengj-templates-cli; then
+    if pengj-templates-cli subrepo check --dir . >/dev/null 2>&1; then
+        ok "{% if options["skill_lang"] | default("zh") == "en" %}sub-repository health check passed{% else %}子仓库体检通过{% endif %}"
+    else
+        code=$?
+        if [ "$code" -eq 2 ]; then
+            warn "{% if options["skill_lang"] | default("zh") == "en" %}sub-repository health check reported warnings; run: pengj-templates-cli subrepo check --dir .{% else %}子仓库体检有警告；请运行：pengj-templates-cli subrepo check --dir .{% endif %}"
+        else
+            fail "{% if options["skill_lang"] | default("zh") == "en" %}sub-repository health check failed; run: pengj-templates-cli subrepo check --dir .{% else %}子仓库体检未通过；请运行：pengj-templates-cli subrepo check --dir .{% endif %}"
+        fi
+    fi
+else
+    if is_windows; then
+        subrepo_cli_hint="irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex"
+    else
+        subrepo_cli_hint="curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh"
+    fi
+    fail "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; the sub-repository health check needs it. Install: {% raw %}${subrepo_cli_hint}{% endraw %}{% else %}未找到 pengj-templates-cli；子仓库体检依赖它。安装：{% raw %}${subrepo_cli_hint}{% endraw %}{% endif %}"
+fi
+{% endif %}
+
+{%- if 'worktree' in layers %}
+# --- shared build directory ------------------------------------------------
+
+# The shared directory is derived by the CLI, so the build recipes and this
+# check read the same value. Missing or unwritable is an error: silently
+# falling back to a per-worktree target/ is exactly the failure mode this
+# layer exists to kill. Exit 2 means the directory is fine but some
+# CARGO_TARGET_DIR in the environment points elsewhere.
+if have pengj-templates-cli; then
+    if [ "$fix" = "1" ]; then
+        pengj-templates-cli worktree check --dir . --fix >/dev/null 2>&1
+    else
+        pengj-templates-cli worktree check --dir . >/dev/null 2>&1
+    fi
+    worktree_code=$?
+    case "$worktree_code" in
+        0) ok "{% if options["skill_lang"] | default("zh") == "en" %}shared build directory ready (worktrees reuse one build directory){% else %}共享编译目录就绪（各工作树复用同一份编译目录）{% endif %}" ;;
+        2) warn "{% if options["skill_lang"] | default("zh") == "en" %}shared build directory is ready, but CARGO_TARGET_DIR in this environment points elsewhere; raw cargo runs land in another directory. Run: pengj-templates-cli worktree check --dir .{% else %}共享编译目录就绪，但环境里的 CARGO_TARGET_DIR 指向别处；裸跑 cargo 会落到另一个目录。请运行：pengj-templates-cli worktree check --dir .{% endif %}" ;;
+        *) fail "{% if options["skill_lang"] | default("zh") == "en" %}shared build directory is missing or not writable; run: pengj-templates-cli worktree check --dir . --fix{% else %}共享编译目录缺失或不可写；请运行：pengj-templates-cli worktree check --dir . --fix{% endif %}" ;;
+    esac
+else
+    if is_windows; then
+        worktree_cli_hint="irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex"
+    else
+        worktree_cli_hint="curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh"
+    fi
+    fail "{% if options["skill_lang"] | default("zh") == "en" %}pengj-templates-cli not found; the shared build directory cannot be derived or checked without it. Install: {% raw %}${worktree_cli_hint}{% endraw %}{% else %}未找到 pengj-templates-cli；没有它无法推导或校验共享编译目录。安装：{% raw %}${worktree_cli_hint}{% endraw %}{% endif %}"
+fi
+{% endif %}
+
 # --- custom checks ---------------------------------------------------------
 
 custom=0

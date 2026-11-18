@@ -1,0 +1,98 @@
+# PENGJ_TEMPLATE_START
+{%- if options["skill_lang"] | default("zh") == "en" %}
+# .pengj-templates/subrepo.toml — the sub-repository registry
+#
+# [template-managed block] `update` replaces only what sits between START and END; the
+# entries below belong to this project and are never overwritten. Delete the block and
+# `update` prepends a fresh one and asks you to review the leftover prose.
+#
+# This file is the single source of truth for the project's external sub-repositories.
+# The subrepo-sync skill and the `subrepo check` command both read it, so the two never
+# disagree about which sub-repositories exist.
+#
+# Register each sub-repository with its own [[subrepo]] table:
+#
+#   [[subrepo]]
+#   name = "example-subrepo"           # name (required); also the dependency name in
+#                                      #   the host build system when mode = "fetch"
+#   path = "submodules/example-subrepo" # path relative to the project root (required)
+#   mode = "submodule"                  # dependency mode (required), one of:
+#                                      #   submodule — consumed as a git submodule
+#                                      #   fetch    — pulled by the host build system by version
+#                                      #   local    — a sibling directory on this machine
+#   upstream = "origin/main"            # upstream tracking branch (required for "submodule")
+#   local_dir = "../example-subrepo"    # sibling directory (required for "local")
+#   has_workspace = false               # does the sub-repository ship its own workspace
+#                                      #   definition? default false
+#
+# The dependency mode is a closed enum: a value outside the three above is a hard error,
+# never a silently accepted typo. The same goes for a missing required field — the
+# registry refuses to parse rather than check less than it claims to.
+#
+# Requirements per mode:
+#   submodule — upstream is required (it is what pointer-drift checks compare against).
+#   fetch    — optional; the version pin lives in the host build system.
+#   local    — local_dir is required (it is what the existence check looks at).
+#
+# Everything below this block is yours: add entries, edit them, or drop them. Template
+# updates will keep your entries byte-for-byte and only refresh the explanation above.
+{%- else %}
+# .pengj-templates/subrepo.toml —— 子仓库登记表
+#
+# 【本块由模板托管】update 只替换 START/END 之间的说明，下面的条目归项目所有，
+# 永不被覆盖。若你把本块整段删掉，update 会重新置顶插入一份并提示你复核残留的旧说明。
+#
+# 这份文件是项目外部子仓库的唯一事实源。子仓库同步技能与 `subrepo check` 命令读的都是它，
+# 因此「技能建议升级哪些子仓库」与「自检检查哪些子仓库」永远对得上。
+#
+# 每个子仓库用一张 [[subrepo]] 表登记：
+#
+#   [[subrepo]]
+#   name = "example-subrepo"           # 名称（必填）；mode = "fetch" 时它也是宿主构建
+#                                      #   系统里的依赖名
+#   path = "submodules/example-subrepo" # 相对项目根的路径（必填）
+#   mode = "submodule"                  # 依赖模式（必填），三选一：
+#                                      #   submodule —— 以 git 子模块接入
+#                                      #   fetch    —— 由宿主构建系统按版本拉取
+#                                      #   local    —— 本机上的同级目录
+#   upstream = "origin/main"            # 上游跟踪分支（submodule 模式必填）
+#   local_dir = "../example-subrepo"    # 本地同级目录（local 模式必填）
+#   has_workspace = false               # 该子仓库是否自带工作区定义，默认 false
+#
+# 依赖模式是封闭枚举：写出上面三个以外的值就是硬错误，绝不静默接受笔误。
+# 必填字段缺失同理——登记表宁可解析失败，也不肯「检查得比它声称的少」。
+#
+# 各模式的额外要求：
+#   submodule —— upstream 必填（指针漂移检查拿它作比对基准）。
+#   fetch    —— 可选；版本锁定写在宿主构建系统里。
+#   local    —— local_dir 必填（存在性检查看的就是它）。
+#
+# 本块以下的内容都归你：增删条目、修改条目都随意。模板更新会逐字保留你的条目，
+# 只刷新上面的说明。
+{%- endif %}
+# PENGJ_TEMPLATE_END
+
+{% if options["skill_lang"] | default("zh") == "en" %}
+# Register a sub-repository: drop the leading "# " from the lines below, then rewrite
+# them to match reality. With no entries at all, `subrepo list` fails on purpose:
+# an empty list means nothing is registered yet, and the tool must not pretend
+# everything is fine.
+#
+# [[subrepo]]
+# name = "example-subrepo"
+# path = "submodules/example-subrepo"
+# mode = "submodule"
+# upstream = "origin/main"
+# has_workspace = false
+{% else %}
+# 登记一个子仓库：把下面几行的行首 "# " 去掉，再按实际改写。
+# 登记表没有任何条目时，`subrepo list` 会报错退出——这是有意的：
+# 空清单说明你还没登记，工具不该假装「一切正常」。
+#
+# [[subrepo]]
+# name = "example-subrepo"
+# path = "submodules/example-subrepo"
+# mode = "submodule"
+# upstream = "origin/main"
+# has_workspace = false
+{% endif %}

@@ -26,10 +26,42 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath "<path/to/subrepo>" -Update
 ```
 
+## The Registry Is the Single Source of Truth
+
+**Read `.pengj-templates/subrepo.toml` first.** It is the machine-readable registry of every
+sub-repository this project depends on: one `[[subrepo]]` table per entry, carrying the name,
+the relative path, the dependency mode, the upstream tracking branch and whether the
+sub-repository ships its own workspace definition.
+
+```toml
+[[subrepo]]
+name = "example-subrepo"
+path = "submodules/example-subrepo"
+mode = "submodule"        # submodule | fetch | local
+upstream = "origin/main"
+has_workspace = false
+```
+
+Two rules follow from it:
+
+- **The registry decides which sub-repositories exist.** Do not work from a hand-maintained
+  Markdown table: it cannot be parsed, so the skill and the health check would disagree about
+  what the project depends on. The health check (`pengj-templates-cli subrepo check`) reads this
+  very file, so the set of entries the skill suggests upgrading is the set the check verifies.
+- **The dependency mode decides what to do.** `submodule` needs pointer and readiness checks;
+  `fetch` is pinned by the host build system; `local` is a sibling directory on this machine.
+  The mode is a closed enum — an unknown value is a hard error, never a silent skip.
+
+List the registry in human-readable form with:
+
+```powershell
+pengj-templates-cli subrepo list --dir .
+```
+
 ## Standard Upgrade Workflow
 
 ```
-[1. Baseline & Target] ──► [2. Unapplied Commits & Clustering] ──► [3. Safe Checkout / Update] ──► [4. Host Refactor & Adapt] ──► [5. Gate Verification & Commit]
+[0. Read the registry] ──► [1. Baseline & Target] ──► [2. Unapplied Commits & Clustering] ──► [3. Safe Checkout / Update] ──► [4. Host Refactor & Adapt] ──► [5. Gate Verification & Commit]
 ```
 
 ### Step 1: Baseline & Target Discovery
@@ -104,10 +136,40 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath "<子仓库路径>" -Update
 ```
 
+## 登记表是唯一事实源
+
+**先读 `.pengj-templates/subrepo.toml`。** 它是本项目全部外部子仓库的机器可读登记表：
+每个子仓库一张 `[[subrepo]]` 表，记着名称、相对路径、依赖模式、上游跟踪分支，
+以及该子仓库是否自带工作区定义。
+
+```toml
+[[subrepo]]
+name = "example-subrepo"
+path = "submodules/example-subrepo"
+mode = "submodule"        # submodule | fetch | local
+upstream = "origin/main"
+has_workspace = false
+```
+
+由此有两条规矩：
+
+- **登记表决定有哪些子仓库。** 不要依据手工维护的 Markdown 表格行事：那张表无法被程序解析，
+  技能与体检命令会对「本项目依赖哪些子仓库」产生分歧。体检命令
+  （`pengj-templates-cli subrepo check`）读的就是这份文件，因此技能建议升级的对象
+  与体检检查的对象永远是同一批。
+- **依赖模式决定该做什么。** `submodule` 要查指针与就绪状态；`fetch` 的版本锁在宿主构建系统里；
+  `local` 是本机的同级目录。模式是封闭枚举，写出三种之外的值是硬错误，绝不静默跳过。
+
+用下面这条命令把登记表渲染成人类可读的清单：
+
+```powershell
+pengj-templates-cli subrepo list --dir .
+```
+
 ## 标准升级工作流
 
 ```
-[1. 识别基线与目标] ──► [2. 提取未应用提交与聚类] ──► [3. 安全签出与更新] ──► [4. 宿主适配与重构] ──► [5. 门禁验证与提交]
+[0. 读取登记表] ──► [1. 识别基线与目标] ──► [2. 提取未应用提交与聚类] ──► [3. 安全签出与更新] ──► [4. 宿主适配与重构] ──► [5. 门禁验证与提交]
 ```
 
 ### 步骤 1：识别基线与目标
@@ -168,9 +230,15 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 <!-- The following is the project-specific area: template updates only replace the managed block above; this area is owned by the project and fully preserved. -->
 ## Project-Specific Subrepo Configuration & Gate Contracts
 
-> Declare project-specific subrepo paths, domain clustering keywords, host verification gates, and architectural invariants here.
+> Declare project-specific clustering keywords, host verification gates, and architectural invariants here.
 
-### 1. Managed Subrepo Registry
+### 1. Subrepo Registry (optional derived view)
+
+The authoritative registry is `.pengj-templates/subrepo.toml` — read it, and keep it up to date
+whenever a sub-repository is added, removed or re-pointed. The table below is an **optional
+human-readable snapshot** derived from that file; it is never the source of truth and it is
+never parsed by any tool. If it drifts from the registry, the registry wins.
+
 | Subrepo Name | Relative Path | Dependency Mode (Submodule / FetchContent / Local) | Upstream Tracking Branch |
 | :--- | :--- | :--- | :--- |
 | `example-subrepo` | `submodules/example-subrepo` | Git Submodule | `origin/main` |
@@ -193,9 +261,14 @@ pwsh .agents/skills/subrepo-sync/scripts/show-unapplied-commits.ps1 -SubrepoPath
 <!-- 以下为项目专属区域：模板更新只替换上方托管块，本区域归项目所有、完整保留。 -->
 ## 项目专属子仓库配置与门禁契约
 
-> 在此处声明本项目的子仓库路径、领域专属聚类关键词、宿主验证门禁与架构红线。
+> 在此处声明领域专属聚类关键词、宿主验证门禁与架构红线。
 
-### 1. 托管子仓库登记
+### 1. 子仓库登记（可选展示）
+
+权威登记在 `.pengj-templates/subrepo.toml` —— 读它，并且增删子仓库、改指向时同步维护它。
+下表是**由登记表派生的可选人类可读快照**，不是事实源，也没有任何工具会解析它。
+若它与登记表不一致，以登记表为准。
+
 | 子仓库名称 | 相对路径 | 依赖模式 (Submodule / FetchContent / 本地) | 上游跟踪分支 |
 | :--- | :--- | :--- | :--- |
 | `example-subrepo` | `submodules/example-subrepo` | Git Submodule | `origin/main` |

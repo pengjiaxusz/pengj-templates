@@ -1,0 +1,11 @@
+name = "Subrepo"
+description = "子仓库登记与校验：机器可读的子仓库登记表（名称、相对路径、依赖模式、上游跟踪分支、是否自带工作区定义），配套子仓库同步技能；为子仓库层提供登记基础设施，升级方法论由技能负责"
+depends = ["common", "just"]
+
+# 配套技能：勾选本层即自动带上「子仓库同步」技能，避免「有登记表没文档」的半接入。
+skills = ["subrepo-sync"]
+
+# 更新黑名单：`.pengj-templates/subrepo.toml` 的条目归项目所有，模板不覆盖。
+# 但文件头部的受管说明块（PENGJ_TEMPLATE_START/END）仍随模板刷新——说明不是用户资产，
+# 冻结它只会让语义一旦反转，注释继续按旧说法骗人。
+update_ignore = [".pengj-templates/subrepo.toml"]

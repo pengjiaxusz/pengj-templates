@@ -1,38 +1,73 @@
 # {% if options["skill_lang"] == "en" %}.pengj-templates/just/rust-workspace.just — common tasks for a multi-crate Rust workspace (managed by the rust-workspace layer){% else %}.pengj-templates/just/rust-workspace.just — Rust 多 crate 工作区常用任务（rust-workspace 层托管）{% endif %}
 # {% if options["skill_lang"] == "en" %}Imported by the root justfile based on the selected layers. If the project has its own{% else %}由 justfile 主入口按层条件 import；项目若有自己的编排，请在 manifest 里设{% endif %}
 # {% if options["skill_lang"] == "en" %}orchestration, set options["just_recipes"] = "none" and keep these recipes in the project-owned area.{% else %}options["just_recipes"] = "none"，把这些配方留给项目专属区。{% endif %}
+{% macro shared_win() %}{% if "worktree" in layers %}$env:CARGO_TARGET_DIR = (pengj-templates-cli worktree target-dir --dir .); {% endif %}{% endmacro -%}
+{% macro shared_sh() %}{% if "worktree" in layers %}CARGO_TARGET_DIR="$(pengj-templates-cli worktree target-dir --dir .)" {% endif %}{% endmacro -%}
 {% if "bque" in layers %}
 # {% if options["skill_lang"] == "en" %}Build the whole workspace (Windows: global queue + Idle priority){% else %}全工作区构建（Windows 走全局排队 + Idle 优先级）{% endif %}
 [windows]
 build *ARGS:
-    @bque run -- cargo build --workspace {% raw %}{{ARGS}}{% endraw %}
+    @{{ shared_win() }}bque run -- cargo build --workspace {% raw %}{{ARGS}}{% endraw %}
 [unix]
 build *ARGS:
-    cargo build --workspace {% raw %}{{ARGS}}{% endraw %}
+    {{ shared_sh() }}cargo build --workspace {% raw %}{{ARGS}}{% endraw %}
 
 # {% if options["skill_lang"] == "en" %}Check the whole workspace (clippy warnings are errors){% else %}全工作区检查（clippy 警告视为错误）{% endif %}
 [windows]
 check *ARGS:
-    @bque run -- cargo clippy --workspace --all-targets --all-features -- -D warnings {% raw %}{{ARGS}}{% endraw %}
+    @{{ shared_win() }}bque run -- cargo clippy --workspace --all-targets --all-features -- -D warnings {% raw %}{{ARGS}}{% endraw %}
 [unix]
 check *ARGS:
-    cargo clippy --workspace --all-targets --all-features -- -D warnings {% raw %}{{ARGS}}{% endraw %}
+    {{ shared_sh() }}cargo clippy --workspace --all-targets --all-features -- -D warnings {% raw %}{{ARGS}}{% endraw %}
 
 # {% if options["skill_lang"] == "en" %}Test the whole workspace{% else %}全工作区测试{% endif %}
 [windows]
 test *ARGS:
-    @bque run -- cargo test --workspace --all-features {% raw %}{{ARGS}}{% endraw %}
+    @{{ shared_win() }}bque run -- cargo test --workspace --all-features {% raw %}{{ARGS}}{% endraw %}
 [unix]
 test *ARGS:
-    cargo test --workspace --all-features {% raw %}{{ARGS}}{% endraw %}
+    {{ shared_sh() }}cargo test --workspace --all-features {% raw %}{{ARGS}}{% endraw %}
 
 # {% if options["skill_lang"] == "en" %}Benchmark (suspends background builds for a clean CPU environment){% else %}专项基准测试（自动挂起后台编译，提供纯净 CPU 环境）{% endif %}
 [windows]
 bench *ARGS:
-    @bque bench -- cargo bench --workspace {% raw %}{{ARGS}}{% endraw %}
+    @{{ shared_win() }}bque bench -- cargo bench --workspace {% raw %}{{ARGS}}{% endraw %}
 [unix]
 bench *ARGS:
-    cargo bench --workspace {% raw %}{{ARGS}}{% endraw %}
+    {{ shared_sh() }}cargo bench --workspace {% raw %}{{ARGS}}{% endraw %}
+{% else %}
+{% if "worktree" in layers %}
+# {% if options["skill_lang"] == "en" %}Build the whole workspace (shared build directory injected per machine){% else %}全工作区构建（共享编译目录按机器推导后注入）{% endif %}
+[windows]
+build *ARGS:
+    @{{ shared_win() }}cargo build --workspace {% raw %}{{ARGS}}{% endraw %}
+[unix]
+build *ARGS:
+    {{ shared_sh() }}cargo build --workspace {% raw %}{{ARGS}}{% endraw %}
+
+# {% if options["skill_lang"] == "en" %}Check the whole workspace{% else %}全工作区检查{% endif %}
+[windows]
+check *ARGS:
+    @{{ shared_win() }}cargo clippy --workspace --all-targets --all-features -- -D warnings {% raw %}{{ARGS}}{% endraw %}
+[unix]
+check *ARGS:
+    {{ shared_sh() }}cargo clippy --workspace --all-targets --all-features -- -D warnings {% raw %}{{ARGS}}{% endraw %}
+
+# {% if options["skill_lang"] == "en" %}Test the whole workspace{% else %}全工作区测试{% endif %}
+[windows]
+test *ARGS:
+    @{{ shared_win() }}cargo test --workspace --all-features {% raw %}{{ARGS}}{% endraw %}
+[unix]
+test *ARGS:
+    {{ shared_sh() }}cargo test --workspace --all-features {% raw %}{{ARGS}}{% endraw %}
+
+# {% if options["skill_lang"] == "en" %}Benchmark{% else %}专项基准测试{% endif %}
+[windows]
+bench *ARGS:
+    @{{ shared_win() }}cargo bench --workspace {% raw %}{{ARGS}}{% endraw %}
+[unix]
+bench *ARGS:
+    {{ shared_sh() }}cargo bench --workspace {% raw %}{{ARGS}}{% endraw %}
 {% else %}
 # {% if options["skill_lang"] == "en" %}Build the whole workspace{% else %}全工作区构建{% endif %}
 build *ARGS:
@@ -49,6 +84,7 @@ test *ARGS:
 # {% if options["skill_lang"] == "en" %}Benchmark{% else %}专项基准测试{% endif %}
 bench *ARGS:
     cargo bench --workspace {% raw %}{{ARGS}}{% endraw %}
+{% endif %}
 {% endif %}
 
 # {% if options["skill_lang"] == "en" %}Format code (lightweight, no queue){% else %}代码就地格式化（轻量，不排队）{% endif %}

@@ -6,6 +6,9 @@
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
 - Route all builds, checks, tests and benchmarks through `just` (`just check`, `just test`, `just q-run <cmd>`); never run raw `cargo`/`ninja`/`cmake`. See `.agents/skills/bque/SKILL.md`.
 {%- endif %}
+{%- if 'worktree' in layers %}
+- Parallel worktrees share **one** build directory outside the repository (`CARGO_TARGET_DIR`, injected by the `just` recipes): dependencies compile once instead of once per worktree. Only intermediate artifacts are shared — **final binaries keep a fixed path inside that directory, so concurrent worktrees overwrite each other's output**. Isolate run artifacts per worktree yourself (copy them out, or set your own output directory); the template deliberately does not implement isolation. Create worktrees with `just wt-create <name>`, verify with `just wt-check`. See `.agents/skills/worktree/SKILL.md`.
+{%- endif %}
 {%- if options["commit_and_push"] %}
 - After changes pass verification, commit and push before replying. Skip only for pure Q&A or when reporting failing builds/tests.
 {%- endif %}
@@ -42,6 +45,9 @@
 ## 通用约定
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
 - 编译/检查/测试/跑分统一走 `just`（`just check`、`just test`、`just q-run <cmd>`），不裸跑 `cargo`/`ninja`/`cmake`；详见 `.agents/skills/bque/SKILL.md`。
+{%- endif %}
+{%- if 'worktree' in layers %}
+- 多个并行工作树共享**同一份**仓库外编译目录（`CARGO_TARGET_DIR`，由 `just` 配方注入）：依赖只编译一次，不必每个工作树各编一遍。共享的只有中间产物——**最终二进制在该目录里路径固定，并发的工作树会互相覆盖产物**。运行产物请按工作树自己隔离（复制出去，或另设输出目录），模板刻意不实现隔离机制。新建工作树用 `just wt-create <名称>`，校验用 `just wt-check`。详见 `.agents/skills/worktree/SKILL.md`。
 {%- endif %}
 {%- if options["commit_and_push"] %}
 - 完成修改并通过验证后，先 commit & push 再回复；纯问答或构建/测试失败待排查时除外。

@@ -15,6 +15,11 @@ import '.pengj-templates/just/bque.just'
 {% if "gate" in layers %}
 import '.pengj-templates/just/gate.just'
 {% endif %}
+{% if "subrepo" in layers %}
+import '.pengj-templates/just/subrepo.just'
+{% endif %}{% if "worktree" in layers %}
+import '.pengj-templates/just/worktree.just'
+{% endif -%}
 {% if options["just_recipes"] is defined %}
 {% if options["just_recipes"] == "rust" %}
 import '.pengj-templates/just/rust.just'
