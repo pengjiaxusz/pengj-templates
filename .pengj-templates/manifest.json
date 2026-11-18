@@ -1,13 +1,14 @@
 {
   "tool": "pengj-templates",
-  "version": "0.74.0",
+  "version": "0.75.0",
   "project_name": "pengj-templates",
   "layers": [
     "common",
     "just",
     "rust-workspace",
     "agent",
-    "bque"
+    "bque",
+    "worktree"
   ],
   "options": {
     "channel": "stable",
@@ -50,6 +51,7 @@
       "wait-what",
       "wayfinder",
       "wizard",
+      "worktree",
       "write-a-skill",
       "write-docs",
       "writing-for-agents"
@@ -132,6 +134,7 @@
     ".agents\\skills\\wayfinder\\SKILL.md": "74ee42dff609211f880852bcfbb45c54b44d0e381e8099a76ad3cc3fa9226a4c",
     ".agents\\skills\\wizard\\SKILL.md": "3ce4a38f7841e5d52be268f19138ba02bac59d9a9c57716366178b6e4f77c740",
     ".agents\\skills\\wizard\\template.sh": "ba0bdc9bacf902b74277939dfd01973d5ac0815625bb7817123e4a26dabddaf5",
+    ".agents\\skills\\worktree\\SKILL.md": "750652dff718c9491f956c50e875e348b88685eb52dbc44898ef471bb75c8e16",
     ".agents\\skills\\write-a-skill\\SKILL.md": "4d1b1de7937feabcc909050c34d95b149134e2b07baf1521c3f708dcb10e8ba5",
     ".agents\\skills\\write-docs\\SKILL.md": "873c5688743b786c3f445229240d9faf562c5179f484be5b04d00b85a9dcfeca",
     ".agents\\skills\\writing-for-agents\\SKILL-MECHANICS.md": "8270f0089a3f0f21ff6df51a728b1ac4fcb71405cc5cc3612fb28e028451edf0",
@@ -140,13 +143,14 @@
     ".gitattributes": "b3acc75b126846fb00541b2ffff9b9212b1cff09fafa7a75312b731200deab95",
     ".gitignore": "47cbecc00fad3532affe035e8f2c9e6af8095bea885aaab694f4a766d5dc291d",
     ".pengj-templates\\just\\bque.just": "d014bf30776544e5cc5084763edef784f0c712d06339b50e4250c853f48e8e3f",
-    ".pengj-templates\\just\\rust-workspace.just": "e2d3edf57505f72b781a6aa3b987dd73da6edf3a3083cc7aa8881818cd41643d",
+    ".pengj-templates\\just\\rust-workspace.just": "bd9450392b6a4f773d531b7297fbbe9faee441e2c64a880926f35c4f60cecc6f",
+    ".pengj-templates\\just\\worktree.just": "39ebbd22a4f66f4c475a8dab2819d2817c5d40809c762ca1b57ea872d72c3554",
     ".pengj-templates\\scripts\\doctor.d\\README.md": "ad85d611af101327951a12b7bd1c186bdc6cf4da2ddd781b5fdbe4e9fc4361f6",
-    ".pengj-templates\\scripts\\doctor.ps1": "21a98ed66f0d217e496050b13741f4258367f0f7f05bafe86cd23f51c761859e",
-    ".pengj-templates\\scripts\\doctor.sh": "3eec841825b99ccad572e6b5584ec28a5ca946d18587a3cad6ce24a91bbee9b0",
-    "AGENTS.md": "64314d54cda425282e212e5581a96de7b109630206536fafc307d7bfeea1c295",
+    ".pengj-templates\\scripts\\doctor.ps1": "ba89071f75d9a868ebb63f1e6a78df369812233350ef7d65b1315aaa3e610615",
+    ".pengj-templates\\scripts\\doctor.sh": "09a0cced4d15de78edafd302364ce559444ca62026fb66fd2cb0243213fb1b2d",
+    "AGENTS.md": "fd39a9d14aa23c4673f82a4a74162b561453beb1386030eeb19136e9a2f372c5",
     "Cargo.toml": "53130b1a688cbae224b0ebe55f910c099580b36f7390b690783b298a27bf3cb2",
-    "justfile": "6875b5f534779b4f81c65b765841bf22467fb0c461c17b3802b6f3df4fecd2de",
+    "justfile": "1ecf6bd3b69b2d3240ea175abbe3a4fe26b5d28865679d501cf87de9b58463af",
     "rust-toolchain.toml": "7271c211635386654befb235ed54aef12efe46376c4fe41c497c8d23bc1572ec"
   }
 }
