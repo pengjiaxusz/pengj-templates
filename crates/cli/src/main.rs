@@ -198,6 +198,20 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// 子仓库：读取机器可读的登记表，渲染清单或做健康体检
+    ///
+    /// 登记表是子仓库的唯一事实源，与子仓库同步技能读的是同一份文件。
+    Subrepo {
+        #[command(subcommand)]
+        cmd: SubrepoCommand,
+    },
+    /// 工作树：共享编译目录的推导与校验、按名新建工作树
+    ///
+    /// 共享目录按机器动态推导（平台数据目录 + 项目标识），构建配方与自检读同一个值。
+    Worktree {
+        #[command(subcommand)]
+        cmd: WorktreeCommand,
+    },
     /// 立即检查 CLI 是否有新版本（同步联网，不写提示状态之外的任何东西）
     ///
     /// 日常运行时由后台异步检查代替，这条命令用于脚本或想立刻知道答案的场合。
@@ -280,6 +294,75 @@ enum McpCommand {
 }
 
 #[derive(Subcommand, Clone)]
+enum SubrepoCommand {
+    /// 把登记表渲染成人类可读的清单（名称、相对路径、依赖模式、上游跟踪分支）
+    ///
+    /// 登记表为空或条目缺少必填字段时直接报错退出，不输出半成品。
+    List {
+        /// 项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 以 JSON 格式输出（供脚本/自动化消费）
+        #[arg(long)]
+        json: bool,
+    },
+    /// 对项目做子仓库体检：嵌套工作区红线、子模块就绪状态、依赖模式自洽
+    ///
+    /// 退出码分级：0 全部通过，1 有失败项，2 只有警告项。
+    Check {
+        /// 项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 以 JSON 格式输出（供脚本/自动化消费）
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+enum WorktreeCommand {
+    /// 打印共享编译目录的绝对路径（构建配方与自检都读这个值，不各自推导）
+    TargetDir {
+        /// 项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 目录缺失时顺手创建（只补缺、不覆盖）
+        #[arg(long)]
+        ensure: bool,
+        /// 以 JSON 格式输出（供脚本消费）
+        #[arg(long)]
+        json: bool,
+    },
+    /// 校验共享编译目录：存在、可写、没有指向别处的覆盖值
+    ///
+    /// 退出码：0 就绪，1 缺失或不可写，2 就绪但被环境变量指向了别处。
+    Check {
+        /// 项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 修复模式：创建缺失的目录（只补缺、不覆盖）
+        #[arg(long)]
+        fix: bool,
+        /// 以 JSON 格式输出（供脚本消费）
+        #[arg(long)]
+        json: bool,
+    },
+    /// 新建工作树：分支 + 目录一次做完，接线共享编译目录并补齐子模块
+    ///
+    /// 目录建在主仓同级、以主仓目录名为前缀；目标已存在时明确报错。
+    Create {
+        /// 工作树名称（同时作为分支名与目录后缀）
+        name: String,
+        /// 主仓目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 以 JSON 格式输出（供脚本消费）
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Clone)]
 enum RepoCommand {
     /// 检查工作区链接与仓库级配置（缺失或冲突时退出码非 0）
     Status {
@@ -356,6 +439,14 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             update::exit(i32::from(code));
         }
         return Ok(());
+    }
+    // subrepo 子命令读取项目里的子仓库登记表，同样不依赖模板目录，提前分发
+    if let Command::Subrepo { cmd } = &cli.command {
+        return cmd_subrepo(cmd.clone());
+    }
+    // worktree 子命令只作用于项目目录（推导共享编译目录、新建工作树），不依赖模板目录
+    if let Command::Worktree { cmd } = &cli.command {
+        return cmd_worktree(cmd.clone());
     }
     let templates = load_templates(&cli.templates)?;
     match cli.command {
@@ -485,6 +576,8 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Repo { .. } => unreachable!("repo 子命令已在加载模板前分发"),
         Command::Mcp { .. } => unreachable!("mcp 子命令已在加载模板前分发"),
         Command::Gate { .. } => unreachable!("gate 子命令已在加载模板前分发"),
+        Command::Subrepo { .. } => unreachable!("subrepo 子命令已在加载模板前分发"),
+        Command::Worktree { .. } => unreachable!("worktree 子命令已在加载模板前分发"),
         Command::CheckUpdate { .. } => unreachable!("check-update 子命令已在加载模板前分发"),
         Command::BackgroundUpdateCheck => unreachable!("后台更新检查已在入口处分发"),
     }
@@ -507,9 +600,14 @@ fn cmd_list_layers(templates: &pengj_core::Templates, json: bool) -> anyhow::Res
         } else {
             l.depends.join(",")
         };
+        let skills = if l.skills.is_empty() {
+            "-".to_string()
+        } else {
+            l.skills.join(",")
+        };
         println!(
-            "{:<10} {:<16} {:<40} {}  (依赖: {})",
-            l.id, l.name, l.description, l.file_count, deps
+            "{:<10} {:<16} {:<40} {}  (依赖: {}  配套技能: {})",
+            l.id, l.name, l.description, l.file_count, deps, skills
         );
     }
     Ok(())
@@ -1210,6 +1308,278 @@ fn cmd_mcp_doctor(
     );
     if problems > 0 {
         update::exit(1);
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// subrepo：子仓库登记表
+// ---------------------------------------------------------------------------
+
+fn cmd_subrepo(cmd: SubrepoCommand) -> anyhow::Result<()> {
+    match cmd {
+        SubrepoCommand::List { dir, json } => cmd_subrepo_list(&dir, json),
+        SubrepoCommand::Check { dir, json } => cmd_subrepo_check(&dir, json),
+    }
+}
+
+/// 把登记表渲染成人类可读的清单。
+///
+/// 登记表为空、或条目缺少必填字段时**报错退出**，不输出半成品：
+/// 一份「看起来完整」但实际漏了条目的清单，比明确报错更危险。
+fn cmd_subrepo_list(dir: &Path, json: bool) -> anyhow::Result<()> {
+    let registry = pengj_core::SubrepoRegistry::load(dir)
+        .context("读取子仓库登记表失败（登记表不存在，或内容不是合法的 TOML）")?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "未找到子仓库登记表: {}（该项目可能未勾选「子仓库」层）",
+                pengj_core::SUBREPO_REGISTRY_REL
+            )
+        })?;
+
+    if registry.entries.is_empty() {
+        anyhow::bail!(
+            "子仓库登记表为空: {}（请先登记 [[subrepo]] 条目，再渲染清单）",
+            pengj_core::SUBREPO_REGISTRY_REL
+        );
+    }
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&registry)?);
+        return Ok(());
+    }
+
+    println!(
+        "子仓库清单（{} 条，来源: {}）",
+        registry.entries.len(),
+        pengj_core::SUBREPO_REGISTRY_REL
+    );
+    println!("------------------------------------------------------------");
+    for entry in &registry.entries {
+        println!("名称: {}", entry.name);
+        println!("  相对路径: {}", entry.path);
+        println!(
+            "  依赖模式: {}（{}）",
+            entry.mode.as_str(),
+            entry.mode.describe()
+        );
+        match entry.mode {
+            pengj_core::DependencyMode::Submodule => {
+                println!(
+                    "  上游跟踪分支: {}",
+                    entry.upstream.as_deref().unwrap_or("-")
+                );
+            }
+            pengj_core::DependencyMode::Local => {
+                println!(
+                    "  本地同级目录: {}",
+                    entry.local_dir.as_deref().unwrap_or("-")
+                );
+            }
+            pengj_core::DependencyMode::Fetch => {
+                println!("  上游跟踪分支: -（按版本拉取，版本锁定在宿主构建系统里）");
+            }
+        }
+        if entry.has_workspace {
+            println!("  自带工作区定义: 是（宿主工作区必须排除它）");
+        }
+    }
+    Ok(())
+}
+
+/// 子仓库体检：逐条结论 + 分级退出码。
+///
+/// 检查逻辑在 `pengj_core::subrepo_check` 里（单一实现），自检脚本只负责转发到这里——
+/// 与提交门禁「只有一套实现」的既有原则一致。
+fn cmd_subrepo_check(dir: &Path, json: bool) -> anyhow::Result<()> {
+    let report = pengj_core::check_project(dir)
+        .context("子仓库体检失败（登记表不存在，或内容不是合法的登记表）")?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("子仓库体检（{}）", report.root);
+        println!("------------------------------------------------------------");
+        for item in &report.items {
+            let label = match item.level {
+                pengj_core::CheckLevel::Pass => "通过",
+                pengj_core::CheckLevel::Warn => "警告",
+                pengj_core::CheckLevel::Fail => "失败",
+            };
+            println!("[{}] {}：{}", label, item.name, item.detail);
+            if let Some(remedy) = &item.remedy {
+                println!("        → {remedy}");
+            }
+        }
+        let failures = report
+            .items
+            .iter()
+            .filter(|i| i.level == pengj_core::CheckLevel::Fail)
+            .count();
+        let warnings = report
+            .items
+            .iter()
+            .filter(|i| i.level == pengj_core::CheckLevel::Warn)
+            .count();
+        println!("------------------------------------------------------------");
+        println!(
+            "共 {} 项检查：{} 个失败，{} 个警告",
+            report.items.len(),
+            failures,
+            warnings
+        );
+    }
+
+    let code = report.exit_code();
+    if code != 0 {
+        update::exit(code);
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// worktree：共享编译目录与新建工作树
+// ---------------------------------------------------------------------------
+
+/// 展示用路径：剥掉 Windows 的 `\\?\` 逐字前缀（`canonicalize` 会加上它，
+/// 打印给人看只会变成噪音）。
+fn display_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    #[cfg(windows)]
+    {
+        text.strip_prefix(r"\\?\").unwrap_or(&text).to_string()
+    }
+    #[cfg(not(windows))]
+    {
+        text
+    }
+}
+
+fn cmd_worktree(cmd: WorktreeCommand) -> anyhow::Result<()> {
+    match cmd {
+        WorktreeCommand::TargetDir { dir, ensure, json } => {
+            cmd_worktree_target_dir(&dir, ensure, json)
+        }
+        WorktreeCommand::Check { dir, fix, json } => cmd_worktree_check(&dir, fix, json),
+        WorktreeCommand::Create { name, dir, json } => cmd_worktree_create(&dir, &name, json),
+    }
+}
+
+/// 打印共享编译目录的绝对路径。
+///
+/// 非 JSON 模式下**只打印路径**：构建配方把它的标准输出直接当作 `CARGO_TARGET_DIR`
+/// 的值，多打一行说明就会毒化环境变量。
+fn cmd_worktree_target_dir(dir: &Path, ensure: bool, json: bool) -> anyhow::Result<()> {
+    let root = repo_root(dir)?;
+    let (target, state) = if ensure {
+        pengj_core::ensure_shared_target(&root)?
+    } else {
+        pengj_core::check_shared_target(&root)?
+    };
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "path": target.path.to_string_lossy(),
+                "project_key": target.project_key,
+                "state": state.as_str(),
+            })
+        );
+        return Ok(());
+    }
+    println!("{}", target.path.display());
+    Ok(())
+}
+
+/// 校验共享目录：存在、可写，且没有指向别处的覆盖值。
+fn cmd_worktree_check(dir: &Path, fix: bool, json: bool) -> anyhow::Result<()> {
+    let root = repo_root(dir)?;
+    let (target, state) = if fix {
+        pengj_core::ensure_shared_target(&root)?
+    } else {
+        pengj_core::check_shared_target(&root)?
+    };
+    let override_path = pengj_core::conflicting_override(&target);
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "root": display_path(&root),
+                "path": target.path.to_string_lossy(),
+                "project_key": target.project_key,
+                "state": state.as_str(),
+                "override_path": override_path,
+            })
+        );
+    } else {
+        println!("共享编译目录（{}）", display_path(&root));
+        println!("------------------------------------------------------------");
+        println!("  路径: {}", target.path.display());
+        println!("  项目标识: {}", target.project_key);
+        println!("  状态: {}", state.describe());
+        if let Some(path) = &override_path {
+            println!(
+                "  警告: 环境变量 CARGO_TARGET_DIR 指向 {path}，与本机推导值不一致；\
+                 裸跑 cargo 会落到别处，请经由 just 配方构建或清掉这个覆盖值"
+            );
+        }
+        if state == pengj_core::SharedTargetState::Missing {
+            println!("  → 修复：pengj-templates-cli worktree check --dir . --fix");
+        }
+    }
+
+    if state != pengj_core::SharedTargetState::Ready {
+        update::exit(1);
+    }
+    // 目录就绪但环境里有个指向别处的覆盖值：不阻断（配方会把值盖回去），
+    // 但必须让人看见——否则「裸跑 cargo」的工作树会悄悄落到另一个目录。
+    if override_path.is_some() {
+        update::exit(2);
+    }
+    Ok(())
+}
+
+/// 新建工作树：分支 + 目录一次做完，接线共享编译目录并补齐子模块。
+fn cmd_worktree_create(dir: &Path, name: &str, json: bool) -> anyhow::Result<()> {
+    let root = repo_root(dir)?;
+    let report = pengj_core::create_worktree(&root, name)?;
+
+    if json {
+        let submodules: Vec<serde_json::Value> = report
+            .submodules
+            .iter()
+            .map(|(name, ready)| serde_json::json!({ "name": name, "ready": ready }))
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({
+                "path": report.path.to_string_lossy(),
+                "branch": report.branch,
+                "shared_target": report.shared_target.to_string_lossy(),
+                "submodules": submodules,
+            })
+        );
+        return Ok(());
+    }
+
+    println!("工作树已创建");
+    println!("------------------------------------------------------------");
+    println!("  路径: {}", report.path.display());
+    println!("  分支: {}", report.branch);
+    println!("  共享编译目录: {}", report.shared_target.display());
+    if report.submodules.is_empty() {
+        println!("  子模块: 无");
+    } else {
+        for (name, ready) in &report.submodules {
+            println!(
+                "  子模块 {name}: {}",
+                if *ready { "就绪" } else { "未就绪" }
+            );
+        }
+        if report.submodules.iter().any(|(_, ready)| !ready) {
+            println!("  → 补齐：pengj-templates-cli repo init --dir .");
+        }
     }
     Ok(())
 }
