@@ -25,6 +25,16 @@
 | [`集成配置与工作区同步.md`](./集成配置与工作区同步.md) | `.vscode/settings.json` 与 `*.code-workspace` 的 fileNesting 增量合并 | `crates/core/src/engine.rs::sync_workspace_file/sync_settings_file`, `templates/vscode/.vscode/settings.json` | 【设计实现】 |
 | [`语言变体文件.md`](./语言变体文件.md) | 代码类产物按语言拆文件（`<stem>.<lang>.<ext>` 跟 `skill_lang`、`<stem>.commit.<lang>.<ext>` 跟 `commit_zh`），引擎二选一写盘、产物去标记 | `crates/core/src/engine.rs::resolve_language_variant/build_file_map` | 【设计实现】 |
 
-## 3. 关联设计草稿与探索（非权威，仅作参考）
+## 3. 决策记录与规格（Decision Records & Specs）
+
+| 文档 | 核心内容 / 职责范围 | 关联模块 / 源码路径 | 规范级别 |
+| :--- | :--- | :--- | :--- |
+| [`GLOSSARY.md`](../../GLOSSARY.md) | 模板引擎领域术语表：层、托管块、更新黑名单、结构化合并、迁移提示、子仓库、登记表、共享编译目录、产物覆盖 | — | 【权威规范】 |
+| [`docs/adr/0001-shared-build-dir-via-env-injection.md`](../adr/0001-shared-build-dir-via-env-injection.md) | 共享编译目录用 `CARGO_TARGET_DIR` 注入而非目录链接 / `target-dir`：链接状态无法被自动校验，且手工方案已静默退化 | — | 【权威规范】 |
+| [`docs/adr/0002-subrepo-and-worktree-as-separate-layers.md`](../adr/0002-subrepo-and-worktree-as-separate-layers.md) | 子仓库能力与多工作树能力拆成两个独立层：机制正交，交汇点交由仓库初始化入口承接 | — | 【权威规范】 |
+| [`docs/adr/0003-machine-readable-subrepo-registry.md`](../adr/0003-machine-readable-subrepo-registry.md) | 子仓库登记表用机器可读格式而非 Markdown 表格：表格方案无法被可靠解析且失效是静默的 | — | 【权威规范】 |
+| [`docs/spec/subrepo-worktree-layers.md`](../spec/subrepo-worktree-layers.md) | `subrepo` 与 `worktree` 两个新层的规格：问题陈述、用户故事、实现决策、测试决策、范围之外 | — | 【规格】 |
+
+## 4. 关联设计草稿与探索（非权威，仅供参考）
 
 - 暂无 `docs/design/` 或 `docs/设计/` 草稿目录。后续实验性设计可置于 `docs/design/<topic>/`，成熟后晋升为 `docs/architecture/` 权威文档并回填本索引。
