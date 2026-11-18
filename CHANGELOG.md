@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.76.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.76.0...v0.76.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **core:** 子模块形态下主工作树取检出目录而非 git 目录 ([00c3550](https://github.com/pengjiaxusz/pengj-templates/commit/00c3550590a1bdfd38d36704bcb4165505a2fed0))
+
 ## [0.76.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.75.1...v0.76.0) (2026-11-18)
 
 
