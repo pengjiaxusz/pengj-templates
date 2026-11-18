@@ -1,6 +1,8 @@
 # 模板支持子仓库与多工作树并行开发
 
 > 本 spec 由 `/grill-with-docs` + `/to-spec` 产出。配套文档：[`GLOSSARY.md`](https://github.com/pengjiaxusz/pengj-templates/blob/main/GLOSSARY.md)、[`docs/adr/0001`](https://github.com/pengjiaxusz/pengj-templates/blob/main/docs/adr/0001-shared-build-dir-via-env-injection.md)、[`0002`](https://github.com/pengjiaxusz/pengj-templates/blob/main/docs/adr/0002-subrepo-and-worktree-as-separate-layers.md)、[`0003`](https://github.com/pengjiaxusz/pengj-templates/blob/main/docs/adr/0003-machine-readable-subrepo-registry.md)
+>
+> 实施工单见 [#133](https://github.com/pengjiaxusz/pengj-templates/issues/133) 的子 issue：#134（联动机制）→ #135（登记表）→ #136（体检）/ #137（技能改读）；#138（共享编译目录）→ #140（新建工作树）。
 
 ## 问题陈述（Problem Statement）
 
