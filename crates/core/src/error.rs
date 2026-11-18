@@ -37,6 +37,9 @@ pub enum CoreError {
     #[error("JSON 解析错误: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[error("子仓库登记表无效: {0}")]
+    SubrepoRegistry(String),
+
     #[error("git 命令失败: {0}")]
     Git(String),
 }
