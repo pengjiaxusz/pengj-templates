@@ -12,6 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::{CoreError, Result};
+use crate::worktree::{main_worktree, strip_verbatim};
 
 /// 新建工作树的报告
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,31 +139,6 @@ fn init_submodules(worktree: &Path) -> Vec<(String, bool)> {
     }
 }
 
-/// 找到主工作树的根：`git worktree list --porcelain` 的第一条就是它。
-///
-/// 从任意一个链接工作树里新建，落点都应是主工作树旁边。取不到时返回 `None`，
-/// 调用方退回「按给定目录当主仓」——这是单工作树仓库的常态。
-fn main_worktree(dir: &Path) -> Option<PathBuf> {
-    let output = git(dir, &["worktree", "list", "--porcelain"]).ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let path = text
-        .lines()
-        .find_map(|line| line.strip_prefix("worktree "))
-        .map(str::trim)
-        .filter(|p| !p.is_empty())?;
-    // git 的 porcelain 输出用正斜杠；不归一的话 Windows 上拼出来的路径会一半
-    // 正斜杠一半反斜杠，虽然能用，但打印出来像 bug。
-    #[cfg(windows)]
-    let path = path.replace('/', "\\");
-    #[cfg(not(windows))]
-    let path = path.to_string();
-    let resolved = PathBuf::from(path);
-    Some(strip_verbatim(&resolved))
-}
-
 fn git(root: &Path, args: &[&str]) -> Result<std::process::Output> {
     std::process::Command::new("git")
         .arg("-C")
@@ -170,22 +146,6 @@ fn git(root: &Path, args: &[&str]) -> Result<std::process::Output> {
         .args(args)
         .output()
         .map_err(|error| CoreError::Git(format!("无法执行 git: {error}")))
-}
-
-/// 剥掉 Windows 的 `\\?\` 逐字路径前缀。
-///
-/// `canonicalize()` 会给绝对路径加上这个前缀，git 遇到它会在建目录时失败
-/// （`could not create leading directories of '//?/C:/...'`），所以凡是交给
-/// git 的路径都要先剥掉。
-fn strip_verbatim(path: &Path) -> PathBuf {
-    #[cfg(windows)]
-    {
-        let text = path.to_string_lossy();
-        if let Some(rest) = text.strip_prefix(r"\\?\") {
-            return PathBuf::from(rest);
-        }
-    }
-    path.to_path_buf()
 }
 
 fn git_stdout(root: &Path, args: &[&str]) -> Result<String> {

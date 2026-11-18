@@ -50,6 +50,17 @@ pub const MIGRATIONS: &[MigrationNote] = &[
                  `.gate.toml` 的配置值要手工搬进 `.pengj-templates/gate.toml`（该文件归项目所有，\
                  update 只刷新说明块、不覆盖值），搬完删掉根上的旧文件再跑一次 update 清账本",
     },
+    MigrationNote {
+        version: "0.76.0",
+        summary: "worktree 层的共享编译目录换了落点：从「平台数据目录下的独立目录」改为**主工作树的 \
+                  `target/`**。`worktree target-dir` 的取值随之改变，`worktree check` 的 JSON 字段 \
+                  `project_key` 被 `main_worktree` 取代",
+        action: "模板侧无需手工改动，跑一次 update 刷新 worktree 配方与技能文案即可；解析 `worktree \
+                 check --json` 的脚本要把 `project_key` 换成 `main_worktree`。旧的 \
+                 `<平台数据目录>/pengj-templates/shared-target/` 是纯编译产物，确认各仓 `just wt-check` \
+                 已指向项目内之后可直接删除。此后在主工作树里 `cargo clean` 会一并清掉所有工作树的\
+                 中间产物",
+    },
 ];
 
 /// 当前工具的版本（crate 版本即发布版本）

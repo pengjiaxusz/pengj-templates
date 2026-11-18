@@ -1,76 +1,58 @@
-//! 共享编译目录：多工作树共享同一份编译产物
+//! 共享编译目录：所有工作树都编译到**主工作树的 `target/`**
 //!
 //! 现状痛点：每个工作树各持一份编译产物目录，依赖被重复编译、磁盘被数十 GB 的
 //! 重复产物撑爆。手写方案的根本问题是**状态无法被任何自动机制校验**——链接没建、
 //! 被误删或悄悄退化时，没有任何环节会报警。
 //!
-//! 机制选择：由构建配方统一注入 `CARGO_TARGET_DIR`，指向**仓库外**的共享目录。
-//! 目录位置按机器动态推导（平台数据目录 + 项目标识），不是模板里的静态路径。
+//! 落点选主工作树的 `target/`，而不是平台数据目录下的独立目录：
+//!
+//! - **产物跟着项目走**：项目在哪块盘、搬到哪里，产物都在同一棵树里，按项目就能
+//!   看清与清理；不往 C 盘用户目录里堆几十 GB。
+//! - **主工作树零配置**：它的默认 `target/` 就是共享目录，裸跑 `cargo build`
+//!   也落在同一处，不需要配方也能命中复用。
+//! - **链接工作树**通过构建配方注入的 `CARGO_TARGET_DIR` 指过去。
+//!
+//! 代价（必须写进文档，不能靠使用者记忆）：在主工作树里 `cargo clean` 或
+//! `git clean -xdf` 会清掉**所有**工作树的中间产物。这是「产物落在项目内」的
+//! 必然取舍，换来的是零新增目录、`.gitignore` 天然覆盖、同盘移动不拆散产物。
 //!
 //! **推导逻辑只有一份**（本模块），构建配方与自检读同一个值，不得各写一套。
 //! 这也是「不在 `.cargo/config.toml` 写 `target-dir`」的原因：那个文件走模板的
 //! 结构化合并，模板受管块与用户自定义区若出现同名表头会判冲突、整文件不予写盘，
 //! 用户的构建配置会静默停在旧值。
 //!
-//! 跨工作树稳定的项目标识：同一仓库的所有工作树共享同一个 git `common-dir`，
-//! 用它的哈希做标识 —— 不同仓库不会撞，同仓库不同工作树必然一致。
+//! 主工作树的判定用 `git worktree list --porcelain` 的第一条：同一仓库的所有工作树
+//! 都会得到它，因此跨工作树稳定；不同仓库各有自己的主工作树，天然按仓库分桶。
+//! 不在 git 仓库里时退回自身 `target/`——单目录项目没有「别的工作树」可分。
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 
 use crate::error::{CoreError, Result};
 
-/// 共享编译目录在平台数据目录下的子目录名
-pub const SHARED_TARGET_DIR_NAME: &str = "shared-target";
+/// 编译产物目录名（主工作树里就是 Cargo 的默认位置）
+pub const TARGET_DIR_NAME: &str = "target";
 
 /// 共享编译目录的推导结果
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SharedTarget {
-    /// 共享目录的绝对路径
+    /// 共享目录的绝对路径（主工作树的 `target/`）
     pub path: PathBuf,
-    /// 项目标识（用于人工辨认；不含盘符、用户名等机器相关字面量）
-    pub project_key: String,
+    /// 主工作树的根：共享目录的持有者，也是清理操作的作用域
+    pub main_worktree: PathBuf,
 }
 
-/// 推导项目标识。
+/// 推导共享编译目录：**主工作树的 `target/`**。
 ///
-/// 优先用 git 的 `common-dir`：同一仓库的多个工作树共享它，因此标识天然跨工作树稳定；
-/// 不同仓库各用自己的 `common-dir`，不会互相覆盖产物。
-///
-/// 不在 git 工作树里时退回到目录名 + 路径哈希：仍然稳定且不泄漏机器信息。
-pub fn project_key(project_dir: &Path) -> String {
-    if let Some(common) = git_common_dir(project_dir) {
-        return format!("repo-{}", short_hash(&common.to_string_lossy()));
+/// 从任意一个链接工作树进来都得到同一个结果——这是复用的前提。不落在平台数据
+/// 目录，也不按哈希分桶：主工作树本身就是桶。
+pub fn shared_target_dir(project_dir: &Path) -> SharedTarget {
+    let main_worktree = main_worktree(project_dir).unwrap_or_else(|| project_dir.to_path_buf());
+    SharedTarget {
+        path: main_worktree.join(TARGET_DIR_NAME),
+        main_worktree,
     }
-    let name = project_dir
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "project".to_string());
-    let slug = crate::context::slugify(&name);
-    format!("{}-{}", slug, short_hash(&project_dir.to_string_lossy()))
-}
-
-/// 推导共享编译目录。
-///
-/// 位置 = 平台数据目录 / `shared-target` / 项目标识。
-/// 平台数据目录取不到时返回错误——**不静默退回项目内的 `target/`**：
-/// 悄悄退回独立目录正是这套机制要消灭的失败模式。
-pub fn shared_target_dir(project_dir: &Path) -> Result<SharedTarget> {
-    let base = crate::engine::platform_data_dir().ok_or_else(|| {
-        CoreError::Git(
-            "无法确定平台数据目录，无法推导共享编译目录（Windows 用 LOCALAPPDATA，\
-             Unix 用 XDG_DATA_HOME 或 HOME）"
-                .to_string(),
-        )
-    })?;
-    let project_key = project_key(project_dir);
-    let path = base
-        .join(SHARED_TARGET_DIR_NAME)
-        .join(&project_key)
-        .join(target_triple());
-    Ok(SharedTarget { path, project_key })
 }
 
 /// 共享编译目录的健康状况
@@ -106,8 +88,8 @@ impl SharedTargetState {
 }
 
 /// 校验共享编译目录：存在、可写。
-pub fn check_shared_target(project_dir: &Path) -> Result<(SharedTarget, SharedTargetState)> {
-    let target = shared_target_dir(project_dir)?;
+pub fn check_shared_target(project_dir: &Path) -> (SharedTarget, SharedTargetState) {
+    let target = shared_target_dir(project_dir);
     let state = if !target.path.exists() {
         SharedTargetState::Missing
     } else if !is_writable_dir(&target.path) {
@@ -115,7 +97,7 @@ pub fn check_shared_target(project_dir: &Path) -> Result<(SharedTarget, SharedTa
     } else {
         SharedTargetState::Ready
     };
-    Ok((target, state))
+    (target, state)
 }
 
 /// 创建缺失的共享编译目录。
@@ -123,7 +105,7 @@ pub fn check_shared_target(project_dir: &Path) -> Result<(SharedTarget, SharedTa
 /// 只补缺、不覆盖：目录已存在时**不动它**（哪怕它不是空的），符合仓库初始化入口
 /// 既有的「只补缺、不覆盖」不变式。
 pub fn ensure_shared_target(project_dir: &Path) -> Result<(SharedTarget, SharedTargetState)> {
-    let (target, state) = check_shared_target(project_dir)?;
+    let (target, state) = check_shared_target(project_dir);
     if state != SharedTargetState::Missing {
         return Ok((target, state));
     }
@@ -175,40 +157,50 @@ fn same_path(a: &Path, b: &Path) -> bool {
     left.trim_end_matches('/') == right.trim_end_matches('/')
 }
 
-/// 目标三元组（架构 + 供应商 + 操作系统）。
+/// 找到主工作树的根：`git worktree list --porcelain` 的第一条就是它。
 ///
-/// 共享目录按三元组分桶：不同架构的产物本来就不能共用，放一起会互相覆盖。
-fn target_triple() -> String {
-    format!(
-        "{}-{}-{}",
-        std::env::consts::ARCH,
-        std::env::consts::FAMILY,
-        std::env::consts::OS
-    )
-}
-
-/// 取 git 的 `common-dir`（同一仓库的所有工作树共享它）
-fn git_common_dir(project_dir: &Path) -> Option<PathBuf> {
+/// 从任意一个链接工作树进来都得到同一个值，这正是「所有工作树共享一份产物」的
+/// 前提。取不到时返回 `None`，调用方退回给定目录本身——单目录项目或非 git 目录
+/// 的常态，此时它的 `target/` 就是唯一的那份。
+pub fn main_worktree(dir: &Path) -> Option<PathBuf> {
     let output = std::process::Command::new("git")
         .arg("-C")
-        .arg(project_dir)
-        .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .arg(dir)
+        .args(["worktree", "list", "--porcelain"])
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if text.is_empty() {
-        return None;
-    }
-    Some(PathBuf::from(text))
+    let text = String::from_utf8_lossy(&output.stdout);
+    let path = text
+        .lines()
+        .find_map(|line| line.strip_prefix("worktree "))
+        .map(str::trim)
+        .filter(|p| !p.is_empty())?;
+    // git 的 porcelain 输出用正斜杠；不归一的话 Windows 上拼出来的路径会一半
+    // 正斜杠一半反斜杠，虽然能用，但打印出来像 bug。
+    #[cfg(windows)]
+    let path = path.replace('/', "\\");
+    #[cfg(not(windows))]
+    let path = path.to_string();
+    Some(strip_verbatim(Path::new(&path)))
 }
 
-/// 短哈希（8 位十六进制）
-fn short_hash(input: &str) -> String {
-    let digest = Sha256::digest(input.as_bytes());
-    digest.iter().take(4).map(|b| format!("{b:02x}")).collect()
+/// 剥掉 Windows 的 `\\?\` 逐字路径前缀。
+///
+/// `canonicalize()` 会给绝对路径加上这个前缀，git 遇到它会在建目录时失败
+/// （`could not create leading directories of '//?/C:/...'`），所以凡是交给
+/// git 的路径都要先剥掉。
+pub(crate) fn strip_verbatim(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let text = path.to_string_lossy();
+        if let Some(rest) = text.strip_prefix(r"\\?\") {
+            return PathBuf::from(rest);
+        }
+    }
+    path.to_path_buf()
 }
 
 /// 目录是否可写
@@ -243,65 +235,84 @@ mod tests {
         dir
     }
 
+    fn git_ok(dir: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?} 失败");
+    }
+
+    /// 非 git 目录没有「别的工作树」：共享目录就是它自己的 `target/`
     #[test]
-    fn 推导结果落在平台数据目录下且不含机器字面量() {
-        let dir = temp_dir("derive");
-        let target = shared_target_dir(&dir).expect("应能推导共享目录");
-        let text = target.path.to_string_lossy().to_string();
-
-        // 位置在平台数据目录之下
-        let base = crate::engine::platform_data_dir().expect("应能取到平台数据目录");
-        assert!(
-            target.path.starts_with(&base),
-            "共享目录应在平台数据目录之下: {text}"
-        );
-        assert!(
-            target
-                .path
-                .to_string_lossy()
-                .contains(SHARED_TARGET_DIR_NAME),
-            "共享目录应带约定的子目录名: {text}"
-        );
-
-        // 标识里不含盘符、用户名等机器相关字面量
-        assert!(
-            !target.project_key.contains('\\') && !target.project_key.contains('/'),
-            "项目标识不应含路径分隔符: {}",
-            target.project_key
-        );
-        assert!(
-            !target.project_key.contains(':'),
-            "项目标识不应含盘符: {}",
-            target.project_key
-        );
-        assert!(
-            target
-                .project_key
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-'),
-            "项目标识只应是 ASCII 字母数字与连字符: {}",
-            target.project_key
-        );
+    fn 非仓库目录的共享目录就是自身target() {
+        let dir = temp_dir("plain");
+        let target = shared_target_dir(&dir);
+        assert_eq!(target.path, dir.join(TARGET_DIR_NAME));
+        assert_eq!(target.main_worktree, dir);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// 复用的前提：同一仓库的链接工作树必须推出**同一个**共享目录
     #[test]
-    fn 非工作树项目的标识来自目录名且稳定() {
-        let dir = temp_dir("plain");
-        let first = project_key(&dir);
-        let second = project_key(&dir);
-        assert_eq!(first, second, "同一目录的标识必须稳定");
-        assert!(first.contains("plain-"), "标识应带目录名: {first}");
-        let _ = std::fs::remove_dir_all(&dir);
+    fn 链接工作树与主工作树推出同一个共享目录() {
+        let root = temp_dir("wt-main");
+        git_ok(&root, &["init", "-q"]);
+        git_ok(&root, &["config", "user.email", "test@example.com"]);
+        git_ok(&root, &["config", "user.name", "test"]);
+        std::fs::write(root.join("README.md"), b"x").unwrap();
+        git_ok(&root, &["add", "."]);
+        git_ok(&root, &["commit", "-q", "-m", "init"]);
+
+        let linked = root.parent().unwrap().join(format!(
+            "pengj-shared-target-wt-linked-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&linked);
+        git_ok(
+            &root,
+            &[
+                "worktree",
+                "add",
+                "-q",
+                "-b",
+                "probe-wt",
+                &linked.to_string_lossy(),
+            ],
+        );
+
+        let main = shared_target_dir(&root);
+        let from_linked = shared_target_dir(&linked);
+        // Windows 上临时目录可能是短路径（`DEVELO~1`），字面量比较会误判；
+        // 建出目录后两侧都能规范化，比较才是「是否同一处」的真语义。
+        std::fs::create_dir_all(&main.path).unwrap();
+        assert!(
+            paths_equal(&main.path, &from_linked.path),
+            "两个工作树必须指向同一个共享目录: {} vs {}",
+            main.path.display(),
+            from_linked.path.display()
+        );
+        assert!(
+            paths_equal(&main.path, &root.join(TARGET_DIR_NAME)),
+            "共享目录应是主工作树的 target: {}",
+            main.path.display()
+        );
+
+        git_ok(
+            &root,
+            &["worktree", "remove", "--force", &linked.to_string_lossy()],
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn 缺失的共享目录被报告为缺失且修复后变为就绪() {
         let dir = temp_dir("missing");
-        // 共享目录落在平台数据目录里，跨测试运行会残留；先清掉才能断言「尚未创建」
-        let target = shared_target_dir(&dir).expect("应能推导共享目录");
+        let target = shared_target_dir(&dir);
         let _ = std::fs::remove_dir_all(&target.path);
-        let (_, state) = check_shared_target(&dir).expect("应能校验");
+        let (_, state) = check_shared_target(&dir);
         assert_eq!(state, SharedTargetState::Missing, "尚未创建时应当是缺失");
 
         let (target, state) = ensure_shared_target(&dir).expect("应能创建");

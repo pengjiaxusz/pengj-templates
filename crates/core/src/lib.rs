@@ -40,7 +40,7 @@ pub use repo::{default_links, repo_init, repo_status, LinkSpec, RepoItem, RepoRe
 pub use subrepo::{DependencyMode, SubrepoEntry, SubrepoRegistry, SUBREPO_REGISTRY_REL};
 pub use subrepo_check::{check_project, CheckItem, CheckLevel, CheckReport};
 pub use worktree::{
-    check_shared_target, conflicting_override, ensure_shared_target, project_key,
-    shared_target_dir, SharedTarget, SharedTargetState, SHARED_TARGET_DIR_NAME,
+    check_shared_target, conflicting_override, ensure_shared_target, main_worktree,
+    shared_target_dir, SharedTarget, SharedTargetState, TARGET_DIR_NAME,
 };
 pub use worktree_create::{create_worktree, worktree_dir_name, WorktreeReport};

@@ -207,7 +207,8 @@ enum Command {
     },
     /// 工作树：共享编译目录的推导与校验、按名新建工作树
     ///
-    /// 共享目录按机器动态推导（平台数据目录 + 项目标识），构建配方与自检读同一个值。
+    /// 共享目录就是主工作树的 `target/`（取 `git worktree list` 第一条），
+    /// 同一仓库的所有工作树推出同一个值，构建配方与自检读同一个值。
     Worktree {
         #[command(subcommand)]
         cmd: WorktreeCommand,
@@ -1474,14 +1475,14 @@ fn cmd_worktree_target_dir(dir: &Path, ensure: bool, json: bool) -> anyhow::Resu
     let (target, state) = if ensure {
         pengj_core::ensure_shared_target(&root)?
     } else {
-        pengj_core::check_shared_target(&root)?
+        pengj_core::check_shared_target(&root)
     };
     if json {
         println!(
             "{}",
             serde_json::json!({
                 "path": target.path.to_string_lossy(),
-                "project_key": target.project_key,
+                "main_worktree": display_path(&target.main_worktree),
                 "state": state.as_str(),
             })
         );
@@ -1497,7 +1498,7 @@ fn cmd_worktree_check(dir: &Path, fix: bool, json: bool) -> anyhow::Result<()> {
     let (target, state) = if fix {
         pengj_core::ensure_shared_target(&root)?
     } else {
-        pengj_core::check_shared_target(&root)?
+        pengj_core::check_shared_target(&root)
     };
     let override_path = pengj_core::conflicting_override(&target);
 
@@ -1507,7 +1508,7 @@ fn cmd_worktree_check(dir: &Path, fix: bool, json: bool) -> anyhow::Result<()> {
             serde_json::json!({
                 "root": display_path(&root),
                 "path": target.path.to_string_lossy(),
-                "project_key": target.project_key,
+                "main_worktree": display_path(&target.main_worktree),
                 "state": state.as_str(),
                 "override_path": override_path,
             })
@@ -1516,8 +1517,12 @@ fn cmd_worktree_check(dir: &Path, fix: bool, json: bool) -> anyhow::Result<()> {
         println!("共享编译目录（{}）", display_path(&root));
         println!("------------------------------------------------------------");
         println!("  路径: {}", target.path.display());
-        println!("  项目标识: {}", target.project_key);
+        println!("  主工作树: {}", display_path(&target.main_worktree));
         println!("  状态: {}", state.describe());
+        println!(
+            "  说明: 所有工作树共用这一份产物；在主工作树里 cargo clean 会一并清掉\
+             各工作树的中间产物（需全量重建）"
+        );
         if let Some(path) = &override_path {
             println!(
                 "  警告: 环境变量 CARGO_TARGET_DIR 指向 {path}，与本机推导值不一致；\
