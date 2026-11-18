@@ -157,34 +157,87 @@ fn same_path(a: &Path, b: &Path) -> bool {
     left.trim_end_matches('/') == right.trim_end_matches('/')
 }
 
-/// 找到主工作树的根：`git worktree list --porcelain` 的第一条就是它。
+/// 找到主工作树的根。
 ///
 /// 从任意一个链接工作树进来都得到同一个值，这正是「所有工作树共享一份产物」的
 /// 前提。取不到时返回 `None`，调用方退回给定目录本身——单目录项目或非 git 目录
 /// 的常态，此时它的 `target/` 就是唯一的那份。
+///
+/// 判定分两种情况，不能只信 `git worktree list`：
+///
+/// - **自己是主工作树**（`git-dir` == `git-common-dir`）：直接取 `--show-toplevel`。
+///   子模块正是这种形态（`.git` 是指向 `../.git/modules/...` 的文件），此时
+///   `worktree list` 会把 **gitdir** 当成主工作树报出来——拿它当产物目录会把
+///   编译产物写进 `.git/modules/` 里，这在 unbound-ui 上是实测到的真实失败。
+/// - **自己是链接工作树**：`worktree list --porcelain` 的第一条就是主工作树。
 pub fn main_worktree(dir: &Path) -> Option<PathBuf> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(dir)
-        .args(["worktree", "list", "--porcelain"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+    let git_dirs = git_stdout(
+        dir,
+        &[
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-dir",
+            "--git-common-dir",
+        ],
+    )?;
+    let mut lines = git_dirs.lines().map(str::trim).filter(|l| !l.is_empty());
+    let git_dir = PathBuf::from(normalize_git_path(lines.next()?));
+    let common_dir = PathBuf::from(normalize_git_path(lines.next()?));
+
+    if paths_equal(&git_dir, &common_dir) {
+        return toplevel(dir);
     }
-    let text = String::from_utf8_lossy(&output.stdout);
+    first_worktree_entry(dir).or_else(|| toplevel(dir))
+}
+
+/// `git rev-parse --show-toplevel`（当前检出目录的根）
+fn toplevel(dir: &Path) -> Option<PathBuf> {
+    let text = git_stdout(dir, &["rev-parse", "--show-toplevel"])?;
+    let path = text.lines().map(str::trim).find(|l| !l.is_empty())?;
+    Some(strip_verbatim(Path::new(&normalize_git_path(path))))
+}
+
+/// `git worktree list --porcelain` 的第一条（主工作树）
+fn first_worktree_entry(dir: &Path) -> Option<PathBuf> {
+    let text = git_stdout(dir, &["worktree", "list", "--porcelain"])?;
     let path = text
         .lines()
         .find_map(|line| line.strip_prefix("worktree "))
         .map(str::trim)
         .filter(|p| !p.is_empty())?;
-    // git 的 porcelain 输出用正斜杠；不归一的话 Windows 上拼出来的路径会一半
-    // 正斜杠一半反斜杠，虽然能用，但打印出来像 bug。
+    Some(strip_verbatim(Path::new(&normalize_git_path(path))))
+}
+
+/// 执行 git 并取标准输出；失败或为空时返回 `None`（调用方退回保守结果）
+fn git_stdout(dir: &Path, args: &[&str]) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+/// git 的输出一律用正斜杠；不归一的话 Windows 上拼出来的路径会一半正斜杠一半
+/// 反斜杠，虽然能用，但打印出来像 bug。
+fn normalize_git_path(path: &str) -> String {
     #[cfg(windows)]
-    let path = path.replace('/', "\\");
+    {
+        path.replace('/', "\\")
+    }
     #[cfg(not(windows))]
-    let path = path.to_string();
-    Some(strip_verbatim(Path::new(&path)))
+    {
+        path.to_string()
+    }
 }
 
 /// 剥掉 Windows 的 `\\?\` 逐字路径前缀。
@@ -305,6 +358,50 @@ mod tests {
             &["worktree", "remove", "--force", &linked.to_string_lossy()],
         );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 子模块/独立 git 目录形态：`.git` 是指向外部 gitdir 的文件，
+    /// `worktree list` 会把 **gitdir** 当成主工作树报出来。产物绝不能落到
+    /// `.git/modules/...` 里——共享目录必须是检出目录自己的 `target/`。
+    #[test]
+    fn gitdir文件形态取检出目录而不是git目录() {
+        let base = temp_dir("gitdir");
+        let work = base.join("work");
+        let gitdir = base.join("modules").join("sub");
+        std::fs::create_dir_all(&work).unwrap();
+        std::fs::create_dir_all(&gitdir).unwrap();
+        git_ok(
+            &base,
+            &[
+                "init",
+                "-q",
+                "--separate-git-dir",
+                &gitdir.to_string_lossy(),
+                &work.to_string_lossy(),
+            ],
+        );
+        // 先确认这条 git 行为确实是我们要防的那个坑，否则测试失去意义
+        let listed = first_worktree_entry(&work).expect("应能取到 worktree list 首条");
+        assert!(
+            paths_equal(&listed, &gitdir),
+            "前提不成立：git 已不再把 gitdir 当主工作树报出来: {}",
+            listed.display()
+        );
+
+        let target = shared_target_dir(&work);
+        // 建出目录后两侧都能规范化（临时目录在 Windows 上可能是短路径）
+        std::fs::create_dir_all(&target.path).unwrap();
+        assert!(
+            paths_equal(&target.path, &work.join(TARGET_DIR_NAME)),
+            "共享目录应落在检出目录下: {}",
+            target.path.display()
+        );
+        assert!(
+            !target.path.starts_with(&gitdir),
+            "共享目录不得落进 git 目录: {}",
+            target.path.display()
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
