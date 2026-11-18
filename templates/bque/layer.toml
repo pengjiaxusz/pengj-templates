@@ -1,3 +1,6 @@
 name = "bque"
 description = "Windows 全局编译排队、CPU 后台降级防卡顿与纯净基准测试保护：产出 .pengj-templates/just/bque.just 排队配方与自检入口"
 depends = ["common", "just"]
+
+# 配套技能：勾选本层即自动带上「排队」技能，避免「有配方没文档」的半接入。
+skills = ["bque"]

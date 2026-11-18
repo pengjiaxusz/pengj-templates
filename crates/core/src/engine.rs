@@ -82,6 +82,7 @@ impl Templates {
                 name: meta.name,
                 description: meta.description,
                 depends: meta.depends,
+                skills: meta.skills,
                 file_count,
             });
         }
@@ -202,6 +203,19 @@ impl Templates {
             selected.push("ci".to_string());
         }
         self.resolve_layers(&selected)
+    }
+
+    /// 把已启用层声明的配套技能并入已持久化的技能清单，返回本次补入的技能名。
+    ///
+    /// 四个入口（生成 / 纳管 / 更新 / 增量加层）都走这一条路径，注入结果因此一致。
+    pub fn ensure_layer_skills(
+        &self,
+        options: &mut BTreeMap<String, serde_json::Value>,
+        ordered: &[String],
+        available: &BTreeSet<String>,
+    ) -> Result<Vec<String>> {
+        let metas = self.layer_metas()?;
+        Ok(ensure_layer_skills(options, ordered, &metas, available))
     }
 }
 
@@ -406,35 +420,55 @@ fn ensure_baseline_skills(
     }
 }
 
-/// 排队层与排队技能联动：启用 `bque` 层时把 `bque` 技能并入已持久化的选项。
+/// 层与技能的联动：按层元数据声明的 `skills` 注入配套技能。
 ///
-/// 层负责产出 `.pengj-templates/just/bque.just` 配方与 AGENTS.md 红线，技能负责告诉 Agent 何时必须排队，
-/// 两者缺一即为「半接入」。显式空技能列表视为用户明确不要技能，此处不注入。
-/// 返回是否真的补入了技能，供报告展示。
-fn ensure_queue_skill(
+/// 「层负责产出机制、技能负责讲清用法」，两者缺一即为「半接入」。
+/// 联动规则由层自己在 `layer.toml` 的 `skills` 字段里声明，引擎不为某一层
+/// 写死专用函数——每加一层不必再复制一份联动逻辑。
+///
+/// 不变式：
+/// - 显式空技能列表视为用户明确不要技能，此时任何层都不注入；
+/// - 声明的技能在模板中已不存在时静默跳过，不阻断流程；
+/// - 只对「已启用且带声明」的层生效，返回本次真正补入的技能名。
+fn ensure_layer_skills(
     options: &mut BTreeMap<String, serde_json::Value>,
     ordered: &[String],
+    metas: &BTreeMap<String, LayerMeta>,
     available: &BTreeSet<String>,
-) -> bool {
-    if !ordered.iter().any(|l| l == "bque") || !available.contains("bque") {
-        return false;
-    }
+) -> Vec<String> {
     let Some(arr) = options.get_mut("skills").and_then(|v| v.as_array_mut()) else {
-        return false;
+        return Vec::new();
     };
-    if arr.is_empty() || arr.iter().any(|v| v.as_str() == Some("bque")) {
-        return false;
+    if arr.is_empty() {
+        return Vec::new();
     }
     let mut set: BTreeSet<String> = arr
         .iter()
         .filter_map(|v| v.as_str().map(str::to_string))
         .collect();
-    set.insert("bque".to_string());
-    *arr = set
-        .into_iter()
-        .map(serde_json::Value::String)
-        .collect::<Vec<_>>();
-    true
+    let mut added = Vec::new();
+    for layer in ordered {
+        let Some(meta) = metas.get(layer) else {
+            continue;
+        };
+        for skill in &meta.skills {
+            // 声明的技能在模板中已不存在时跳过：模板可以先删技能再删声明，
+            // 中间这段窗口不该让整个流程失败。
+            if !available.contains(skill) {
+                continue;
+            }
+            if set.insert(skill.clone()) {
+                added.push(skill.clone());
+            }
+        }
+    }
+    if !added.is_empty() {
+        *arr = set
+            .into_iter()
+            .map(serde_json::Value::String)
+            .collect::<Vec<_>>();
+    }
+    added
 }
 
 /// 判断相对路径是否属于 `.agents/skills/<name>/...`，是则返回技能名。
@@ -1050,7 +1084,8 @@ pub fn generate(
         // 用户显式勾选的技能名可能已从模板删除，先裁剪再补基线/联动技能
         migrate_skills_option(&mut options, &available);
         ensure_baseline_skills(&mut options, &available);
-        ensure_queue_skill(&mut options, &ordered, &available);
+        // 层声明了配套技能时自动带上（层 -> 技能的联动由层自己声明）
+        templates.ensure_layer_skills(&mut options, &ordered, &available)?;
     }
 
     let ctx = RenderContext::new(project_name, ordered.clone(), options.clone());
@@ -1157,7 +1192,8 @@ pub fn adopt_project(
         // 用户显式勾选的技能名可能已从模板删除，先裁剪再补基线/联动技能
         migrate_skills_option(&mut options, &available);
         ensure_baseline_skills(&mut options, &available);
-        ensure_queue_skill(&mut options, &ordered, &available);
+        // 层声明了配套技能时自动带上（层 -> 技能的联动由层自己声明）
+        templates.ensure_layer_skills(&mut options, &ordered, &available)?;
     }
 
     let ctx = RenderContext::new(&project_name, ordered.clone(), options.clone());
@@ -1514,8 +1550,8 @@ pub fn update_project_with_options(
         }
         // 新模板加进来的基线技能要在存量项目里补齐，否则更新永远带不上
         ensure_baseline_skills(&mut manifest.options, &available_skills);
-        // 排队层已启用但技能未勾选的存量项目，更新时自动补齐，避免半接入
-        ensure_queue_skill(&mut manifest.options, &ordered, &available_skills);
+        // 层已启用但配套技能未勾选的存量项目，更新时自动补齐，避免半接入
+        templates.ensure_layer_skills(&mut manifest.options, &ordered, &available_skills)?;
     }
     let ctx = RenderContext::new(
         &manifest.project_name,
@@ -1940,9 +1976,9 @@ pub fn add_layers_to_project(
             .into_iter()
             .map(|s| s.name)
             .collect();
-        if ensure_queue_skill(&mut manifest.options, &ordered, &available) {
-            added_skills.push("bque".to_string());
-        }
+        // 层声明了配套技能时自动带上（与生成 / 纳管 / 更新同一路径）
+        added_skills =
+            templates.ensure_layer_skills(&mut manifest.options, &ordered, &available)?;
     }
 
     let added_layers: Vec<String> = ordered
@@ -2294,15 +2330,32 @@ pub fn audit_project(
 
     // 配置层巡检（非阻断提示）：层与技能半接入、justfile 未迁移到托管块格式
     let mut warnings = Vec::new();
-    if ordered.iter().any(|l| l == "bque") {
-        if let Some(serde_json::Value::Array(skills)) = manifest.options.get("skills") {
-            let has_bque = skills.iter().any(|v| v.as_str() == Some("bque"));
-            if !skills.is_empty() && !has_bque {
-                warnings.push(
-                    "已启用 bque 层但未勾选 bque 技能（半接入）：运行 update 或 add-layer 自动补齐"
-                        .to_string(),
-                );
-            }
+    // 半接入：层已启用、层声明的配套技能却不在技能清单里。
+    // 规则来自各层的 `skills` 声明，不再为某一层写死检查。
+    for layer in &ordered {
+        let Some(meta) = metas.get(layer) else {
+            continue;
+        };
+        if meta.skills.is_empty() {
+            continue;
+        }
+        let Some(serde_json::Value::Array(skills)) = manifest.options.get("skills") else {
+            continue;
+        };
+        if skills.is_empty() {
+            continue;
+        }
+        let missing: Vec<&str> = meta
+            .skills
+            .iter()
+            .filter(|skill| !skills.iter().any(|v| v.as_str() == Some(skill.as_str())))
+            .map(|s| s.as_str())
+            .collect();
+        if !missing.is_empty() {
+            warnings.push(format!(
+                "已启用 {layer} 层但未勾选配套技能（半接入）：{}；运行 update 或 add-layer 自动补齐",
+                missing.join("、")
+            ));
         }
     }
     if let Ok(text) = std::fs::read_to_string(project_dir.join("justfile")) {
@@ -2868,6 +2921,13 @@ mod tests {
     /// manifest 的键是 OS 原生分隔符的相对路径；测试按正斜杠书写，比较前先归一。
     fn manifest_key(path: &str) -> String {
         path.replace('/', std::path::MAIN_SEPARATOR_STR)
+    }
+
+    /// 同一进程内的临时目录序号：让并行跑的测试各占各的目录。
+    fn unique_id() -> u32 {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static COUNTER: AtomicU32 = AtomicU32::new(0);
+        COUNTER.fetch_add(1, Ordering::SeqCst)
     }
 
     use super::*;
@@ -5754,14 +5814,35 @@ body
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// 造一份层元数据表：层 id -> 声明的配套技能
+    fn metas_with_skills(entries: &[(&str, &[&str])]) -> BTreeMap<String, LayerMeta> {
+        entries
+            .iter()
+            .map(|(layer, skills)| {
+                (
+                    (*layer).to_string(),
+                    LayerMeta {
+                        name: (*layer).to_string(),
+                        description: String::new(),
+                        depends: Vec::new(),
+                        skills: skills.iter().map(|s| (*s).to_string()).collect(),
+                        update_ignore: Vec::new(),
+                    },
+                )
+            })
+            .collect()
+    }
+
     #[test]
-    fn ensure_queue_skill_links_bque_layer_to_skill() {
+    fn ensure_layer_skills_injects_declared_skills() {
         let available: BTreeSet<String> =
             ["bque", "caveman"].iter().map(|s| s.to_string()).collect();
+        let metas = metas_with_skills(&[("bque", &["bque"]), ("common", &[])]);
         let mut opts = BTreeMap::new();
         opts.insert("skills".to_string(), serde_json::json!(["caveman"]));
         let with_bque = vec!["common".to_string(), "bque".to_string()];
-        assert!(ensure_queue_skill(&mut opts, &with_bque, &available));
+        let added = ensure_layer_skills(&mut opts, &with_bque, &metas, &available);
+        assert_eq!(added, vec!["bque".to_string()]);
         let names: Vec<&str> = opts["skills"]
             .as_array()
             .unwrap()
@@ -5770,18 +5851,542 @@ body
             .collect();
         assert_eq!(names, vec!["bque", "caveman"]);
 
-        // 未启用 bque 层不注入；显式空列表不注入；已存在时幂等
+        // 未启用该层不注入；显式空列表不注入；已存在时幂等
         let mut opts2 = BTreeMap::new();
         opts2.insert("skills".to_string(), serde_json::json!(["caveman"]));
-        assert!(!ensure_queue_skill(
-            &mut opts2,
-            &["common".to_string()],
-            &available
-        ));
+        assert!(
+            ensure_layer_skills(&mut opts2, &["common".to_string()], &metas, &available).is_empty()
+        );
         let mut opts3 = BTreeMap::new();
         opts3.insert("skills".to_string(), serde_json::json!([]));
-        assert!(!ensure_queue_skill(&mut opts3, &with_bque, &available));
-        assert!(!ensure_queue_skill(&mut opts, &with_bque, &available));
+        assert!(ensure_layer_skills(&mut opts3, &with_bque, &metas, &available).is_empty());
+        assert!(ensure_layer_skills(&mut opts, &with_bque, &metas, &available).is_empty());
+    }
+
+    #[test]
+    fn ensure_layer_skills_skips_missing_skill_without_blocking() {
+        // 声明的技能在模板中已不存在：静默跳过，不阻断流程
+        let available: BTreeSet<String> = ["caveman"].iter().map(|s| s.to_string()).collect();
+        let metas = metas_with_skills(&[("gone", &["vanished"])]);
+        let mut opts = BTreeMap::new();
+        opts.insert("skills".to_string(), serde_json::json!(["caveman"]));
+        let added = ensure_layer_skills(&mut opts, &["gone".to_string()], &metas, &available);
+        assert!(added.is_empty());
+        let names: Vec<&str> = opts["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert_eq!(names, vec!["caveman"]);
+    }
+
+    #[test]
+    fn layer_meta_declares_its_companion_skills() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+        let layers = templates.list_layers().unwrap();
+        let bque = layers.iter().find(|l| l.id == "bque").expect("bque 层");
+        assert_eq!(
+            bque.skills,
+            vec!["bque".to_string()],
+            "排队层应声明式声明配套技能"
+        );
+        // 未声明 skills 的层行为与之前完全一致（空列表）
+        let common = layers.iter().find(|l| l.id == "common").expect("common 层");
+        assert!(common.skills.is_empty());
+    }
+
+    #[test]
+    fn layer_skill_linkage_is_consistent_across_four_entry_points() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-linkage-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // 只勾选 caveman 技能 + bque 层：四个入口都应把 bque 补进技能清单
+        let options = |skills: Vec<&str>| -> BTreeMap<String, serde_json::Value> {
+            let mut map = BTreeMap::new();
+            map.insert(
+                "skills".to_string(),
+                serde_json::json!(skills.iter().map(|s| s.to_string()).collect::<Vec<_>>()),
+            );
+            map
+        };
+        let names_of = |m: &ProjectManifest| -> Vec<String> {
+            m.options["skills"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
+        // 1) 生成
+        let gen_dir = tmp.join("gen");
+        generate(
+            &templates,
+            "gen",
+            &[
+                "common".to_string(),
+                "bque".to_string(),
+                "agent".to_string(),
+            ],
+            options(vec!["caveman"]),
+            &tmp,
+        )
+        .unwrap();
+        let gen_manifest = ProjectManifest::load(&gen_dir).unwrap();
+        assert!(
+            names_of(&gen_manifest).contains(&"bque".to_string()),
+            "生成入口应补齐层声明的配套技能，实际: {:?}",
+            names_of(&gen_manifest)
+        );
+
+        // 2) 纳管
+        let adopt_dir = tmp.join("adopt");
+        std::fs::create_dir_all(&adopt_dir).unwrap();
+        adopt_project(
+            &templates,
+            &adopt_dir,
+            &[
+                "common".to_string(),
+                "bque".to_string(),
+                "agent".to_string(),
+            ],
+            options(vec!["caveman"]),
+            false,
+        )
+        .unwrap();
+        let adopt_manifest = ProjectManifest::load(&adopt_dir).unwrap();
+        assert!(
+            names_of(&adopt_manifest).contains(&"bque".to_string()),
+            "纳管入口应补齐层声明的配套技能，实际: {:?}",
+            names_of(&adopt_manifest)
+        );
+
+        // 3) 更新：先把技能清单改回只有 caveman，模拟存量项目半接入
+        let mut stale = adopt_manifest.clone();
+        stale
+            .options
+            .insert("skills".to_string(), serde_json::json!(["caveman"]));
+        stale.save(&adopt_dir).unwrap();
+        update_project(&templates, &adopt_dir).unwrap();
+        let updated = ProjectManifest::load(&adopt_dir).unwrap();
+        assert!(
+            names_of(&updated).contains(&"bque".to_string()),
+            "更新入口应补齐层声明的配套技能，实际: {:?}",
+            names_of(&updated)
+        );
+
+        // 4) 增量加层：先做只有 common+agent 的项目，再加 bque 层
+        let add_dir = tmp.join("add");
+        std::fs::create_dir_all(&add_dir).unwrap();
+        adopt_project(
+            &templates,
+            &add_dir,
+            &["common".to_string(), "agent".to_string()],
+            options(vec!["caveman"]),
+            false,
+        )
+        .unwrap();
+        let report = add_layers_to_project(
+            &templates,
+            &add_dir,
+            &["bque".to_string()],
+            &UpdateOptions { sync_skills: false },
+        )
+        .unwrap();
+        assert!(
+            report.added_skills.contains(&"bque".to_string()),
+            "增量加层入口应补齐层声明的配套技能，实际: {:?}",
+            report.added_skills
+        );
+        let added_manifest = ProjectManifest::load(&add_dir).unwrap();
+        assert!(
+            names_of(&added_manifest).contains(&"bque".to_string()),
+            "增量加层后 manifest 应含配套技能，实际: {:?}",
+            names_of(&added_manifest)
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn explicit_empty_skill_list_blocks_layer_linkage_in_every_entry_point() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        let templates = Templates::new(&root);
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-empty-skills-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let mut options = BTreeMap::new();
+        options.insert("skills".to_string(), serde_json::json!([]));
+        let dir = tmp.join("empty");
+        generate(
+            &templates,
+            "empty",
+            &[
+                "common".to_string(),
+                "bque".to_string(),
+                "agent".to_string(),
+            ],
+            options.clone(),
+            &tmp,
+        )
+        .unwrap();
+        let manifest = ProjectManifest::load(&dir).unwrap();
+        let skills = manifest.options["skills"].as_array().unwrap();
+        assert!(skills.is_empty(), "显式清空技能列表后不应注入任何技能");
+
+        // 存量项目里显式清空技能列表后，update 也不该注入
+        let mut stale = manifest;
+        stale
+            .options
+            .insert("skills".to_string(), serde_json::json!([]));
+        stale.save(&dir).unwrap();
+        update_project(&templates, &dir).unwrap();
+        let after = ProjectManifest::load(&dir).unwrap();
+        assert!(
+            after.options["skills"].as_array().unwrap().is_empty(),
+            "显式清空技能列表后更新入口不应注入任何技能"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 真实模板目录（仓库里的 `templates/`）。
+    fn real_templates() -> Templates {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("templates");
+        Templates::new(&root)
+    }
+
+    /// 子仓库层：登记表与配方模块成对出现，登记表本身可被机器解析。
+    ///
+    /// 这是「新增层」最核心的断言形状——产物存在 + 反向断言（不勾选就没有）。
+    #[test]
+    fn subrepo_layer_ships_registry_recipes_and_skill() {
+        let templates = real_templates();
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-subrepo-layer-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let mut options = BTreeMap::new();
+        options.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        let with_layer = vec![
+            "common".to_string(),
+            "just".to_string(),
+            "agent".to_string(),
+            "subrepo".to_string(),
+        ];
+        generate(&templates, "with_sub", &with_layer, options.clone(), &tmp).unwrap();
+        let proj = tmp.join("with_sub");
+
+        let registry_path = proj.join(crate::subrepo::SUBREPO_REGISTRY_REL);
+        assert!(registry_path.is_file(), "勾选子仓库层应产出登记表");
+        let registry_text = std::fs::read_to_string(&registry_path).unwrap();
+        assert!(
+            registry_text.contains("# PENGJ_TEMPLATE_START")
+                && registry_text.contains("# PENGJ_TEMPLATE_END"),
+            "登记表必须有受管说明块（说明随模板刷新，条目归用户）: {registry_text}"
+        );
+        let parsed = crate::subrepo::SubrepoRegistry::parse(&registry_text)
+            .expect("生成的登记表必须能被机器解析");
+        assert!(parsed.entries.is_empty(), "默认登记表不带任何生效条目");
+
+        assert!(
+            proj.join(".pengj-templates/just/subrepo.just").is_file(),
+            "勾选子仓库层应产出配方模块"
+        );
+        let justfile = std::fs::read_to_string(proj.join("justfile")).unwrap();
+        assert!(
+            justfile.contains("import '.pengj-templates/just/subrepo.just'"),
+            "配方模块必须被 justfile 条件 import: {justfile}"
+        );
+
+        // 层 -> 技能联动：勾层即带上技能，且技能指向同一份登记表
+        let manifest = ProjectManifest::load(&proj).unwrap();
+        let skills: Vec<&str> = manifest.options["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(
+            skills.contains(&"subrepo-sync"),
+            "勾选子仓库层应自动带上同步技能，实际: {skills:?}"
+        );
+        let skill =
+            std::fs::read_to_string(proj.join(".agents/skills/subrepo-sync/SKILL.md")).unwrap();
+        assert!(
+            skill.contains(crate::subrepo::SUBREPO_REGISTRY_REL),
+            "技能必须指向登记表这个唯一事实源"
+        );
+
+        // 反向断言：不勾选时产物一个都不出现
+        let plain = vec![
+            "common".to_string(),
+            "just".to_string(),
+            "agent".to_string(),
+        ];
+        generate(&templates, "plain", &plain, options, &tmp).unwrap();
+        let plain_dir = tmp.join("plain");
+        assert!(
+            !plain_dir
+                .join(crate::subrepo::SUBREPO_REGISTRY_REL)
+                .exists(),
+            "不勾选子仓库层不得产出登记表"
+        );
+        assert!(
+            !plain_dir
+                .join(".pengj-templates/just/subrepo.just")
+                .exists(),
+            "不勾选子仓库层不得产出配方模块"
+        );
+        let plain_justfile = std::fs::read_to_string(plain_dir.join("justfile")).unwrap();
+        assert!(!plain_justfile.contains("subrepo.just"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 登记表归项目所有：模板更新刷新说明块，用户填的条目逐字保留且仍可解析。
+    #[test]
+    fn subrepo_registry_keeps_user_entries_across_update() {
+        let templates = real_templates();
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-subrepo-update-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let layers = vec![
+            "common".to_string(),
+            "just".to_string(),
+            "agent".to_string(),
+            "subrepo".to_string(),
+        ];
+        let mut options = BTreeMap::new();
+        options.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        generate(&templates, "keep", &layers, options, &tmp).unwrap();
+        let proj = tmp.join("keep");
+
+        // 项目登记一条子仓库（模板不该动它）
+        let registry_path = proj.join(crate::subrepo::SUBREPO_REGISTRY_REL);
+        let entry = "\n[[subrepo]]\nname = \"shared-ui\"\npath = \"submodules/shared-ui\"\nmode = \"fetch\"\nhas_workspace = true\n";
+        let mut text = std::fs::read_to_string(&registry_path).unwrap();
+        text.push_str(entry);
+        write_test_file(&registry_path, &text).unwrap();
+
+        update_project(&templates, &proj).expect("update 应成功");
+
+        let after = std::fs::read_to_string(&registry_path).unwrap();
+        assert!(
+            after.contains("name = \"shared-ui\"") && after.contains("has_workspace = true"),
+            "用户填的条目必须在更新后逐字保留: {after}"
+        );
+        assert!(
+            after.contains("# PENGJ_TEMPLATE_START") && after.contains("# PENGJ_TEMPLATE_END"),
+            "说明块必须仍在（说明随模板刷新）: {after}"
+        );
+        let registry = crate::subrepo::SubrepoRegistry::load(&proj)
+            .expect("更新后的登记表仍可解析")
+            .expect("登记表存在");
+        assert_eq!(registry.entries.len(), 1);
+        assert_eq!(registry.entries[0].name, "shared-ui");
+        assert!(registry.entries[0].has_workspace);
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 工作树层：配方模块与共享编译目录接线成对出现，且不往 Cargo 配置里写产物目录。
+    #[test]
+    fn worktree_layer_wires_shared_target_without_touching_cargo_config() {
+        let templates = real_templates();
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-worktree-layer-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let mut options = BTreeMap::new();
+        options.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        let with_layer = vec![
+            "common".to_string(),
+            "just".to_string(),
+            "agent".to_string(),
+            "rust".to_string(),
+            "worktree".to_string(),
+        ];
+        generate(&templates, "with_wt", &with_layer, options.clone(), &tmp).unwrap();
+        let proj = tmp.join("with_wt");
+
+        assert!(
+            proj.join(".pengj-templates/just/worktree.just").is_file(),
+            "勾选工作树层应产出配方模块"
+        );
+        let justfile = std::fs::read_to_string(proj.join("justfile")).unwrap();
+        assert!(
+            justfile.contains("import '.pengj-templates/just/worktree.just'"),
+            "配方模块必须被 justfile 条件 import: {justfile}"
+        );
+
+        // 构建配方注入 CARGO_TARGET_DIR，且值来自 CLI 的同一份推导
+        let rust_just =
+            std::fs::read_to_string(proj.join(".pengj-templates/just/rust.just")).unwrap();
+        assert!(
+            rust_just.contains("CARGO_TARGET_DIR"),
+            "构建配方必须注入 CARGO_TARGET_DIR: {rust_just}"
+        );
+        assert!(
+            rust_just.contains("worktree target-dir"),
+            "配方必须从 CLI 读同一条推导结果，不得自己拼路径: {rust_just}"
+        );
+
+        // 回归防线：结构化合并的 Cargo 配置里不得出现 target-dir
+        let cargo_config = std::fs::read_to_string(proj.join(".cargo/config.toml")).unwrap();
+        assert!(
+            !cargo_config.contains("target-dir"),
+            "共享目录不得写进 Cargo 配置（会与用户自定义区冲突并整文件不写盘）: {cargo_config}"
+        );
+
+        // 层 -> 技能联动
+        let manifest = ProjectManifest::load(&proj).unwrap();
+        let skills: Vec<&str> = manifest.options["skills"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(
+            skills.contains(&"worktree"),
+            "勾选工作树层应自动带上工作树技能，实际: {skills:?}"
+        );
+
+        // 自检脚本随层条件启用（两套脚本同步）
+        for script in [
+            ".pengj-templates/scripts/doctor.sh",
+            ".pengj-templates/scripts/doctor.ps1",
+        ] {
+            let text = std::fs::read_to_string(proj.join(script)).unwrap();
+            assert!(
+                text.contains("worktree check"),
+                "{script} 应转发共享目录体检"
+            );
+        }
+
+        // 反向断言：不勾选时产物与检查都不出现
+        let plain = vec![
+            "common".to_string(),
+            "just".to_string(),
+            "agent".to_string(),
+            "rust".to_string(),
+        ];
+        generate(&templates, "plain_wt", &plain, options, &tmp).unwrap();
+        let plain_dir = tmp.join("plain_wt");
+        assert!(
+            !plain_dir
+                .join(".pengj-templates/just/worktree.just")
+                .exists(),
+            "不勾选工作树层不得产出配方模块"
+        );
+        let plain_rust =
+            std::fs::read_to_string(plain_dir.join(".pengj-templates/just/rust.just")).unwrap();
+        assert!(
+            !plain_rust.contains("CARGO_TARGET_DIR"),
+            "不勾选工作树层时构建配方不得注入共享目录: {plain_rust}"
+        );
+        let plain_doctor =
+            std::fs::read_to_string(plain_dir.join(".pengj-templates/scripts/doctor.sh")).unwrap();
+        assert!(!plain_doctor.contains("worktree check"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 两个新层互不依赖：只勾一个时，另一个的产物与检查项都不出现。
+    #[test]
+    fn new_layers_stay_independent() {
+        let templates = real_templates();
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-layer-independence-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let mut options = BTreeMap::new();
+        options.insert("skill_lang".to_string(), serde_json::json!("en"));
+
+        let only_sub = vec![
+            "common".to_string(),
+            "just".to_string(),
+            "agent".to_string(),
+            "subrepo".to_string(),
+        ];
+        generate(&templates, "only_sub", &only_sub, options.clone(), &tmp).unwrap();
+        let sub_dir = tmp.join("only_sub");
+        assert!(sub_dir.join(crate::subrepo::SUBREPO_REGISTRY_REL).is_file());
+        assert!(!sub_dir.join(".pengj-templates/just/worktree.just").exists());
+        let sub_doctor =
+            std::fs::read_to_string(sub_dir.join(".pengj-templates/scripts/doctor.sh")).unwrap();
+        assert!(sub_doctor.contains("subrepo check"));
+        assert!(!sub_doctor.contains("worktree check"));
+
+        let only_wt = vec![
+            "common".to_string(),
+            "just".to_string(),
+            "agent".to_string(),
+            "worktree".to_string(),
+        ];
+        generate(&templates, "only_wt", &only_wt, options, &tmp).unwrap();
+        let wt_dir = tmp.join("only_wt");
+        assert!(wt_dir.join(".pengj-templates/just/worktree.just").is_file());
+        assert!(!wt_dir.join(crate::subrepo::SUBREPO_REGISTRY_REL).exists());
+        let wt_doctor =
+            std::fs::read_to_string(wt_dir.join(".pengj-templates/scripts/doctor.sh")).unwrap();
+        assert!(wt_doctor.contains("worktree check"));
+        assert!(!wt_doctor.contains("subrepo check"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
@@ -5874,7 +6479,7 @@ body
         std::fs::create_dir_all(bque.join("just")).unwrap();
         write_test_file(
             bque.join("layer.toml"),
-            "name = \"bque\"\ndescription = \"Q\"\ndepends = [\"common\", \"just\"]\n",
+            "name = \"bque\"\ndescription = \"Q\"\ndepends = [\"common\", \"just\"]\nskills = [\"bque\"]\n",
         )
         .unwrap();
         write_test_file(
@@ -5986,6 +6591,8 @@ body
             "vscode",
             "gate",
             "rust-workspace",
+            "subrepo",
+            "worktree",
         ]
         .iter()
         .map(|s| (*s).to_string())
