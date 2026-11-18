@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.75.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.75.0...v0.75.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **core:** 共享目录覆盖值比较两侧同时规范化 ([ecbf49f](https://github.com/pengjiaxusz/pengj-templates/commit/ecbf49f8ba932c44e22d5f2ad02802a285d25c4b))
+
 ## [0.75.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.74.0...v0.75.0) (2026-11-18)
 
 
