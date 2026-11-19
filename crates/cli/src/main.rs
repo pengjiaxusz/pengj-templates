@@ -591,8 +591,16 @@ fn cmd_list_layers(templates: &pengj_core::Templates, json: bool) -> anyhow::Res
         return Ok(());
     }
     if layers.is_empty() {
-        println!("(没有可用层)");
-        return Ok(());
+        if json {
+            println!("[]");
+            return Ok(());
+        }
+        // 空模板根永远不是「正常的空状态」：指错目录后 `update` 会把整份清单
+        // 当上游删除。这里直接报错，给出可执行的下一步。
+        anyhow::bail!(
+            "模板根 {} 下没有任何层目录（含 layer.toml 的子目录）——--templates 要指向 templates/ 本身，而不是仓库根",
+            templates.root().display()
+        );
     }
     println!("{:<10} {:<16} {:<40} 文件数", "ID", "名称", "描述");
     for l in layers {

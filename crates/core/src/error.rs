@@ -28,6 +28,19 @@ pub enum CoreError {
     #[error("模板目录不存在: {0}")]
     TemplateRoot(String),
 
+    #[error(
+        "模板根 {0} 下没有任何含 layer.toml 的层目录——--templates 要指向直接含各层目录（common/just/rust ...）的 templates/，而不是仓库根"
+    )]
+    EmptyTemplateRoot(String),
+
+    #[error(
+        "项目清单记录的层在模板根里一个都不存在（请求: {requested}；可用: {available}）——模板根可能指到了别的仓库的 templates/；已拒绝按「层全被移除」执行，否则会把所有受管文件当上游删除清空"
+    )]
+    LayerSetUnresolved {
+        requested: String,
+        available: String,
+    },
+
     #[error("IO 错误: {0}")]
     Io(#[from] std::io::Error),
 

@@ -57,6 +57,22 @@ impl Templates {
         Ok(metas)
     }
 
+    /// 读取层元数据，并确认模板根确实是一份模板目录（至少含一个带 layer.toml 的层）。
+    ///
+    /// `Templates::new` 只记路径、不校验内容，指错目录时 `layer_metas()` 会安静地
+    /// 返回空表；`update` 随后会把清单里的每个文件都当成「上游已删除」清掉。
+    /// 把仓库根当成模板根（少写末尾的 `templates/`）就会命中这条路，因此凡是
+    /// 会按层清单**动磁盘**或有诊断结论的入口，都先过这一关。
+    pub fn require_layer_metas(&self) -> Result<BTreeMap<String, LayerMeta>> {
+        let metas = self.layer_metas()?;
+        if metas.is_empty() {
+            return Err(CoreError::EmptyTemplateRoot(
+                self.root.display().to_string(),
+            ));
+        }
+        Ok(metas)
+    }
+
     /// 列出所有可用层（模板根的直接子目录中带 layer.toml 的）
     pub fn list_layers(&self) -> Result<Vec<LayerInfo>> {
         let mut out = Vec::new();
@@ -1522,15 +1538,24 @@ pub fn update_project_with_options(
     // 过滤掉已从模板中移除/废弃的层，保留当前模板仍支持的层。
     // 历史层名先映射到现名：`lefthook` 已被 `gate` 取代，老项目若直接按
     // 名字过滤会被当成「已移除的层」丢掉，提交门禁就此消失。
-    let metas = templates.layer_metas()?;
+    let metas = templates.require_layer_metas()?;
     let mut seen_layers: BTreeSet<String> = BTreeSet::new();
     let valid_layers: Vec<String> = manifest
         .layers
-        .into_iter()
-        .map(|l| canonical_layer_id(&l))
+        .iter()
+        .map(|l| canonical_layer_id(l))
         .filter(|l| metas.contains_key(l))
         .filter(|l| seen_layers.insert(l.clone()))
         .collect();
+    // 清单里记着层、却一个都解析不出来 = 模板根指错了（很可能是别的仓库的
+    // templates/）。不设这道闸，下面会把整份清单当「上游已删除」处理，把所有
+    // 受管文件物理删除——版本号照样往上跳，看起来像一次正常的更新。
+    if !manifest.layers.is_empty() && valid_layers.is_empty() {
+        return Err(CoreError::LayerSetUnresolved {
+            requested: manifest.layers.join(", "),
+            available: metas.keys().cloned().collect::<Vec<_>>().join(", "),
+        });
+    }
     let ordered = templates.resolve_layers_with_linkage(&valid_layers)?;
     let mut dropped_skills = Vec::new();
     if ordered.iter().any(|l| l == "agent") {
@@ -1960,6 +1985,8 @@ pub fn add_layers_to_project(
     }
 
     let mut manifest = ProjectManifest::load(project_dir)?;
+    // 模板根不成立时先停在这里，免得报成「未知的层」把注意力引到层名上
+    templates.require_layer_metas()?;
     let mut merged = manifest.layers.clone();
     for layer in &requested {
         if !merged.iter().any(|l| l == layer) {
@@ -2060,7 +2087,7 @@ pub fn audit_project(
     include_diff: bool,
 ) -> Result<AuditReport> {
     let manifest = ProjectManifest::load(project_dir)?;
-    let metas = templates.layer_metas()?;
+    let metas = templates.require_layer_metas()?;
     let mut seen_layers: BTreeSet<String> = BTreeSet::new();
     let valid_layers: Vec<String> = manifest
         .layers
@@ -2069,6 +2096,14 @@ pub fn audit_project(
         .filter(|l| metas.contains_key(l))
         .filter(|l| seen_layers.insert(l.clone()))
         .collect();
+    // 与 update 同一道闸：巡检是只读的，但模板根指错时会把整份清单报成
+    // 「上游已废弃」，比报错更容易误导人。
+    if !manifest.layers.is_empty() && valid_layers.is_empty() {
+        return Err(CoreError::LayerSetUnresolved {
+            requested: manifest.layers.join(", "),
+            available: metas.keys().cloned().collect::<Vec<_>>().join(", "),
+        });
+    }
     let ordered = templates.resolve_layers(&valid_layers)?;
     let mut options = manifest.options.clone();
     if ordered.iter().any(|l| l == "agent") {
@@ -6757,6 +6792,96 @@ body
         }
 
         let _ = std::fs::remove_dir_all(&tpl);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 把仓库根当成模板根（少写末尾的 `templates/`）时必须直接报错。
+    ///
+    /// 曾经的表现是：层清单解析为空 -> 清单里每个文件都被判「上游已删除」->
+    /// 105 个受管文件被物理删除，版本号还照常往上跳，看起来像一次正常更新。
+    #[test]
+    fn update_refuses_when_templates_root_holds_no_layers() {
+        let id = unique_id();
+        let tmp = std::env::temp_dir().join(format!("pengj-root-guard-{}", id));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let tpl = tmp.join("templates");
+        write_test_file(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        write_test_file(tpl.join("common").join("README.md"), "hello\n").unwrap();
+
+        let templates = Templates::new(&tpl);
+        generate(
+            &templates,
+            "proj",
+            &["common".to_string()],
+            BTreeMap::new(),
+            &tmp,
+        )
+        .unwrap();
+        let proj = tmp.join("proj");
+        assert!(proj.join("README.md").is_file());
+
+        // 指到父目录：它存在、可读，但直接子目录里没有 layer.toml
+        let wrong_root = Templates::new(&tmp);
+        let err = update_project(&wrong_root, &proj).unwrap_err();
+        assert!(
+            matches!(err, CoreError::EmptyTemplateRoot(_)),
+            "应报模板根无层目录，实际: {err}"
+        );
+        assert!(
+            proj.join("README.md").is_file(),
+            "报错前不得动磁盘，受管文件必须原样保留"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 模板根有效但一个层都对不上（指到了别的仓库的 templates/）时同样必须报错。
+    #[test]
+    fn update_refuses_when_manifest_layers_all_unknown() {
+        let id = unique_id();
+        let tmp = std::env::temp_dir().join(format!("pengj-layer-guard-{}", id));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let tpl = tmp.join("templates");
+        write_test_file(
+            tpl.join("common").join("layer.toml"),
+            "name = \"Common\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        write_test_file(tpl.join("common").join("README.md"), "hello\n").unwrap();
+
+        let templates = Templates::new(&tpl);
+        generate(
+            &templates,
+            "proj",
+            &["common".to_string()],
+            BTreeMap::new(),
+            &tmp,
+        )
+        .unwrap();
+        let proj = tmp.join("proj");
+
+        // 另一份模板根：有层目录，但没有本项目用到的 common
+        let other = tmp.join("other-templates");
+        write_test_file(
+            other.join("rust").join("layer.toml"),
+            "name = \"Rust\"\ndescription = \"x\"\n",
+        )
+        .unwrap();
+        let wrong_root = Templates::new(&other);
+        let err = update_project(&wrong_root, &proj).unwrap_err();
+        assert!(
+            matches!(err, CoreError::LayerSetUnresolved { .. }),
+            "应报清单层全部无法解析，实际: {err}"
+        );
+        assert!(
+            proj.join("README.md").is_file(),
+            "报错前不得动磁盘，受管文件必须原样保留"
+        );
+
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
