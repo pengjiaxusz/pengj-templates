@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.77.0...v0.77.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **core:** 模板根指错时拒绝清空受管文件 ([79f8ce3](https://github.com/pengjiaxusz/pengj-templates/commit/79f8ce3ed5590eaf0efb942f640a162cf64d95d4))
+
 ## [0.77.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.76.1...v0.77.0) (2026-11-19)
 
 
