@@ -2,29 +2,36 @@
 {% if options["skill_lang"] == "en" %}
 # {{ project_name }} Coding Standards
 
-## General conventions
+## Workflow and Environment
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
-- Route all builds, checks, tests and benchmarks through `just` (`just check`, `just test`, `just q-run <cmd>`); never run raw `cargo`/`ninja`/`cmake`. See `.agents/skills/bque/SKILL.md`.
+- **Build and test**: Route all builds, checks and tests through `just` (`just check`, `just test`); do not run raw build commands. See `.agents/skills/bque/SKILL.md`.
 {%- endif %}
 {%- if 'worktree' in layers %}
-- Parallel worktrees share **one** build directory outside the repository (`CARGO_TARGET_DIR`, injected by the `just` recipes): dependencies compile once instead of once per worktree. Only intermediate artifacts are shared — **final binaries keep a fixed path inside that directory, so concurrent worktrees overwrite each other's output**. Isolate run artifacts per worktree yourself (copy them out, or set your own output directory); the template deliberately does not implement isolation. Create worktrees with `just wt-create <name>`, verify with `just wt-check`. See `.agents/skills/worktree/SKILL.md`.
+- **Parallel worktrees**: Worktrees share the main build directory (intermediates reused, concurrent binary outputs may collide). Create with `just wt-create <name>`, verify with `just wt-check`. See `.agents/skills/worktree/SKILL.md`.
 {%- endif %}
 {%- if options["commit_and_push"] %}
-- After changes pass verification, commit and push before replying. Skip only for pure Q&A or when reporting failing builds/tests.
+- **Commit before reply**: After changes pass verification, commit and push before replying. Skip only for pure Q&A or when reporting failures.
 {%- endif %}
-- After cloning, run `just doctor --fix` (or `sh .pengj-templates/scripts/doctor.sh --fix` / `pwsh -NoProfile -File .pengj-templates/scripts/doctor.ps1 -Fix` when `just` is unavailable): it checks the toolchain, activates the commit hooks, creates the agent-client workspace links (`.trae` / `.claude/skills` / `.workbuddy/skills`), and runs the project fixes in `.pengj-templates/scripts/doctor.d/`. A missing `pengj-templates-cli` is an error, not a warning — the gate and the links both need it — and `--install-cli` is the only step that touches the network (`--fix` never does).
-{%- if options["commit_zh"] %}
-- Commit subjects MUST be Chinese (at least 2 CJK characters); type/scope stay English. Every commit entry point (including /commit commands) follows this rule — the commit-msg hook rejects pure-English subjects.
-{%- else %}
-- Commit subjects MUST be pure English (no CJK characters); type/scope stay English. Every commit entry point follows this rule — the commit-msg hook rejects Chinese subjects.
-{%- endif %}
+- **Environment setup**: Run `just doctor --fix` (add `--install-cli` if CLI is missing) to verify tools, activate hooks and link workspaces.
+
+## Commit Conventions
+- **Conventional commits**: Subject must match `type(scope): subject`, type from `.pengj-templates/gate.toml`, {% if options["commit_zh"] %}subject must contain at least 2 Chinese characters{% else %}subject must be pure English (no Han characters){% endif %}, no trailing period, length <= 100 chars.
 {%- if 'gate' in layers %}
-- The commit gate runs from `.githooks/`; activate it with `just doctor --fix` (or `sh .pengj-templates/scripts/doctor.sh --fix`) — the doctor calls `.githooks/install.sh`, which needs only git and a POSIX shell, so activating the hooks does not need the CLI. The gate itself runs from `pengj-templates-cli`: without it the hooks block the commit and print the install command. The gate layer implies the `ci` layer, which runs the same binary as a required status check.
-- There is exactly one rule set: the hooks only locate the CLI and hand over, and the template ships no fallback script. A machine without the CLI cannot commit locally until it installs the CLI — never a weaker local check that might disagree with CI. The `gate` job in `.github/workflows/gate.yml` and its ruleset in `.github/rulesets/gate.json` enforce the same rules server-side.
-- Check the subject before committing: it must match `type(scope): subject`, the type must be one of `commit.types` in `.pengj-templates/gate.toml`, {% if options["commit_zh"] %}the subject needs at least 2 Han characters{% else %}the subject must carry no Han characters{% endif %}, it must not end with a full stop, and the header stays within 100 characters. The gate enforces all of it, but a self-check is faster than a rejection.
-- Code-language guard: every commit checks identifiers and string copy against `.pengj-templates/gate.toml` (`mode`) — English programming rejects non-English, Chinese programming rejects non-Chinese. Chinese mode judges human-facing copy only: command-line flags, paths, protocol field names and embedded source are machine text, not violations (they still count toward the denominator so the budget is not diluted). Each file tolerates a small ratio of string exceptions (default 1%); genuine ones must be certified in source with `lang-ok: <reason>` on the line or `lang-allow: <reason>` near the top. Full audit: {% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}.
+- **Commit gate**: Local commits are validated by git hooks and the gate tool, enforced identically in CI. Full audit: {% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}.
 {%- endif %}
-- If a change touches module boundaries, public APIs, data flow, lifecycle, or adds a module/subsystem, update the matching architecture/design docs before committing.
+
+## Code and Comment Languages
+- **Code comments**: All doc comments (`//!`, `///`) and inline comments (`//`, `/* */`) must be written in English.
+{%- if 'gate' in layers %}
+{%- if not options["chinese_programming"] %}
+- **Code-language guard (English programming)**:
+  - **English identifiers only**: Function, type, field and variable names use ASCII only.
+  - **Default English strings**: Assertions, error messages and fixtures must be English.
+  - **Exemptions**: Line exemption via `lang-ok: <reason>`; whole file via `lang-allow: <reason>` (e.g. data fixtures). Full audit: {% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}.
+{%- else %}
+- **Code-language guard (Chinese programming)**: Human-facing copy checked against `.pengj-templates/gate.toml`. Exemptions via `lang-ok: <reason>` / `lang-allow: <reason>`. Full audit: {% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}.
+{%- endif %}
+{%- endif %}
 {%- if options["chinese_programming"] %}
 
 ### Chinese programming conventions
@@ -39,32 +46,42 @@
 - Keep entry files (`main.rs`/`lib.rs`/`mod.rs`) ASCII; map Chinese-named files via `#[path]`.
 - Chinese identifiers need no snake_case; pure-ASCII ones follow Rust conventions. Prefer derive macros (e.g. `derive_more`).
 {%- endif %}
+
+## Architecture and Documentation
+- **Architecture documentation**: When modifying module boundaries, public APIs, data flows, or lifecycles, update matching architecture docs. If `docs/architecture/` exists, check `docs/architecture/README.md` first and follow its architecture writing standards.
 {%- else %}
 # {{ project_name }} 编码规范
 
-## 通用约定
+## 工作流与环境
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
-- 编译/检查/测试/跑分统一走 `just`（`just check`、`just test`、`just q-run <cmd>`），不裸跑 `cargo`/`ninja`/`cmake`；详见 `.agents/skills/bque/SKILL.md`。
+- **构建与测试**：编译、检查与测试统一走 `just`（`just check`、`just test`），不裸跑底层构建工具；详见 `.agents/skills/bque/SKILL.md`。
 {%- endif %}
 {%- if 'worktree' in layers %}
-- 多个并行工作树共享**同一份**编译目录，它就是**主工作树的 `target/`**（链接工作树由 `just` 配方注入 `CARGO_TARGET_DIR` 指过去）：依赖只编译一次，不必每个工作树各编一遍。共享的只有中间产物——**最终二进制在该目录里路径固定，并发的工作树会互相覆盖产物**。运行产物请按工作树自己隔离（复制出去，或另设输出目录），模板刻意不实现隔离机制。因为目录在主工作树里，那里跑 `cargo clean` 会一并清掉所有工作树的中间产物。新建工作树用 `just wt-create <名称>`，校验用 `just wt-check`。详见 `.agents/skills/worktree/SKILL.md`。
+- **并行工作树**：多个并行工作树共享主工作树的编译目录（中间产物复用，但并发二进制可能覆盖）；新建工作树用 `just wt-create <名称>`，校验用 `just wt-check`。详见 `.agents/skills/worktree/SKILL.md`。
 {%- endif %}
 {%- if options["commit_and_push"] %}
-- 完成修改并通过验证后，先 commit & push 再回复；纯问答或构建/测试失败待排查时除外。
+- **完成验证后提交**：完成修改并通过验证后，先 commit & push 再回复；纯问答或构建/测试失败排查除外。
 {%- endif %}
-- 克隆后跑 `just doctor --fix`（没有 just 时用 `sh .pengj-templates/scripts/doctor.sh --fix` / `pwsh -NoProfile -File .pengj-templates/scripts/doctor.ps1 -Fix`）：检查工具链、激活提交钩子、创建 agent 客户端工作区链接（`.trae` / `.claude/skills` / `.workbuddy/skills`），并执行 `.pengj-templates/scripts/doctor.d/` 下的项目自检与修复。缺 `pengj-templates-cli` 是**错误**而不是警告（门禁与链接都依赖它），唯一的联网入口是 `--install-cli`，`--fix` 永不联网。
-{%- if options["commit_zh"] %}
-- 提交标题必须用中文（至少 2 个汉字），type/scope 用英文；任何提交入口（含 /commit 命令）都不得写纯英文标题，commit-msg 钩子会拦截。
-{%- else %}
-- 提交标题必须用纯英文（不得含汉字），type/scope 用英文；任何提交入口都不得写中文标题，commit-msg 钩子会拦截。
-{%- endif %}
+- **环境初始化**：克隆或环境异常时跑 `just doctor --fix`（缺失 CLI 工具时加 `--install-cli`），自动检查工具链、激活钩子并创建客户端链接。
+
+## 提交流程与规范
+- **约定式提交**：提交标题必须匹配 `type(scope): 摘要`，type 取自 `.pengj-templates/gate.toml` 的 `commit.types`，{% if options["commit_zh"] %}摘要至少 2 个汉字{% else %}摘要不含汉字{% endif %}，且不以句号结尾，标题长度 ≤ 100 字符。
 {%- if 'gate' in layers %}
-- {% if options["skill_lang"] | default("zh") == "en" %}The commit gate runs from `.githooks/`; activate it with `just doctor --fix` (or `sh .pengj-templates/scripts/doctor.sh --fix`) — the doctor calls `.githooks/install.sh`, which needs only git and a POSIX shell, so activating the hooks does not need the CLI. The gate itself runs from `pengj-templates-cli`: without it the hooks block the commit and print the install command. The gate layer implies the `ci` layer, which runs the same binary as a required status check.{% else %}提交门禁由 `.githooks/` 执行，激活入口是 `just doctor --fix`（或 `sh .pengj-templates/scripts/doctor.sh --fix`）：doctor 会调用 `.githooks/install.sh`，后者只需要 git 与一个 POSIX shell，所以激活钩子不需要 CLI。门禁本体在 `pengj-templates-cli` 里：没装它时钩子会拦下提交并打印安装命令。gate 层会自动带上 `ci` 层，服务端跑的是同一个二进制，并把它设成必需状态检查。{% endif %}
-- {% if options["skill_lang"] | default("zh") == "en" %}There is exactly one rule set: the hooks only locate the CLI and hand over, and the template ships no fallback script. A machine without the CLI cannot commit locally until it installs the CLI — never a weaker local check that might disagree with CI. The `gate` job in `.github/workflows/gate.yml` and its ruleset in `.github/rulesets/gate.json` enforce the same rules server-side.{% else %}规则只有一套：钩子只负责找到 CLI 并把活交给它，模板不带兜底脚本。没装 CLI 的机器在装好之前无法在本地提交，刻意不提供一套可能与 CI 判决不一致的更宽松检查。同样的规则由 `.github/workflows/gate.yml` 的 `gate` 任务与 `.github/rulesets/gate.json` 的必需状态检查在服务端执行。{% endif %}
-- {% if options["skill_lang"] | default("zh") == "en" %}Check the subject before committing: it must match `type(scope): subject`, the type must be one of `commit.types` in `.pengj-templates/gate.toml`, {% if options["commit_zh"] %}the subject needs at least 2 Han characters{% else %}the subject must carry no Han characters{% endif %}, it must not end with a full stop, and the header stays within 100 characters. The gate enforces all of it, but a self-check is faster than a rejection.{% else %}提交前自查标题：必须匹配 `type(scope): 摘要`，type 取自 `.pengj-templates/gate.toml` 的 `commit.types`，{% if options["commit_zh"] %}摘要至少 2 个汉字{% else %}摘要不含汉字{% endif %}，且不以句号结尾，标题不超过 100 字符。门禁会兜住全部，但先自查比被拦下更快。{% endif %}
-- 代码语言守卫：每次提交按 `.pengj-templates/gate.toml` 的 `mode` 校验标识符与字符串文案——英文编程拒绝非英文，中文编程拒绝非中文。中文模式只判定面向人的文案，命令行参数、路径、协议字段名、内嵌源码等机器字面量不算违规（仍计入分母，避免额度被稀释）。每个文件容忍小比例（默认 1%）字符串例外；真实例外必须在源码里认证：行尾 `lang-ok: 理由`，或文件头附近 `lang-allow: 理由`。全量自检：{% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}。
+- **提交门禁**：本地提交由 git 钩子与 gate 门禁校验，与 CI 必需状态检查规则一致。全量自检运行：{% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}。
 {%- endif %}
-- 改动涉及模块边界、公共 API、数据流、生命周期或新增模块/子系统时，同步更新对应的架构/设计文档再提交。
+
+## 代码与注释语言规范
+- **代码注释必须使用中文**：所有源码文件中的文档注释（`//!`、`///`）与行内注释（`//`、`/* */`）必须使用中文编写；API 标识符、符号名与专有名词（如 `Vulkan`、`SlotMap`）可保留英文原文。
+{%- if 'gate' in layers %}
+{%- if not options["chinese_programming"] %}
+- **代码语言守卫（英文编程）**：
+  - **标识符一律英文**：函数名、类型名、字段名、局部变量、测试函数名只使用 ASCII；中文只出现在注释里。
+  - **字符串文案默认英文**：测试断言、错误消息、示例数据一律英文。
+  - **例外认证**：单行例外行尾注释写 `lang-ok: 理由`；整文件放行文件头注释写 `lang-allow: 理由`（仅限词典、测试样本等数据文件）。全量自检：{% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}。
+{%- else %}
+- **代码语言守卫（中文编程）**：按 `.pengj-templates/gate.toml` 校验面向人的文案（机器字面量除外）；例外通过 `lang-ok` / `lang-allow` 认证。全量自检：{% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}。
+{%- endif %}
+{%- endif %}
 {%- if options["chinese_programming"] %}
 
 ### 中文编程规范
@@ -79,6 +96,9 @@
 - 入口文件（`main.rs`/`lib.rs`/`mod.rs`）保持 ASCII；中文源文件用 `#[path]` 映射模块。
 - 含中文标识符不强制蛇形，纯英文标识符仍遵循 Rust 惯例；优先用派生宏（如 `derive_more`）减少样板。
 {%- endif %}
+
+## 架构与文档
+- **架构文档规范**：改动涉及模块边界、公共 API、数据流、生命周期或新增子系统时，同步更新对应的架构与设计文档。若项目存在 `docs/architecture/`，修改代码前先核对 `docs/architecture/README.md` 路由至对应领域文档，并严格遵循其架构文档编写规范。
 {%- endif %}
 <!-- PENGJ_TEMPLATE_END -->
 
