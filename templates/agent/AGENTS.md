@@ -2,23 +2,14 @@
 {% if options["skill_lang"] == "en" %}
 # {{ project_name }} Coding Standards
 
-## Workflow and Environment
+## Workflow Invariants
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
-- **Build and test**: Route all builds, checks and tests through `just` (`just check`, `just test`); do not run raw build commands. See `.agents/skills/bque/SKILL.md`.
-{%- endif %}
-{%- if 'worktree' in layers %}
-- **Parallel worktrees**: Worktrees share the main build directory (intermediates reused, concurrent binary outputs may collide). Create with `just wt-create <name>`, verify with `just wt-check`. See `.agents/skills/worktree/SKILL.md`.
+- **Build and test**: Route all builds, checks and tests through `just` (`just check`, `just test`); do not run raw build commands.
 {%- endif %}
 {%- if options["commit_and_push"] %}
 - **Commit before reply**: After changes pass verification, commit and push before replying. Skip only for pure Q&A or when reporting failures.
 {%- endif %}
-- **Environment setup**: Run `just doctor --fix` (add `--install-cli` if CLI is missing) to verify tools, activate hooks and link workspaces.
-
-## Commit Conventions
-- **Conventional commits**: Subject must match `type(scope): subject`, type from `.pengj-templates/gate.toml`, {% if options["commit_zh"] %}subject must contain at least 2 Chinese characters{% else %}subject must be pure English (no Han characters){% endif %}, no trailing period, length <= 100 chars.
-{%- if 'gate' in layers %}
-- **Commit gate**: Local commits are validated by git hooks and the gate tool, enforced identically in CI. Full audit: {% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}.
-{%- endif %}
+- **Conventional commits**: Subject must match `type(scope): subject`, type from `.pengj-templates/gate.toml`, {% if options["commit_zh"] %}subject must contain at least 2 Chinese characters{% else %}subject must be pure English (no Han characters){% endif %}, no trailing period, length <= 100 chars (see `git-workflow` skill).
 
 ## Code and Comment Languages
 - **Code comments**: All doc comments (`//!`, `///`) and inline comments (`//`, `/* */`) must be written in English.
@@ -46,29 +37,17 @@
 - Keep entry files (`main.rs`/`lib.rs`/`mod.rs`) ASCII; map Chinese-named files via `#[path]`.
 - Chinese identifiers need no snake_case; pure-ASCII ones follow Rust conventions. Prefer derive macros (e.g. `derive_more`).
 {%- endif %}
-
-## Architecture and Documentation
-- **Architecture documentation**: When modifying module boundaries, public APIs, data flows, or lifecycles, update matching architecture docs. If `docs/architecture/` exists, check `docs/architecture/README.md` first and follow its architecture writing standards.
 {%- else %}
 # {{ project_name }} 编码规范
 
-## 工作流与环境
+## 工作流红线
 {%- if 'bque' in layers or (options["skills"] is defined and 'bque' in options["skills"]) %}
-- **构建与测试**：编译、检查与测试统一走 `just`（`just check`、`just test`），不裸跑底层构建工具；详见 `.agents/skills/bque/SKILL.md`。
-{%- endif %}
-{%- if 'worktree' in layers %}
-- **并行工作树**：多个并行工作树共享主工作树的编译目录（中间产物复用，但并发二进制可能覆盖）；新建工作树用 `just wt-create <名称>`，校验用 `just wt-check`。详见 `.agents/skills/worktree/SKILL.md`。
+- **构建与测试**：编译、检查与测试统一走 `just`（`just check`、`just test`），不裸跑底层构建工具。
 {%- endif %}
 {%- if options["commit_and_push"] %}
-- **完成验证后提交**：完成修改并通过验证后，先 commit & push 再回复；纯问答或构建/测试失败排查除外。
+- **回复前提交**：完成修改并通过验证后，先 commit & push 再回复；纯问答或构建/测试失败排查除外。
 {%- endif %}
-- **环境初始化**：克隆或环境异常时跑 `just doctor --fix`（缺失 CLI 工具时加 `--install-cli`），自动检查工具链、激活钩子并创建客户端链接。
-
-## 提交流程与规范
-- **约定式提交**：提交标题必须匹配 `type(scope): 摘要`，type 取自 `.pengj-templates/gate.toml` 的 `commit.types`，{% if options["commit_zh"] %}摘要至少 2 个汉字{% else %}摘要不含汉字{% endif %}，且不以句号结尾，标题长度 ≤ 100 字符。
-{%- if 'gate' in layers %}
-- **提交门禁**：本地提交由 git 钩子与 gate 门禁校验，与 CI 必需状态检查规则一致。全量自检运行：{% if 'just' in layers %}`just gate-check`{% else %}`pengj-templates-cli gate check`{% endif %}。
-{%- endif %}
+- **约定式提交**：提交标题必须匹配 `type(scope): 摘要`，type 取自 `.pengj-templates/gate.toml` 的 `commit.types`，{% if options["commit_zh"] %}摘要至少 2 个汉字{% else %}摘要不含汉字{% endif %}，且不以句号结尾，标题长度 ≤ 100 字符（详见 `git-workflow` 技能）。
 
 ## 代码与注释语言规范
 - **代码注释必须使用中文**：所有源码文件中的文档注释（`//!`、`///`）与行内注释（`//`、`/* */`）必须使用中文编写；API 标识符、符号名与专有名词（如 `Vulkan`、`SlotMap`）可保留英文原文。
@@ -96,9 +75,6 @@
 - 入口文件（`main.rs`/`lib.rs`/`mod.rs`）保持 ASCII；中文源文件用 `#[path]` 映射模块。
 - 含中文标识符不强制蛇形，纯英文标识符仍遵循 Rust 惯例；优先用派生宏（如 `derive_more`）减少样板。
 {%- endif %}
-
-## 架构与文档
-- **架构文档规范**：改动涉及模块边界、公共 API、数据流、生命周期或新增子系统时，同步更新对应的架构与设计文档。若项目存在 `docs/architecture/`，修改代码前先核对 `docs/architecture/README.md` 路由至对应领域文档，并严格遵循其架构文档编写规范。
 {%- endif %}
 <!-- PENGJ_TEMPLATE_END -->
 
