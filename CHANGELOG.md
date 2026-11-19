@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.76.1...v0.77.0) (2026-11-19)
+
+
+### Features
+
+* **templates:** 精简 AGENTS.md 结构并收编注释与代码语言规范 ([c593b55](https://github.com/pengjiaxusz/pengj-templates/commit/c593b55e995337f3b2727a9f586b6109e2752960))
+
 ## [0.76.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.76.0...v0.76.1) (2026-11-18)
 
 
