@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第二课｜一次改动的七层关卡</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="series">教学工作区 · LESSON 02 / 03</span>
+    <button class="theme-toggle" type="button" data-theme-toggle>主题</button>
+  </div>
+
+  <p class="eyebrow">Lesson 02 · 机制拆解</p>
+  <h1>一次改动的七层关卡</h1>
+  <p class="dek">把「谁拦得住」拆开：从作者的机器到用户，改动穿过七层；每层拦一部分、漏一部分，少数穿过全部，剩下的交给回滚。</p>
+  <div class="meta">约 7 分钟 · 4 题自测 · 承接第一课的成本 / 护栏框架</div>
+
+  <main>
+    <section id="map">
+      <h2><span class="num">01</span>先记住这张地图</h2>
+      <p>关键心智模型：<strong>不是一道闸门，而是层层过滤 + 事后兜底。</strong>越靠前的层越便宜、越机械；越靠后的层越贵、越需要人的判断。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>层</th><th>做什么</th><th>谁能挡</th></tr></thead>
+          <tbody>
+            <tr><td>1 自验证</td><td>测试 / 构建 / 截图对比；新上下文 subagent 复审</td><td>常规错误（PR 之前）</td></tr>
+            <tr><td>2 AI 评审</td><td>读 diff + 全仓 + PR 意图；多 agent 并行、投票去噪</td><td>发现必须回应，未清不能合并</td></tr>
+            <tr><td>3 安全评审</td><td>独立一轮</td><td>发现未清，硬挡合并</td></tr>
+            <tr><td>4 自动检查</td><td>lint / 类型 / 多平台测试 / 构建</td><td>机械回归，硬挡</td></tr>
+            <tr><td>5 人工审批</td><td>按风险分级：0 / 1 / 2 人</td><td>只有人能判断的部分</td></tr>
+            <tr><td>6 合并队列</td><td>在主干上重跑全部检查；功能开关；渐进发布</td><td>两个 PR 各自通过却合坏主干</td></tr>
+            <tr><td>7 发现与回滚</td><td>遥测、内部先用、每周 on-call、一键回滚</td><td>漏网的错，事后兜底</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>逐层细节可查 <a href="../reference/code-review-at-anthropic.html#layers">参考手册 · 七层关卡</a>；这节课只讲最容易误读的三处。</p>
+    </section>
+
+    <section id="verify">
+      <h2><span class="num">02</span>第一层：让机器先跑，让人看证据</h2>
+      <p>提交前给 Claude 一个<strong>能判定成败的检查</strong>——测试、构建、和设计稿对比的截图——并要求它展示输出，而不是口头说「做完了」。然后用一个<strong>全新上下文的 subagent</strong> 复审 diff。</p>
+      <p>评审者反复标记同一类问题时，团队不在评论里反复说，而是<strong>在源头修</strong>：写进 skill、加 lint 规则、或更新说明文件。这是把一次性意见沉淀成永久检查。</p>
+      <div class="callout">
+        <span class="tag">关键判断</span>
+        <p>「展示证据」比「声称完成」便宜得多：读测试输出、命令返回值、截图，比自己重跑一遍快。人看的是证据，不是承诺。</p>
+      </div>
+    </section>
+
+    <section id="noise">
+      <h2><span class="num">03</span>第二层：AI 评审怎么不被噪声淹没</h2>
+      <p>研究预览上线后，内部 PR 收到实质性评审意见的比例从 <strong>16% 升到 54%</strong>；千行以上的 PR 大多有发现，小改动大多干净通过。但「多报」很容易变成噪声，所以团队加了几道阀：</p>
+      <ul>
+        <li><strong>并行 + 投票</strong>：多个 agent 同时找 bug，另一组对每条发现投票，够多认可才发布。</li>
+        <li><strong>丢弃低价值类</strong>：只涉及风格、诊断、清理的发现直接扔掉，这些过滤在内部 PR 上做过 A/B 测试。</li>
+        <li><strong>标注性质</strong>：Important / Nit / Pre-existing；最后一种明确告诉作者「这不是你引入的」。</li>
+        <li><strong>每条必须有回复</strong>：要么修，要么说明理由关闭。agent 常常连夜把发现修掉，作者第二天看到的是已经过了一轮的 PR。</li>
+      </ul>
+      <p>按仓库设 Quick / Standard / Deep 三档；原文的判断标准很实用：<strong>漏掉一个 bug 的代价比多花的评审时间更高时，才值得开 Deep。</strong></p>
+    </section>
+
+    <section id="risk">
+      <h2><span class="num">04</span>第五层：风险分级，四条容易看错的规则</h2>
+      <p>低风险（文档、文案、开关后的内部功能）在自动检查全绿后<strong>无需人工</strong>；中风险（普通产品改动、缓存、自动更新器、系统提示词）要<strong>一人</strong>；高风险要<strong>两人</strong>。</p>
+      <p>真正容易看错的是这四条：</p>
+      <ol>
+        <li><strong>改动定级，不是作者定级。</strong>分类器读改动内容选档；第二个分类器再问「这次是否额外需要一个人」。</li>
+        <li><strong>只有可信作者走轻量通道。</strong>其他人都需要第二人批准。</li>
+        <li><strong>agent 的批准不算人的批准。</strong>自动评审能清掉低风险改动，但填不了「必须有人」的那个名额。</li>
+        <li><strong>谁驱动 agent，谁占一个名额；批准只覆盖当时的 commit。</strong>出现 agent 推送或手工解决的合并冲突，批准要重新给。</li>
+      </ol>
+      <p>完整表格见 <a href="../reference/code-review-at-anthropic.html#risk">参考手册 · 风险分级</a>。</p>
+    </section>
+
+    <section id="recall">
+      <h2><span class="num">05</span>先回忆，再看答案</h2>
+      <div class="recall" data-recall>
+        <div class="prompt">把七层按顺序列一遍——列到几层算几层，别翻上面的表。</div>
+        <button type="button" data-reveal>揭晓参考答案</button>
+        <div class="answer" hidden>①提交前自验证 + 新上下文复审；②每个 PR 的 AI 评审；③可阻塞的安全评审；④阻塞式自动检查；⑤按风险分级的人工审批；⑥合并队列 + 功能开关 + 渐进发布；⑦快速发现与回滚。</div>
+      </div>
+      <div class="recall" data-recall>
+        <div class="prompt">为什么「agent 批准了」不能算作那个需要的人类审批？</div>
+        <button type="button" data-reveal>揭晓参考答案</button>
+        <div class="answer" hidden>因为人类审批是为了让只有人能判断的部分有人负责；自动评审可以清掉低风险改动，但不能填「必须有人」的名额。在 agent 写的 PR 上，驱动 agent 的人算一个评审者，等于亲自写的那种责任。</div>
+      </div>
+    </section>
+
+    <section id="quiz">
+      <h2><span class="num">06</span>自测：机制是否真的清楚了</h2>
+      <div class="quiz" data-quiz></div>
+      <script type="application/json" data-quiz-data>
+      {
+        "questions": [
+          {
+            "q": "哪一层可以直接挡住合并？",
+            "options": [
+              { "t": "合并后的回滚机制", "c": false },
+              { "t": "安全评审与自动检查", "c": true },
+              { "t": "团队共享的上下文", "c": false },
+              { "t": "提交前的自验证环节", "c": false }
+            ],
+            "e": "安全评审与自动检查未通过会阻塞合并；自验证在 PR 之前，回滚在合并之后。"
+          },
+          {
+            "q": "风险等级由谁决定？",
+            "options": [
+              { "t": "由提交作者自己定", "c": false },
+              { "t": "由审批的人现场定", "c": false },
+              { "t": "由改动分类器来定", "c": true },
+              { "t": "由仓库管理员手定", "c": false }
+            ],
+            "e": "分类器读改动内容定级，第二个分类器再判断是否需要额外的人；作者不能自选轻量通道。"
+          },
+          {
+            "q": "每条 AI 发现必须怎么处理？",
+            "options": [
+              { "t": "直接忽略不必回应", "c": false },
+              { "t": "攒够三条统一处理", "c": false },
+              { "t": "只处理重要的那些", "c": false },
+              { "t": "修掉或说明再关闭", "c": true }
+            ],
+            "e": "要么修，要么给出理由关闭讨论串；未解决的发现会挡住合并，误报靠说明理由来清。"
+          },
+          {
+            "q": "合并队列解决什么问题？",
+            "options": [
+              { "t": "单独通过却合坏主干", "c": true },
+              { "t": "让评审意见自动消失", "c": false },
+              { "t": "减少要运行的测试", "c": false },
+              { "t": "把发布推迟到下周", "c": false }
+            ],
+            "e": "合并队列在主干上带着改动重跑全部检查，防止两个各自通过的 PR 合并后弄坏 main。"
+          }
+        ]
+      }
+      </script>
+    </section>
+
+    <section id="recap">
+      <h2><span class="num">07</span>这节课的锚点</h2>
+      <ul>
+        <li>七层是过滤器 + 兜底，不是一道闸门。</li>
+        <li>验证先于评审：给机器可判定的检查、看证据，再让新上下文 agent 复审。</li>
+        <li>AI 评审靠并行投票、丢弃风格类、标注性质、每条必回，来控制噪声。</li>
+        <li>审批按改动的风险分级；agent 的批准永远不算人的批准。</li>
+      </ul>
+      <p><strong>下一课</strong>处理最容易被忽略的问题：评审者本身也会出错、会绕圈。见 <a href="0003-convergence-and-humans.html">第三课：让评审收敛，把人留在哪里</a>。</p>
+    </section>
+
+    <section id="primary-source">
+      <h2><span class="num">08</span>首选一手资料</h2>
+      <a class="source-card" href="https://claude.dev/blog/solving-code-review-at-anthropic/">
+        <span class="k">Primary source · 对照原文</span>
+        <div class="t">How the Claude Code team does code review — “The life of a change” / “Layer by layer”</div>
+        <div class="d">重点核对第 1、2、5 层的原文段落，以及那张风险分级表。</div>
+      </a>
+    </section>
+  </main>
+
+  <footer>
+    <a href="0001-what-review-is-for.html">← 第一课</a>
+    <a href="../reference/code-review-at-anthropic.html#layers">参考手册 · 七层</a>
+    <a href="../reference/code-review-at-anthropic.html#risk">参考手册 · 风险</a>
+    <a href="0003-convergence-and-humans.html">下一课 →</a>
+    <div class="ask-agent">对任何一层的边界有疑问，随时向 Agent 追问：让它举一个真实 PR 穿过七层的例子。</div>
+  </footer>
+</div>
+<script src="../assets/lesson.js"></script>
+</body>
+</html>

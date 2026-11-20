@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第一课｜评审到底在评什么</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="series">教学工作区 · LESSON 01 / 03</span>
+    <button class="theme-toggle" type="button" data-theme-toggle>主题</button>
+  </div>
+
+  <p class="eyebrow">Lesson 01 · 核心重构</p>
+  <h1>评审到底在评什么</h1>
+  <p class="dek">这节课只解决一个问题：为什么「有没有人读过代码」是个坏问题，以及团队用什么取代了它。</p>
+  <div class="meta">约 6 分钟 · 4 题自测 · 学完你能用自己的话讲清评审的新目标</div>
+
+  <main>
+    <section id="scale">
+      <h2><span class="num">01</span>先看规模</h2>
+      <p>Anthropic 的 monorepo 里，每天合并的改动从 5 月的约 <strong>2,500</strong> 个涨到 9 月的 <strong>30,000 多个</strong>。同期 Claude Code 仓库合并的 PR 翻倍以上，而被回滚的 PR 占比反而下降超过 40%。</p>
+      <p>原文开头还说，Claude Code 自身约 <strong>90%</strong> 的代码由 Claude 编写。在这种产出速度下，要求每个人逐行读完每个 diff，不 just 困难，而是几乎不可能。</p>
+      <p class="sidenote"><span class="label">先别急着下结论</span>这组数字来自团队自报，没有独立复现。它们的作用是设定问题规模，不是证明方法正确。方法好不好，要看后面的指标设计与事故闭环。</p>
+    </section>
+
+    <section id="reframe">
+      <h2><span class="num">02</span>核心重构：换个问题问</h2>
+      <p>评审一直干两件事：<strong>①上线前发现并修复问题</strong>；<strong>②让团队共享对代码库的理解</strong>。这篇文章主要谈第一件。</p>
+      <p>团队的判断是：「有没有人读过代码？」是一个<strong>不精确的代理</strong>。真正该问的是——</p>
+      <p class="big-claim">这次改动可能出什么错？哪一道检查——自动的或人工的——适合拦住它？</p>
+      <p>问题一换，评审的<strong>时机</strong>也变了：不再是流程末端那道「写完 → 开 PR → 等同同事」的闸门，而是像<strong>拼写检查一样持续发生</strong>。大多数改动在被人看到之前，已经被 Claude 至少评审并修过一轮。</p>
+      <div class="callout">
+        <span class="tag">术语锁定</span>
+        <p>后文凡说「评审」，默认指发现并修复问题这一职责；谈知识传播时会明确说「第二个职责」。术语对照见 <a href="../reference/code-review-at-anthropic.html#glossary">参考手册 · 术语表</a>。</p>
+      </div>
+    </section>
+
+    <section id="cost">
+      <h2><span class="num">03</span>稀缺资源：人的时间与注意力</h2>
+      <p>人的时间出现在成本的两侧：<strong>评审花掉的时间</strong>，以及<strong>修坏代码花掉的时间</strong>。只砍前者，省下的时间会原封不动出现在后者——那不叫省，叫搬。</p>
+      <p>所以团队的优化目标写成了一句可检验的话：</p>
+      <p class="big-claim">大多数 PR 在最多一个人的参与下合并——这个人可以是作者——且不抬高回滚率与事故率。</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>类别</th><th>指标</th><th>读法</th></tr></thead>
+          <tbody>
+            <tr><td>成本（要降）</td><td>每 PR 人工审批数（中位数 / P95）、人工评论数、PR 等人的时长</td><td>省下了多少人时</td></tr>
+            <tr><td>护栏（不许坏）</td><td>回滚率、事故率</td><td>证明成本不是被转移到事后</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>完整定义见 <a href="../reference/code-review-at-anthropic.html#metrics">参考手册 · 成本指标与护栏指标</a>。这组「目标 + 护栏」的写法，是整篇文章最值得带走的一件东西。</p>
+    </section>
+
+    <section id="recall">
+      <h2><span class="num">04</span>先回忆，再看答案</h2>
+      <div class="recall" data-recall>
+        <div class="prompt">合上页面想 10 秒：「有没有人读过代码」为什么是个坏问题？团队改问什么？</div>
+        <button type="button" data-reveal>揭晓参考答案</button>
+        <div class="answer" hidden>它衡量的是手段（读没读），不是目的（会不会出错、谁拦得住）。改问：「这次改动可能出什么错，哪一道检查适合拦住它。」</div>
+      </div>
+      <div class="recall" data-recall>
+        <div class="prompt">如果只把评审时间压到零，却让回滚率上升，按文章的口径算成功吗？为什么？</div>
+        <button type="button" data-reveal>揭晓参考答案</button>
+        <div class="answer" hidden>不算。回滚率与事故率是护栏指标：上升就说明省下的人工时间只是转移到了事后修复，没有真正节省。</div>
+      </div>
+    </section>
+
+    <section id="quiz">
+      <h2><span class="num">05</span>自测：确认你真的带走了它</h2>
+      <p>先选，再看反馈。题目考的是理解，不是记忆原句。</p>
+      <div class="quiz" data-quiz></div>
+      <script type="application/json" data-quiz-data>
+      {
+        "questions": [
+          {
+            "q": "团队认为「有没有人读过代码」的问题在哪里？",
+            "options": [
+              { "t": "它忽略了检查也会有成本", "c": false },
+              { "t": "它要求每个人都逐行阅读", "c": false },
+              { "t": "它把手段当成了目的本身", "c": true },
+              { "t": "它把结果与手段混为一谈", "c": false }
+            ],
+            "e": "它把「人读了」这个手段当成目的；真正要问的是可能出什么错、哪道检查该拦。"
+          },
+          {
+            "q": "团队用哪一组指标当护栏，防止人工时间转移到事后修复？",
+            "options": [
+              { "t": "评论数量与审批人数", "c": false },
+              { "t": "构建时长与测试时长", "c": false },
+              { "t": "合并速度与发布速度", "c": false },
+              { "t": "回滚比率与事故比率", "c": true }
+            ],
+            "e": "成本指标是审批数、评论数、等待时长；护栏是回滚率与事故率，后者不许恶化。"
+          },
+          {
+            "q": "按照原文，现在的评审更像什么？",
+            "options": [
+              { "t": "写作时的拼写检查", "c": true },
+              { "t": "路口的一次性闸门", "c": false },
+              { "t": "上线后的紧急刹车", "c": false },
+              { "t": "每季度的全面审计", "c": false }
+            ],
+            "e": "评审变成持续发生的过程，像边写边跑的拼写检查；末端闸门只是旧隐喻。"
+          },
+          {
+            "q": "团队的目标里，大多数 PR 应该最多有几个人参与？",
+            "options": [
+              { "t": "零个人，全部交给机器", "c": false },
+              { "t": "一个人，且可以是作者", "c": true },
+              { "t": "两个人，一人写一人审", "c": false },
+              { "t": "三个人，还要加上安全", "c": false }
+            ],
+            "e": "最多一个人类环节，且作者本人就能算；前提是回滚与事故不升高。"
+          }
+        ]
+      }
+      </script>
+    </section>
+
+    <section id="recap">
+      <h2><span class="num">06</span>这节课的锚点</h2>
+      <ul>
+        <li>评审 = 发现并修复问题 + 传播理解；本文主线是前者。</li>
+        <li>坏问题：「有没有人读过？」；好问题：「可能出什么错，谁拦得住？」</li>
+        <li>评审从末端闸门变成持续过程，像拼写检查。</li>
+        <li>成本指标要降，护栏指标（回滚 / 事故）不许坏。</li>
+      </ul>
+      <p><strong>下一课</strong>沿着「谁拦得住」往下走：一次改动从作者机器到用户，究竟穿过哪七层关卡，以及哪些层能直接挡住合并。见 <a href="0002-seven-layers.html">第二课：一次改动的七层关卡</a>。</p>
+    </section>
+
+    <section id="primary-source">
+      <h2><span class="num">07</span>首选一手资料</h2>
+      <a class="source-card" href="https://claude.dev/blog/solving-code-review-at-anthropic/">
+        <span class="k">Primary source · 强烈推荐读一遍</span>
+        <div class="t">How the Claude Code team does code review</div>
+        <div class="d">原文约 14 分钟。这节课的全部论断都能在其中找到；读时重点看 “Rethinking the purpose of code review” 与 “The scarce resource” 两节。</div>
+      </a>
+    </section>
+  </main>
+
+  <footer>
+    <a href="../reference/code-review-at-anthropic.html#thesis">参考手册 · 一句话主张</a>
+    <a href="../reference/code-review-at-anthropic.html#metrics">参考手册 · 指标</a>
+    <a href="0002-seven-layers.html">下一课 →</a>
+    <div class="ask-agent">术语、数字或论证有任何不清楚，随时向 Agent 追问：让它换一种说法重讲，或指出原文对应段落。</div>
+  </footer>
+</div>
+<script src="../assets/lesson.js"></script>
+</body>
+</html>

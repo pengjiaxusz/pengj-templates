@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>参考手册｜AI 时代代码评审速查</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="series">教学工作区 · 参考手册 / REFERENCE</span>
+    <button class="theme-toggle" type="button" data-theme-toggle>主题</button>
+  </div>
+
+  <p class="eyebrow">Reference · 可打印速查</p>
+  <h1>代码评审速查手册</h1>
+  <p class="dek">把原文压缩成可检索的术语、数字与关卡表。术语在此定义，所有课程严格遵守。</p>
+  <div class="meta">来源：<a href="https://claude.dev/blog/solving-code-review-at-anthropic/">How the Claude Code team does code review</a>（2026-10-15）</div>
+
+  <main>
+    <section id="thesis">
+      <h2>一句话主张</h2>
+      <p class="big-claim">评审的目标不是「有没有人读过代码」，而是「这次改动可能出什么错，以及哪一道检查适合拦住它」——把人的注意力留给只有人能判断的部分，同时用回滚率与事故率证明质量没有下降。</p>
+      <div class="callout">
+        <span class="tag">关键区分</span>
+        <p>评审有两个职责：<strong>①上线前发现并修复问题</strong>（本系列主线）；<strong>②在团队内传播代码库理解</strong>（最后一课谈）。原文明确说，自动化主要替掉的是第一种读取。</p>
+      </div>
+    </section>
+
+    <section id="numbers">
+      <h2>关键数字（团队自报）</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>数字</th><th>含义</th><th>时间点</th></tr></thead>
+          <tbody>
+            <tr><td>约 90%</td><td>Claude Code 自身代码由 Claude 编写的比例</td><td>原文引用既有表述</td></tr>
+            <tr><td>2,500 → 30,000+</td><td>Anthropic monorepo 每天合并的改动数</td><td>5 月 → 9 月</td></tr>
+            <tr><td>翻倍以上</td><td>Claude Code 仓库合并 PR 数的增长</td><td>6 月 → 9 月</td></tr>
+            <tr><td>下降 40%+</td><td>被回滚的 PR 占比</td><td>同期</td></tr>
+            <tr><td>16% → 54%</td><td>内部 PR 收到实质性评审意见的比例</td><td>Code Review 研究预览上线后</td></tr>
+            <tr><td>59%</td><td>评审者反复标记的内容中，从其第一次评审起就存在的旧代码占比</td><td>收敛改造前</td></tr>
+            <tr><td>3 轮</td><td>评审轮数上限，超过后要求作者退后重审方案</td><td>收敛改造后</td></tr>
+            <tr><td>50+ 轮</td><td>一个 CLI PR 在作者叫停前一晚经历的评审/修复轮数</td><td>改造前的反面案例</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="sidenote"><span class="label">读法提醒</span>这些都是 Anthropic 对自己代码库的自报数据，没有独立第三方复现。它们能说明「这套流程在他们那里跑通了」，不能直接推出「任何团队照搬都会得到同样曲线」。</p>
+    </section>
+
+    <section id="layers">
+      <h2>一次改动的七层关卡</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>层</th><th>关卡</th><th>拦什么</th><th>是否阻塞</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>提交前自验证（测试 / 构建 / 截图对比）+ 新上下文 subagent 复审 diff</td><td>常规错误、与自己声明的目标不符</td><td>否（PR 之前）</td></tr>
+            <tr><td>2</td><td>每个 PR 的 AI 评审（读全仓 + PR 意图，多 agent 并行、投票去噪）</td><td>根因未解决、破坏系统、风格/诊断类噪声被过滤</td><td>发现须回复，未解决不能合并</td></tr>
+            <tr><td>3</td><td>安全评审（独立一轮）</td><td>安全问题</td><td>是，发现未清不能合并</td></tr>
+            <tr><td>4</td><td>自动检查：lint、类型、多平台测试、构建</td><td>机械性回归；PR 模板要求写测试方式与回滚方式</td><td>是</td></tr>
+            <tr><td>5</td><td>按风险分级的人工审批</td><td>需要人判断的部分（见下表）</td><td>按风险等级</td></tr>
+            <tr><td>6</td><td>合并队列 + 功能开关 + 渐进发布</td><td>两个各自通过的 PR 合并后弄坏 main；对用户的爆炸半径</td><td>是（队列重跑全部检查）</td></tr>
+            <tr><td>7</td><td>快速发现与回滚（遥测、内部先用、每周 on-call）</td><td>漏网之错；事故复盘追问「本该哪一层拦住」</td><td>事后兜底</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>层的逻辑：<strong>每层拦住一部分、漏掉一部分，少数能穿过全部；剩下的交给回滚。</strong>不是一道闸门，而是层层过滤加兜底。</p>
+    </section>
+
+    <section id="risk">
+      <h2>人工审批的风险分级</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>风险</th><th>典型改动</th><th>人工审批</th></tr></thead>
+          <tbody>
+            <tr><td>低</td><td>文档、文案、仅内部功能、开关后的增量改动</td><td>自动评审与安全检查全绿后，无需人工</td></tr>
+            <tr><td>中</td><td>普通产品改动；缓存、自动更新器、系统提示词等敏感区</td><td>一人</td></tr>
+            <tr><td>高</td><td>最高风险代码，以及少量固定路径</td><td>两人</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>定级规则：</strong>由分类器读改动内容定级，<em>不是作者自己选</em>；第二个分类器再问「这次是否额外需要一个人」。固定路径（owner 标记的敏感区、CI workflow 文件）永远要人。只有可信名单上的作者能走轻量通道；agent 的批准不算人的批准；谁发起 agent 改动谁占一个评审名额；审批只覆盖当时的那个 commit，新 commit 需重新批准。</p>
+    </section>
+
+    <section id="convergence">
+      <h2>让评审收敛（核心机制）</h2>
+      <p>作者是 agent 时，噪声成本更高：人可以几秒忽略一个 nit，agent 却会真的去改，于是多一个 commit、多一轮评审。作者与评审者都是 agent 时可能无限互相触发。</p>
+      <ul>
+        <li><strong>轮数上限</strong>：3 轮后评审者请作者退后重审方案，而不是继续抠细节。</li>
+        <li><strong>前几轮之后只复审新 diff</strong>，不再全文重扫。</li>
+        <li><strong>标注 bug 的类别</strong>，让作者一次修掉所有同类，而不是改一行。</li>
+        <li><strong>不重复</strong>已发表过的发现。</li>
+      </ul>
+      <p class="sidenote"><span class="label">诊断数据</span>git blame 显示，反复标记的内容里约 59% 是评审者第一次评审时就存在的旧代码——评审者不是在发现新 bug，而是每轮多翻出一点旧的。这正是「评审必须收敛」的证据。</p>
+    </section>
+
+    <section id="improvement">
+      <h2>让评审者更好的闭环</h2>
+      <ul>
+        <li><strong>事故即 eval</strong>：把过去引发事故的 PR、修复与回滚收成评测集，每天跑；评审者的每次改动都要对全套重新打分。</li>
+        <li><strong>用人的行为测噪声</strong>：按人对每条评论的处理分类——修了 / 说不对 / 说有意如此 / 说无所谓；也在已知干净的 PR 上跑，统计会导致有害改动的误报。</li>
+        <li><strong>优先级写下来</strong>：先抓真 bug，再减少评审轮数。</li>
+        <li><strong>漏了就补输入</strong>：问「模型当时没看到什么」，把答案写进 <code>CLAUDE.md</code>、skill 或新检查，而不是只改一句提示。</li>
+        <li><strong>夜间全仓扫</strong>：评审 agent 每晚扫既有代码，提前抓旧 bug。</li>
+      </ul>
+    </section>
+
+    <section id="human">
+      <h2>人留在哪里</h2>
+      <ul>
+        <li>决定<strong>要不要做</strong>：方向、品味、范围；有团队即使宣称评审瓶颈已解，仍对来自团队外的改动保留人工评审，只因要问「我们该做这件事吗」。</li>
+        <li>评审<strong>高风险代码</strong>：计费、自动更新器、CI workflow。</li>
+        <li>评审<strong>架构</strong>：会被别人照抄的模式。</li>
+        <li><strong>读证据</strong>：测试输出、实际执行的命令与返回、截图、评审发现；说不出检查会漏什么时，要的是真评审而非快批。</li>
+        <li><strong>承担结果</strong>：每个上线的改动都有人负责，不论谁敲的键盘。</li>
+      </ul>
+    </section>
+
+    <section id="ownership">
+      <h2>「你落地，你负责」与知识传播</h2>
+      <p>中小改动出问题，团队规范通常是落地者自己修。前提是：改动小、一切可逆（开关/回滚/分阶段）、爆炸半径决定审查强度、回归能被快速发现、事故复盘对事不对人。</p>
+      <p>机器读了大部分 diff 之后，团队不再指望谁有完整心智模型；想理解某块代码就让 Claude 生成针对那一切片的 explainer，甚至做一个可视化小产物。开放 Slack 频道让旁路学习者看到别人在做什么。</p>
+    </section>
+
+    <section id="metrics">
+      <h2>成本指标与护栏指标</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>类别</th><th>指标</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td>成本（要降低）</td><td>每 PR 人工审批数（中位数 / P95）、人工评论数、PR 等人的时长</td><td>衡量省下多少人的时间</td></tr>
+            <tr><td>护栏（不许恶化）</td><td>回滚率、事故率</td><td>防止「省下的时间」只是转移到事后修坏代码</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="callout"><span class="tag">未决</span>原文说目前没有「指标恶化时自动收紧审批」的断路器，团队希望在更多代码走向零人工合并之前先有它。</p>
+    </section>
+
+    <section id="glossary">
+      <h2>术语表（后续课程严格沿用）</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>术语</th><th>本文中的含义</th></tr></thead>
+          <tbody>
+            <tr><td>护栏指标</td><td>不允许恶化的指标（回滚率、事故率）；区别于要优化的成本指标。</td></tr>
+            <tr><td>验证先于评审</td><td>PR 之前先让 agent 跑可判定成败的检查并给出证据，再由新上下文的 agent 复审。</td></tr>
+            <tr><td>投票去噪</td><td>多个 agent 并行找 bug，另一组对每条发现投票，够多认可才发布；风格类发现直接丢弃。</td></tr>
+            <tr><td>收敛</td><td>评审轮数有界、只复审新 diff、按 bug 类别修、不重复发现。</td></tr>
+            <tr><td>风险分级</td><td>按改动内容（而非作者）把 PR 分为低/中/高，决定需要几个人的批准。</td></tr>
+            <tr><td>可信作者</td><td>仓库可信名单上的作者，才有资格走轻量审批通道。</td></tr>
+            <tr><td>事故即 eval</td><td>把历史事故做成每日运行的评测集，用来给评审者打分。</td></tr>
+            <tr><td>爆炸半径</td><td>改动出错时影响的范围；决定投入多少人与多少检查。</td></tr>
+            <tr><td>你落地你负责</td><td>中小改动出问题由落地者通常负责修，前提是小改动、可回滚、快速发现、无指责复盘。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sources">
+      <h2>一手资料</h2>
+      <ul>
+        <li><a href="https://claude.dev/blog/solving-code-review-at-anthropic/">原文：How the Claude Code team does code review</a></li>
+        <li><a href="https://www.anthropic.com/engineering/claude-code-best-practices">Best practices for Claude Code</a>（验证回路的来源）</li>
+        <li><a href="https://www.anthropic.com/research/redesigning-source-control">Redesigning source control at Anthropic</a>（规模背景）</li>
+        <li>本工作区资源清单：<code>RESOURCES.md</code></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <a href="../lessons/0001-what-review-is-for.html">← 第一课：评审到底在评什么</a>
+    <a href="../RESOURCES.md">资源清单</a>
+    <span class="ask-agent">看不懂任何术语或数字，随时向 Agent 追问——让它用另一句话重讲，或指出原文出处。</span>
+  </footer>
+</div>
+<script src="../assets/lesson.js"></script>
+</body>
+</html>

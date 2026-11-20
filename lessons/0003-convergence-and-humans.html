@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>第三课｜让评审收敛，把人留在哪里</title>
+<link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <span class="series">教学工作区 · LESSON 03 / 03</span>
+    <button class="theme-toggle" type="button" data-theme-toggle>主题</button>
+  </div>
+
+  <p class="eyebrow">Lesson 03 · 反馈闭环与人的位置</p>
+  <h1>让评审收敛，把人留在哪里</h1>
+  <p class="dek">最后一个概念块：评审者本身也会出错、会绕圈；团队用事故和人的行为训练它，同时把判断权明确留给人。</p>
+  <div class="meta">约 7 分钟 · 4 题自测 · 收束全篇</div>
+
+  <main>
+    <section id="converge">
+      <h2><span class="num">01</span>评审必须收敛，否则会互相喂养</h2>
+      <p>作者是 agent 时，噪声更贵：人可以几秒忽略一个 nit，agent 却会真的去改——于是多一个 commit，再多一轮评审。作者与评审者都是 agent 时，可以无限互相触发。原文举了一个 CLI PR：<strong>作者叫停前一晚跑了 50 多轮</strong>。</p>
+      <p>团队用 git blame 查评审者反复标记的内容，发现约 <strong>59%</strong> 是从评审者第一次评审起就存在的旧代码——它不是在发现新 bug，而是每轮多翻出一点旧的。</p>
+      <p class="big-claim">他们意识到：是自己把流程训练成了「默认跑几轮」，因为每轮总能抓到点新东西。</p>
+      <p>于是加了四条收敛规则：</p>
+      <ul>
+        <li><strong>轮数上限</strong>：3 轮后请作者退后一步重审方案，而不是继续抠细节。</li>
+        <li><strong>前几轮之后只复审新 diff</strong>，不全文重扫。</li>
+        <li><strong>标注 bug 的类别</strong>，让作者一次修掉所有同类，而不是改一行。</li>
+        <li><strong>不重复</strong>已发表过的发现。</li>
+      </ul>
+      <p>同时把「轮数」和召回率一起追踪。细节见 <a href="../reference/code-review-at-anthropic.html#convergence">参考手册 · 让评审收敛</a>。</p>
+    </section>
+
+    <section id="eval">
+      <h2><span class="num">02</span>评审者怎么变好：事故即 eval</h2>
+      <p>团队把过去引发事故的 PR、对应的修复与回滚收集起来，请熟悉那块代码的工程师逐条确认 bug 与位置，做成<strong>评测集</strong>。评审者每天跑一遍；它的每次改动都要对全套重新打分。</p>
+      <p>光看召回率会诱导误报，所以团队还<strong>用人的行为测噪声</strong>：按人对每条评论的处理分类——修了 / 说不对 / 说有意如此 / 说无所谓；并在已知干净的 PR 上跑，数「会导致有害改动」的误报次数。</p>
+      <div class="callout">
+        <span class="tag">写下来的优先级</span>
+        <p>先抓真 bug，再减少评审轮数。顺序反了，就会得到一个安静但漏东西的评审者。</p>
+      </div>
+      <p>漏审时团队问的不是「提示词怎么写得更好」，而是<strong>「模型当时没看到什么」</strong>，把答案写进 <code>CLAUDE.md</code>、skill 或新检查。评审 agent 还每晚扫现有代码，提前抓旧 bug。</p>
+    </section>
+
+    <section id="human">
+      <h2><span class="num">03</span>人留在哪里</h2>
+      <p>把「读代码」交给机器之后，人不是退场，而是移到只有人能判断的位置：</p>
+      <ul>
+        <li><strong>要不要做</strong>——方向、品味、范围。有团队即便宣称评审瓶颈已解，仍对来自团队外的改动保留人工评审，只为问一句「我们该做这件事吗」。</li>
+        <li><strong>高风险代码</strong>——计费、自动更新器、CI workflow。</li>
+        <li><strong>架构</strong>——会别人照抄的模式。</li>
+        <li><strong>读证据</strong>——测试输出、实际命令与返回值、截图、评审发现。说不出检查会漏什么时，要的是真评审，不是快批。</li>
+        <li><strong>承担结果</strong>——每个上线的改动都有人负责，不论谁敲的键盘。</li>
+      </ul>
+      <p>原文还给了两个配套规范：<strong>「你落地，你负责」</strong>——中小改动出问题，落地者通常自己修；以及<strong>知识传播</strong>——不再指望谁有完整心智模型，想理解某块代码就让 Claude 生成针对那一切片的 explainer 或可视化小产物。</p>
+    </section>
+
+    <section id="recall">
+      <h2><span class="num">04</span>先回忆，再看答案</h2>
+      <div class="recall" data-recall>
+        <div class="prompt">不看上文，说出让评审收敛的四条规则。</div>
+        <button type="button" data-reveal>揭晓参考答案</button>
+        <div class="answer" hidden>①三轮上限，之后请作者重审方案；②前几轮后只复审新 diff；③按 bug 类别一次修全；④不重复已发表的发现。</div>
+      </div>
+      <div class="recall" data-recall>
+        <div class="prompt">「事故即 eval」和「用人的行为测噪声」分别解决什么问题？</div>
+        <button type="button" data-reveal>揭晓参考答案</button>
+        <div class="answer" hidden>前者用历史事故组成每日评测集，衡量评审者抓真 bug 的能力；后者按人如何处理评论、以及在干净 PR 上的误报，衡量噪声。两者一起防止「多报即变好」的假象。</div>
+      </div>
+    </section>
+
+    <section id="quiz">
+      <h2><span class="num">05</span>自测：收束全篇</h2>
+      <div class="quiz" data-quiz></div>
+      <script type="application/json" data-quiz-data>
+      {
+        "questions": [
+          {
+            "q": "git blame 显示 59% 的重复发现说明了什么？",
+            "options": [
+              { "t": "评审者每次都能发现新 bug", "c": false },
+              { "t": "旧代码在夜间扫描中被修复", "c": false },
+              { "t": "多数发现是早就存在的旧代码", "c": true },
+              { "t": "作者故意留下不修的旧问题", "c": false }
+            ],
+            "e": "评审者很少发现新 bug，只是每轮多翻出一点旧的——这正是需要收敛的证据。"
+          },
+          {
+            "q": "超过三轮后，评审者会要求作者做什么？",
+            "options": [
+              { "t": "退后一步重新考虑实现方案", "c": true },
+              { "t": "立刻合并不再继续评审", "c": false },
+              { "t": "换一个更深的评审档位", "c": false },
+              { "t": "把所有 nit 一次性修完", "c": false }
+            ],
+            "e": "三轮是上限：继续抠细节收益递减，此时该退后重审整体方案。"
+          },
+          {
+            "q": "把事故做成 eval 的主要用途是什么？",
+            "options": [
+              { "t": "统计每位作者的事故数量", "c": false },
+              { "t": "自动收紧所有仓库的审批", "c": false },
+              { "t": "取代人工评审高风险代码", "c": false },
+              { "t": "每天给评审者改动打分", "c": true }
+            ],
+            "e": "历史事故构成评测集，评审者的每次改动都要对全套重新打分。"
+          },
+          {
+            "q": "下面哪项最需要人而不是机器？",
+            "options": [
+              { "t": "运行全平台测试并汇总结果", "c": false },
+              { "t": "决定这个改动该不该做", "c": true },
+              { "t": "给 PR 打上 Nit 严重度标签", "c": false },
+              { "t": "把风格问题写成 lint 规则", "c": false }
+            ],
+            "e": "方向、品味、范围是人的位置；机械检查与标注更适合机器。"
+          }
+        ]
+      }
+      </script>
+    </section>
+
+    <section id="end">
+      <h2><span class="num">06</span>全文的一句话收束</h2>
+      <p class="big-claim">目标没有变：每次改动花更少的人工时间，且不比从前更多的回滚。</p>
+      <p>文章把这条线画到——对外产品只提交发现、不提交批准；他们自己的仓库走得更远，让 owner 决定哪些低风险改动仅凭自动检查合并，并且这条线还在往前移。同时坦白：还没有「指标恶化就自动收紧审批」的断路器，工程师希望在更多代码走向零人工合并之前先有它。</p>
+      <p class="sidenote"><span class="label">保留判断</span>把这些当成一套有自报数据支撑、仍在演进的工程实践，而不是已被独立验证的行业定律。这正是第一课的护栏思路在「读这篇文章」上的应用。</p>
+    </section>
+
+    <section id="primary-source">
+      <h2><span class="num">07</span>首选一手资料</h2>
+      <a class="source-card" href="https://claude.dev/blog/solving-code-review-at-anthropic/">
+        <span class="k">Primary source · 通读收尾</span>
+        <div class="t">How the Claude Code team does code review — “How we make the reviewer better” 至结尾</div>
+        <div class="d">现在回到原文读后半段，你会认出每一个概念：收敛、事故 eval、人在环内、你落地你负责、采纳清单。</div>
+      </a>
+    </section>
+  </main>
+
+  <footer>
+    <a href="0002-seven-layers.html">← 第二课</a>
+    <a href="../reference/code-review-at-anthropic.html#convergence">参考手册 · 收敛</a>
+    <a href="../reference/code-review-at-anthropic.html#human">参考手册 · 人留在哪里</a>
+    <a href="../MISSION.md">学习使命</a>
+    <div class="ask-agent">想检验自己是否真的学会了：向 Agent 复述这三层课，让它指出你漏掉或说错的地方。</div>
+  </footer>
+</div>
+<script src="../assets/lesson.js"></script>
+</body>
+</html>
