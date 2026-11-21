@@ -1,0 +1,105 @@
+{% if options["skill_lang"] == "en" -%}
+# Auditing a Handoff Document
+
+A handoff package ships claims, not facts. This file is how to sort them and what your report must contain.
+
+## 1. Classify every claim
+
+| Class | Example | How to verify |
+| :--- | :--- | :--- |
+| Executable | "`just test` passes", "`cargo build` clean" | Run it yourself, capture the summary line |
+| Baseline | "based on `a1b2c3d`" | `git rev-parse <base>`; `git merge-base --is-ancestor`; does the series apply on it |
+| Structural | "12 patches, one per ticket #102–#113" | Count patches, read subjects, map to issue numbers |
+| Scope | "implements the state machine and tests" | Diffstat, then grep the diff for the named symbols |
+| Behavioural | "renders the menu labels" | Cannot be verified by tests alone — inspect output |
+
+Only the last class is dangerous: it takes a claim that no green command contradicts and quietly fails it. Give behavioural claims their own section in the report.
+
+## 2. The usual lies, in order of frequency
+
+1. **Does not compile as delivered.** Type errors, wrong field or variant names, arity mismatches against the real API. Expect this by default.
+2. **Wrong baseline SHA.** The patch context often reveals the real base — the commit where it applies cleanly.
+3. **Gates named incorrectly.** The doc names commands the project does not have, or skips the formatting step that CI enforces.
+4. **Counts inflated.** "N tests passing" refers to an older run, or to a subset, or counts ignored tests.
+5. **Synthetic authorship.** Placeholder identity like `dev@project.local`, which must not reach the shared branch.
+
+## 3. Acceptance criteria you write
+
+For each gate, record command and passing signature. Both columns come from the repo, not from the document:
+
+| Command | Passing signature |
+| :--- | :--- |
+| `<project lint>` | exit 0, no `warning:` / `error` |
+| `<project format check>` | no diff output |
+| `<project test>` | `failed=0`, count recorded for the baseline |
+| `<hook>` | the hook's own log lines appear before the push succeeds |
+
+Add one line per run: the total count, so the next handoff has something real to compare against.
+
+## 4. Report format
+
+Four blocks, always:
+
+1. **Where and what** — which worktree, which base, which commit range, in what order.
+2. **Per-file findings** — `file : problem : fix`, one row per repair, including repairs that were purely mechanical.
+3. **Gate results** — each command with its conclusion and the test count.
+4. **Open items** — documentation errors, behavioural gaps tests cannot see, anything the user must decide.
+
+Never summarise a landed series as "implemented and verified" without disclosing what was broken on arrival. The user reads the report to decide whether to trust the upstream agent again.
+
+## 5. When to stop and ask
+
+Stop before touching the remote when: the series applies but the mapping is broken beyond repair, a test failure looks like a genuine regression rather than a compile artifact, the base ref is ambiguous, or folding a fix requires modifying a commit outside the series.
+{% else %}
+# 审计交接文档
+
+交接包里装的是声明，不是事实。这个文件讲怎么把它们分类，以及你的报告必须写什么。
+
+## 一、把每条声明归类
+
+| 类别 | 例子 | 怎么验 |
+| :--- | :--- | :--- |
+| 可执行 | 「`just test` 通过」「`cargo build` 干净」 | 自己跑，取汇总行 |
+| 基线 | 「基于 `a1b2c3d`」 | `git rev-parse <base>`、`git merge-base --is-ancestor`、序列是否真能在其上应用 |
+| 结构 | 「12 个补丁，对应工单 #102–#113 各一」 | 数补丁、读标题、映射到 issue 编号 |
+| 范围 | 「实现了状态机与测试」 | diffstat，再在 diff 里 grep 它点名的符号 |
+| 行为 | 「渲染出菜单文案」 | 跑测试验不出来——必须看输出 |
+
+只有最后一类危险：它不靠任何一条绿命令就能反驳，静默地不成立。报告里给行为类声明单独一节。
+
+## 二、常见的谎报，按出现频率
+
+1. **交付版本编译不过。** 类型错、字段/变体名不对、形参个数与真实 API 不符。默认按这个假设准备。
+2. **基线 SHA 写错。** 补丁上下文往往会暴露真实基线——就是它能干净应用的那个提交。
+3. **门禁名写错。** 文档点的命令项目里没有，或漏掉 CI 强制的那道格式检查。
+4. **数字虚高。** 「N 个测试通过」来自更早一轮、或某个子集、或把 ignored 也算进去了。
+5. **合成作者。** 类似 `dev@project.local` 的占位身份，绝不能进共享分支。
+
+## 三、你自己写验收判据
+
+每道门禁记两列——命令与通过标志，两端都从仓库取，不从文档取：
+
+| 命令 | 通过标志 |
+| :--- | :--- |
+| `<项目 lint>` | 退出码 0，无 `warning:` / `error` |
+| `<项目格式检查>` | 无 diff 输出 |
+| `<项目测试>` | `failed=0`，并把通过数记为基线 |
+| `<钩子>` | 推送前能看到钩子自己的日志行 |
+
+每跑一轮补一行：通过总数，让下一份交接包有真实数字可比。
+
+## 四、报告格式
+
+固定四块：
+
+1. **在哪、干了什么** —— 哪个工作树、哪个基线、什么提交区间、什么顺序。
+2. **逐文件结论** —— `文件 : 问题 : 修法`，一条修复一行，纯机械的也要写。
+3. **门禁结果** —— 每条命令的结论与测试通过数。
+4. **遗留问题** —— 文档错误、测试看不见的行为缺口、需要用户拍板的事。
+
+绝不能把落地的补丁集只写成「已实现并验收通过」而不披露到手时坏在哪。用户是据此判断能不能再信任上游那个 agent。
+
+## 五、什么时候停下来问
+
+在动远端之前，遇到这些情况停手：序列能应用但映射已经无法修复；测试失败看起来是真回归而不是编译产物；基线 ref 有歧义；折叠修复需要改到序列之外的提交。
+{% endif %}
