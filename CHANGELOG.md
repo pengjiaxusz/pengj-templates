@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.77.1...v0.78.0) (2026-11-21)
+
+
+### Features
+
+* **gate:** 新增 pre-push 钩子，补上批量落补丁漏掉的检查 ([f2594bf](https://github.com/pengjiaxusz/pengj-templates/commit/f2594bfc6bb21777a0ea36ee20cb95d8cd23f4df))
+
 ## [0.77.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.77.0...v0.77.1) (2026-11-19)
 
 
