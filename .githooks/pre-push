@@ -1,0 +1,34 @@
+#!/bin/sh
+# gate hook: the pre-push stage.
+#
+# 推送离开本机前跑三项：
+#   1. `cargo fmt --check`（与 CI 同一条命令）；
+#   2. 代码语言守卫，覆盖整个工作树；
+#   3. `.pengj-templates/gate.toml` 里 `prepush.commands` 声明的命令。
+#
+# 为什么需要这一层：`git am`、`git cherry-pick`、`git rebase` 都不触发 pre-commit，
+# 只有 `git commit` 会——批量落补丁的格式问题因此一路藏到 CI。
+#
+# 门禁内置在 pengj-templates-cli 里。本钩子优先用 PATH 上的 CLI；
+# 本仓库（模板自身）尚未安装发行版时，退回 cargo run 走工作区源码。
+#
+# git 把待推引用写在 stdin 上，`exec` 会原样转交。
+
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+if command -v pengj-templates-cli >/dev/null 2>&1; then
+    exec pengj-templates-cli gate hook pre-push
+fi
+
+if [ -f "crates/cli/Cargo.toml" ]; then
+    exec cargo run --quiet -p pengj-templates-cli -- gate hook pre-push
+fi
+
+echo "[gate] push blocked: pengj-templates-cli was not found on PATH." >&2
+echo "[gate] install it once and the gate comes with it:" >&2
+echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
+echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
+exit 2

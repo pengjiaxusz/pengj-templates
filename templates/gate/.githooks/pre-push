@@ -1,0 +1,46 @@
+#!/bin/sh
+# gate hook: {% if options["skill_lang"] | default("zh") == "en" %}the pre-push stage.{% else %}推送前的 pre-push 阶段。{% endif %}
+#
+# {% if options["skill_lang"] | default("zh") == "en" %}Why this stage exists at all: `git am`, `git cherry-pick` and `git rebase` never run `pre-commit` — only `git commit` does. A patch series therefore lands with no formatting or language check, and the problem surfaces in CI instead. `pre-push` is the one hook every history-building command has to pass through.
+#
+# Three checks run before a push leaves the machine:
+#   1. `cargo fmt --check`, the same command CI runs;
+#   2. the code language guard over the whole working tree;
+#   3. every command listed in `prepush.commands` (`.pengj-templates/gate.toml`), in order — that is where a project puts clippy and friends.{% else %}为什么非要这一层：`git am`、`git cherry-pick`、`git rebase` 都不触发 `pre-commit`，只有 `git commit` 会。于是批量落补丁一路没有格式与语言检查，问题拖到 CI 才炸。`pre-push` 是每一种造历史方式都要经过的那个钩子。
+#
+# 推送离开本机之前跑三项：
+#   1. `cargo fmt --check`，与 CI 完全同一条命令；
+#   2. 代码语言守卫，覆盖整个工作树；
+#   3. `.pengj-templates/gate.toml` 里 `prepush.commands` 声明的命令，按序执行——clippy 这类项目自己的检查放这儿。{% endif %}
+#
+# {% if options["skill_lang"] | default("zh") == "en" %}git passes the refs being pushed on stdin and this hook must forward them untouched, which is why the CLI is `exec`ed rather than captured.{% else %}git 把待推的引用写在 stdin 上，本钩子必须原样转交，所以用 `exec` 而不是把输出捕获下来。{% endif %}
+#
+# {% if options["skill_lang"] | default("zh") == "en" %}The gate lives in `pengj-templates-cli` and nowhere else: this hook only finds the binary and hands the work to `pengj-templates-cli gate hook pre-push`. No CLI means no rule set, so the push is blocked with install instructions instead of being let through by a check that cannot run.{% else %}门禁只存在于 `pengj-templates-cli` 里：本钩子只负责找到二进制，把活儿交给 `pengj-templates-cli gate hook pre-push`。没有 CLI 就没有规则集，所以直接拦下推送并给出安装命令，而不是让一个跑不起来的检查放行。{% endif %}
+
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+# {% if options["skill_lang"] | default("zh") == "en" %}Locate the CLI: PATH first, then the installation directory. The second step matters for terminals opened before the installer refreshed PATH — without it a working install would look like a missing one.{% else %}定位 CLI：先找 PATH，再回落到安装目录。回落这一步是为了应付「装好 CLI 之前就打开的终端」——PATH 没刷新时不该被当成没装。{% endif %}
+if command -v pengj-templates-cli >/dev/null 2>&1; then
+    exec pengj-templates-cli gate hook pre-push
+fi
+
+for candidate in \
+    "${PENGJ_INSTALL_DIR:+$PENGJ_INSTALL_DIR/bin/pengj-templates-cli.exe}" \
+    "${PENGJ_INSTALL_DIR:+$PENGJ_INSTALL_DIR/bin/pengj-templates-cli}" \
+    "${LOCALAPPDATA:+$LOCALAPPDATA/pengj-templates/bin/pengj-templates-cli.exe}" \
+    "${XDG_DATA_HOME:+$XDG_DATA_HOME/pengj-templates/bin/pengj-templates-cli}" \
+    "${HOME:+$HOME/.local/share/pengj-templates/bin/pengj-templates-cli}"
+do
+    if [ -x "$candidate" ]; then
+        exec "$candidate" gate hook pre-push
+    fi
+done
+
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}push blocked: pengj-templates-cli was not found on PATH or in the installation directory.{% else %}推送被拦下：PATH 与安装目录里都找不到 pengj-templates-cli。{% endif %}" >&2
+echo "[gate] {% if options["skill_lang"] | default("zh") == "en" %}rustfmt and the code language guard live inside the CLI, so there is no local check to fall back to. Install it once and the gate comes with it:{% else %}rustfmt 与代码语言守卫都在 CLI 里，本地没有另一套检查可回落。安装一次即可带上：{% endif %}" >&2
+echo "[gate]   irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex" >&2
+echo "[gate]   curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh" >&2
+exit 1

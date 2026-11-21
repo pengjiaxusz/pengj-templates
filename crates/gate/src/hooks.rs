@@ -13,7 +13,15 @@
 
 use std::path::Path;
 
-const HOOKS: [&str; 2] = ["pre-commit", "commit-msg"];
+/// 必须存在的钩子：缺一个就说明 `.githooks` 不完整，安装直接失败。
+const REQUIRED_HOOKS: [&str; 2] = ["pre-commit", "commit-msg"];
+
+/// 有文件就一并装上的钩子。
+///
+/// `pre-push` 晚于另外两个出现：新 CLI 掉进一个还没 `update` 过的旧项目时，`.githooks`
+/// 里当然没有它。这种情况跳过而不是报错——安装器的职责是「把仓库里有的钩子激活」，
+/// 不是替模板补齐文件；文件由 `update` 送上门。
+const OPTIONAL_HOOKS: [&str; 1] = ["pre-push"];
 
 /// The marker every gate hook carries. A hook without it was written by
 /// another tool and must not be overwritten.
@@ -50,6 +58,19 @@ const RIVALS: [(&str, &str); 2] = [
     ),
 ];
 
+/// 同一个路径上已经躺着一个不是 gate 写的钩子。
+///
+/// 装下去就等于替别的工具接管它的钩子，所以这里一律硬失败，而不是覆盖后再解释。
+fn foreign_hook_message(path: &Path) -> String {
+    format!(
+        "{} was not written by the gate.\n  \
+         Another tool owns this directory; installing would replace its hooks.\n  \
+         Remove the foreign hooks first, then run `just doctor --fix` \
+         (or `pengj-templates-cli gate hooks install`) again.",
+        path.display()
+    )
+}
+
 pub fn install() -> Result<(), String> {
     if !crate::git::in_work_tree() {
         println!("[gate] not a git work tree, skipping hook installation");
@@ -58,7 +79,10 @@ pub fn install() -> Result<(), String> {
     let root = crate::git::repo_root()
         .ok_or_else(|| "cannot determine the repository root".to_string())?;
 
-    for hook in HOOKS {
+    // 先判定哪些钩子要装：必需的缺一不可，可选的（`pre-push`）只在这份 `.githooks`
+    // 真的带了它时才纳入。
+    let mut hooks: Vec<&str> = Vec::new();
+    for hook in REQUIRED_HOOKS {
         let path = root.join(".githooks").join(hook);
         if !path.is_file() {
             return Err(format!(
@@ -66,17 +90,30 @@ pub fn install() -> Result<(), String> {
                 path.display()
             ));
         }
-        let text = std::fs::read_to_string(&path).unwrap_or_default();
-        if !text.contains(MARKER) {
-            return Err(format!(
-                "{} was not written by the gate.\n  \
-                 Another tool owns this directory; installing would replace its hooks.\n  \
-                 Remove the foreign hooks first, then run `just doctor --fix` \
-                 (or `pengj-templates-cli gate hooks install`) again.",
-                path.display()
-            ));
+        if !std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .contains(MARKER)
+        {
+            return Err(foreign_hook_message(&path));
         }
-        make_executable(&path)?;
+        hooks.push(hook);
+    }
+    for hook in OPTIONAL_HOOKS {
+        let path = root.join(".githooks").join(hook);
+        if !path.is_file() {
+            continue;
+        }
+        // 可选只针对「文件不存在」，不针对「文件被别的工具占了」——后者仍是硬错误。
+        if !std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .contains(MARKER)
+        {
+            return Err(foreign_hook_message(&path));
+        }
+        hooks.push(hook);
+    }
+    for hook in &hooks {
+        make_executable(&root.join(".githooks").join(hook))?;
     }
 
     crate::git::run(&["config", "core.hooksPath", ".githooks"])?;
@@ -91,7 +128,7 @@ pub fn install() -> Result<(), String> {
     // Record the executable bit in the index. A fresh clone on Linux runs the
     // hooks straight from the working tree, and without the bit git skips
     // them silently, which turns the gate off without any error.
-    for hook in HOOKS {
+    for hook in &hooks {
         let relative = format!(".githooks/{hook}");
         if let Some(mode) = crate::git::hook_mode(&relative) {
             if !mode.starts_with("1007") {
@@ -109,7 +146,7 @@ pub fn install() -> Result<(), String> {
 
     println!(
         "[gate] commit gate installed: core.hooksPath=.githooks ({})",
-        HOOKS.join(", ")
+        hooks.join(", ")
     );
     report_rivals(&root);
     Ok(())

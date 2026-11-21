@@ -6,7 +6,7 @@
 //! public entry point of the gate.
 
 use crate::config::Mode;
-use crate::{commit, config, fmt, git, hooks, lang_guard};
+use crate::{commit, config, fmt, git, hooks, lang_guard, prepush};
 
 /// The help text, shown by `pengj-templates-cli gate --help`.
 pub const HELP: &str = "\
@@ -17,6 +17,7 @@ USAGE
   pengj-templates-cli gate fmt [FILES...]               rustfmt the given files and re-stage them
   pengj-templates-cli gate commit-msg FILE              validate a commit message
   pengj-templates-cli gate hook pre-commit              staged rustfmt + language guard
+  pengj-templates-cli gate hook pre-push                fmt --check + language guard + prepush.commands
   pengj-templates-cli gate hook commit-msg FILE         commit message validation
   pengj-templates-cli gate hooks install                point core.hooksPath at .githooks
   pengj-templates-cli gate check-commits [--base REF]   validate the commit messages in a range
@@ -203,6 +204,45 @@ fn hook_pre_commit() -> Result<u8, String> {
     Ok(lang_guard::audit(&options) as u8)
 }
 
+/// 推送前的最后一道本地闸门。
+///
+/// 为什么不是在 `pre-commit` 里查：`git am`、`git cherry-pick`、`git rebase` 都不触发
+/// `pre-commit`，批量落补丁这条路径从来跑不到它。详见 `prepush` 模块头部。
+fn hook_pre_push() -> Result<u8, String> {
+    // git 把待推的引用写在 stdin 上，先原样报出来——一次推多个分支时，失败信息得能
+    // 对上是哪一个。
+    prepush::report_refs(&prepush::read_refs());
+
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let (config, _) = config::load(&cwd)?;
+
+    // 内置两项与 `gate.toml` 的开关一一对应，关掉的方式和 pre-commit 一致。
+    if !config.is_disabled("fmt") {
+        prepush::check_fmt()?;
+    }
+    if !config.is_disabled("lang-guard") {
+        let settings = resolve(None, None, None)?;
+        // 空文件列表 = 整个工作树；推送覆盖整个仓，不是几个暂存文件。
+        let options = options_for(Vec::new(), &settings, false, false);
+        let code = lang_guard::audit(&options);
+        if code != 0 {
+            return Ok(code as u8);
+        }
+    }
+
+    let commands = config
+        .list("prepush.commands")
+        .map(<[String]>::to_vec)
+        .unwrap_or_default();
+    let code = prepush::run_commands(&commands)?;
+    if code != 0 {
+        return Ok(code);
+    }
+
+    println!("[gate] pre-push passed");
+    Ok(0)
+}
+
 fn self_test() -> u8 {
     let cases = lang_guard::self_test_cases();
     let mut failed = 0;
@@ -320,13 +360,14 @@ pub fn run(args: &[String]) -> Result<u8, String> {
         }
         "hook" => match rest.first().map(String::as_str) {
             Some("pre-commit") => hook_pre_commit(),
+            Some("pre-push") => hook_pre_push(),
             Some("commit-msg") => {
                 let path = rest
                     .get(1)
                     .ok_or_else(|| "hook commit-msg needs a message file".to_string())?;
                 commit::validate_file(path)
             }
-            _ => Err("unknown hook; expected pre-commit or commit-msg".to_string()),
+            _ => Err("unknown hook; expected pre-commit, pre-push or commit-msg".to_string()),
         },
         "hooks" => match rest.first().map(String::as_str) {
             Some("install") => {

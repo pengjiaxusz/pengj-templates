@@ -1,5 +1,5 @@
 name = "Gate"
-description = "提交门禁：约定式提交校验、代码语言守卫与 rustfmt 暂存格式化，纯 Rust 实现无第三方依赖，产出 .pengj-templates/gate.toml 与 .githooks 钩子；自动带上 ci 层在服务端执行同一套规则"
+description = "提交门禁：约定式提交校验、代码语言守卫、rustfmt 暂存格式化，以及推送前补上批量落补丁漏掉的格式与语言检查，纯 Rust 实现无第三方依赖，产出 .pengj-templates/gate.toml 与 .githooks 钩子；自动带上 ci 层在服务端执行同一套规则"
 depends = ["common"]
 
 # 更新黑名单：`.pengj-templates/gate.toml` 的配置值归项目所有，模板不覆盖。

@@ -173,13 +173,13 @@ gate 层用法：门禁是纯 Rust 实现，没有任何 Node 依赖，且已收
 
 scope 策略：现在省略 `commit.scopes` 或留空列表都会**拒绝一切 `(scope)`**（fail-closed），旧的「空列表表示接受任意 scope」行为已移除。设 `commit.scopes = ["*"]` 放行任意 scope，或填入 crate 名收紧为白名单。本次改动之前生成的项目里写的是 `commit.scopes = []`，升级 CLI 后会开始拒绝带 scope 的标题——在 `.pengj-templates/gate.toml` 里加上 `["*"]` 即可恢复旧行为。
 
-钩子只做一件事：找到 CLI 并把活交给它（`pengj-templates-cli gate hook pre-commit` / `pengj-templates-cli gate hook commit-msg <msgfile>`），找不到 CLI 就拦下提交并打印安装命令。模板不带任何兜底脚本，本地与 CI 永远是同一套规则；原先的多级回退探测（`$PENGJ_GATE` 环境变量、独立 `gate` 二进制、仓库 URL 分支）与 shell 兜底脚本均已移除。
+钩子只做一件事：找到 CLI 并把活交给它（`pengj-templates-cli gate hook pre-commit` / `gate hook commit-msg <msgfile>` / `gate hook pre-push`），找不到 CLI 就拦下提交或推送并打印安装命令。`pre-push` 补的是 `pre-commit` 覆盖不到的那条路径：`git am`、`git cherry-pick`、`git rebase` 既不触发 `pre-commit` 也不触发 `commit-msg`，只有 `git commit` 会——批量落补丁因此会一路不带格式与语言检查地走到 CI。推送前的这一层跑 `cargo fmt --check`、整个工作树的语言守卫，以及 `prepush.commands` 里声明的全部命令。模板不带任何兜底脚本，本地与 CI 永远是同一套规则；原先的多级回退探测（`$PENGJ_GATE` 环境变量、独立 `gate` 二进制、仓库 URL 分支）与 shell 兜底脚本均已移除。
 
 ### 没装 CLI 时
 
 门禁只有一套实现，规则就在 `pengj-templates-cli` 里，模板不自带第二套脚本。所以没装 CLI 时：
 
-- **本地**：`commit-msg` 与 `pre-commit` 都拦下提交，打印安装命令后退出——不放行，也不用一套更宽松的 shell 规则顶替。
+- **本地**：`commit-msg`、`pre-commit` 与 `pre-push` 拦下提交或推送，打印安装命令后退出——不放行，也不用一套更宽松的 shell 规则顶替。
 - **服务端**：`ci` 层的 `gate` 任务跑的是同一个二进制，`.github/rulesets/gate.json` 把它设成必需状态检查，PR 一样过不去。CI 失败时把可操作的修复提示写进 `GITHUB_STEP_SUMMARY`，PR 页面直接能看到该怎么改。
 
 钩子激活本身不需要 CLI：`just doctor --fix`（或 `sh .pengj-templates/scripts/doctor.sh --fix`）调用 `.githooks/install.sh`，它只用 git 与 POSIX shell 就把 `core.hooksPath` 指向 `.githooks` 并补上可执行位；`just gate-hooks-local` 是同一个脚本的裸入口。装 CLI：Windows 用 `irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex`，Unix 用 `curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh`。

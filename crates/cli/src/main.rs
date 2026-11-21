@@ -191,7 +191,7 @@ enum Command {
     /// 提交门禁：约定式提交校验、代码语言守卫与 git 钩子安装
     ///
     /// 门禁内置于本 CLI，无独立二进制；参数原样透传：
-    /// `audit`（默认）、`fmt`、`commit-msg <文件>`、`hook pre-commit|commit-msg`、
+    /// `audit`（默认）、`fmt`、`commit-msg <文件>`、`hook pre-commit|commit-msg|pre-push`、
     /// `hooks install`、`selftest`。
     Gate {
         /// 透传给门禁的参数
