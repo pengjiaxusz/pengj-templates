@@ -2,9 +2,9 @@
 name: patch-handoff
 description: >-
 {% if options["skill_lang"] == "en" %}
-  Verify and land an offline patch handoff package (`HANDOFF.md` + `patches/NNNN-*.patch`): replay the series with `git am`, repair the build and tests, fold each repair back into the commit that introduced the defect, normalize authorship to the repository owner's identity (auto-resolved, never hand-filled), force-push with lease, sync the worktree, file every problem found during acceptance as a GitHub issue, close out the referenced tickets plus the issues you filed, and delete the unpacked temp content. Every acceptance claim in the handoff document is an unverified hypothesis until you reproduce it yourself. Use when receiving a patch series or handoff zip from another agent, or when a delivered series does not compile as claimed. Triggers: patch-handoff, handoff package, handoff zip, patch series, git am, apply patches, verify handoff, fold fixes, offline handoff, file handoff issues, close handoff issues.
+  Verify and land an offline patch handoff package (`HANDOFF.md` + `patches/NNNN-*.patch`): push the issues the package carries up to GitHub first, replay the series with `git am`, repair the build and tests, fold each repair back into the commit that introduced the defect, normalize authorship to the repository owner's identity (auto-resolved, never hand-filled), force-push with lease, sync the worktree, close each mapped issue out after landing, and delete the unpacked temp content. Every acceptance claim in the handoff document is an unverified hypothesis until you reproduce it yourself. Use when receiving a patch series or handoff zip from another agent, or when a delivered series does not compile as claimed. Triggers: patch-handoff, handoff package, handoff zip, patch series, git am, apply patches, verify handoff, fold fixes, offline handoff, upload handoff issues, close handoff issues.
 {% else %}
-  验收并合入离线补丁交接包（`HANDOFF.md` + `patches/NNNN-*.patch`）：按序 `git am` 落提交、修编译与测试、把修复折回引入缺陷的提交、作者自动归一为仓库拥有者身份（禁止手填）、强推、同步工作树；验收中发现的问题当场上 GitHub issue，交接完成后逐条收口 issue 状态，并删掉解包出来的临时内容。交接文档里的每一条验收声明，在你亲手复现之前都是未验证假设。当收到别的 agent 产出的补丁集/交接 zip，或交付的补丁集并不像文档说的那样能编译时使用。 Triggers: patch-handoff, 交接包, handoff 包, handoff.zip, 补丁集, patches, git am, 打补丁验收, patch series, 补丁包验收, 校验交接文档, 交接建单, issue 收口.
+  验收并合入离线补丁交接包（`HANDOFF.md` + `patches/NNNN-*.patch`）：先把包里带的 issue 条目上传成真实 GitHub issue 并拿回编号，再按序 `git am` 落提交、修编译与测试、把修复折回引入缺陷的提交、作者自动归一为仓库拥有者身份（禁止手填）、强推、同步工作树；落地后按映射逐条收口 issue 状态，并删掉解包出来的临时内容。交接文档里的每一条验收声明，在你亲手复现之前都是未验证假设。当收到别的 agent 产出的补丁集/交接 zip，或交付的补丁集并不像文档说的那样能编译时使用。 Triggers: patch-handoff, 交接包, handoff 包, handoff.zip, 补丁集, patches, git am, 打补丁验收, patch series, 补丁包验收, 校验交接文档, 交接 issue 上传, issue 收口.
 {% endif %}
 ---
 
@@ -33,9 +33,8 @@ Read them out of the repo, never out of `HANDOFF.md`.
 | Format check | Whether CI runs `fmt --check` / `lint` as a separate step | A linter passing says nothing about formatting |
 | Hook installation | `git config core.hooksPath`; run the repo's installer in the current worktree if unset | Hooks are per-worktree config and do not travel with a clone |
 | Author identity | `normalize-authors.sh --print-identity` — owner from `origin` URL + `git config user.email`; NEVER hand-fill or read from the package | Package authors are synthetic placeholders; a hand-typed name is the leak |
-| Issue tracker | The issue numbers the doc cites, plus the repo name | Closing them is part of landing, not an afterthought |
-| Issue write target | `gh repo view --json nameWithOwner`; does each cited number exist (`gh issue view <n>`) | On a fork `gh` defaults to the upstream repo — filing there is filing in the wrong place |
-| Issue status flow | `gh label list`; the project's in-progress / needs-decision labels | Miss the label and you close tickets without moving the board — the tracker silently rots |
+| Issue source | What the package carries: `issues/*.md` (front matter), a ticket table inside the doc, or bare numbers | Without this inventory there is no patch↔issue mapping, and S7 has nothing to close |
+| Import target | `gh repo view --json nameWithOwner`; `gh label list`; `gh issue view <n>` for any number the doc cites | On a fork `gh` defaults to the upstream repo; a label that does not exist fails the whole batch |
 
 ## Quick Start
 
@@ -45,6 +44,11 @@ BASE="origin/$(git rev-parse --abbrev-ref origin/HEAD | sed 's|^origin/||')"
 git status -sb; git rev-list --count "$BASE"..HEAD     # must be clean and 0
 
 .agents/skills/patch-handoff/scripts/inspect-handoff-package.sh "$PKG"   # pre-flight audit
+
+# if the package carries issues: import them first and keep the key -> number mapping
+pwsh .agents/skills/issue-sync/scripts/issue-push.ps1 -Repo <owner/name> \
+    -InputDir <dir>/issues -Mapping ./issue-mapping.json -DryRun   # drop -DryRun to create
+
 .agents/skills/patch-handoff/scripts/normalize-authors.sh "$BASE" --print-identity  # confirm target identity
 .agents/skills/patch-handoff/scripts/replay-patch-series.sh <dir>/patches <fix-spec-dir> "$BASE"
 
@@ -57,47 +61,41 @@ git status -sb; git rev-list --count "$BASE"..HEAD     # must be clean and 0
 
 | Step | Action | Key point |
 | :-- | :--- | :--- |
-| S1 | Pre-flight | Inventory patches, authors, touched files; compare claimed baseline with reality; file an issue for every discrepancy you confirm (dedupe first) |
+| S1 | Pre-flight | Inventory patches, authors, touched files; compare claimed baseline with reality; **import the package's issues to GitHub** (`-DryRun` first, then create) and build the patch↔issue mapping |
 | S2 | Replay | `git am patches/*.patch` in order; on failure diagnose the base first, then `--show-current-patch` |
-| S3 | Repair | Run the gate chain top-down; syntax errors mask type errors, so re-run after each fix; log anything you cannot fix as an issue |
+| S3 | Repair | Run the gate chain top-down; syntax errors mask type errors, so re-run after each fix |
 | S4 | Fold | Fold each repair into the commit that introduced it, keeping one commit per ticket |
 | S5 | Author + push | Run `normalize-authors.sh "$BASE"` **without name/email** so the identity is auto-resolved from the repo (keeping author dates); then `push --force-with-lease` |
 | S6 | Resync | After a force push: `fetch --prune --force` then `reset --hard`, never `git pull` |
-| S7 | Issues | Close out **both** lines: each implemented ticket (comment, then close, then labels) and every issue you filed during S1–S4 (closed with its fold-back SHA, or left open with a label and an owner) |
-| S8 | Cleanup | Delete the unpacked temp content you created: unpack dir, fix-spec dir, logs. Verify it is gone. No throwaway clone should exist — do not clone to test |
+| S7 | Issue close-out | Walk the mapping: each landed ticket gets a comment with its fold-back SHA, then `close`, then its label flipped; a ticket with no landed patch stays open with that reason written down |
+| S8 | Cleanup | Delete the unpacked temp content you created: unpack dir, fix-spec dir, import mapping, logs. Verify it is gone. No throwaway clone should exist — do not clone to test |
 
-## File Every Problem as an Issue — Not Just in the Report
+## The Package's Issues Go Up to GitHub First
 
-Report prose is read once and then rots; an issue keeps a number somebody can point at. Anything you confirm while verifying gets a GitHub issue **in the same pass**, before you move on:
+A handoff package usually ships its tickets as files — `issues/*.md` with `key` / `title` / `labels` / `parent` / `blocked_by` front matter, sometimes just a ticket table inside `HANDOFF.md`. Those tickets are the plan behind the patch series: they have no business staying inside a zip. Push them to GitHub **before** replaying, so every claim in the doc points at a number somebody can open.
 
-- The series does not compile as delivered, or the doc's claims do not reproduce.
-- Scope gaps: a claimed feature is missing, or a cited ticket has no patch.
-- Behavioural gaps the tests cannot see, while the user has not decided yet.
-- Anything you deliberately leave unfixed.
+1. **Preview.** `issue-push.ps1 -DryRun` prints every create, parent link and `blocked_by` edge without touching the remote.
+2. **Create.** Drop `-DryRun`. The script is idempotent — re-running only fills gaps — and writes `mapping.json` (local `key` → real number).
+3. **Map.** Build the `patch NNNN ↔ #number` table from that mapping (and from the numbers the doc already cites, cross-checked with `gh issue view`). The mapping is what S7 walks; a patch with no number is a ticket that is not on GitHub yet.
+4. **Backfill.** Push writes `number` and `url` back into the issue files — keep that so the next handoff can match without guessing.
+5. **No `issue-sync` skill in this project** (it is not a baseline skill): create them one by one with `gh issue create --title ... --body-file ...`, in dependency order, and write the same mapping by hand. Slower, identical contract.
+6. **Never invent the mapping.** If a patch title and an issue title do not obviously correspond, stop and ask the user — a guessed number closes the wrong ticket, which is worse than a ticket left open.
 
-Rules for filing:
+Filing is not the same as reporting: problems **you** discover while verifying are not new tickets. They go into the report, and — if the user wants them tracked — as comments on the corresponding ticket. Do not open your own issues unless the user asks for them.
 
-1. **Deduplicate first.** `gh issue list --state all --search '"<symptom>"'`; if a twin exists, extend it with a comment instead of opening another one.
-2. **One issue per distinct defect.** Title `[handoff] <package>: <symptom in one line>`; body carries package + patch number, claim vs reality, the command that reproduces it, and what "fixed" looks like.
-3. **Reuse the project's labels** (`gh label list`); do not invent a taxonomy for one handoff.
-4. **Back-reference from the report.** Every open-item row names its `#number` — a row without a number is an issue you forgot to file.
-5. **No `gh`, no write access, or `gh` pointing at a fork's upstream:** say so in the report and print the command you would have run. Never quietly degrade back to prose.
+## Close-Out — After Landing, Walk the Mapping
 
-Filed issues are not decoration: S7 has to give each one a terminal state.
+After the push (S5–S6), every ticket in the mapping gets a state you can name:
 
-## Issue Close-out — After Landing, Nothing Stays Dangling
-
-Run two lines, both of which must end with a state you can name:
-
-1. **Ticket line** (the tickets the doc maps to): for each one, `gh issue comment <n>` with the landing summary — folded commit SHA, gate commands, test counts — **then** `gh issue close <n>`, **then** flip labels (add the new label before removing the old one, so no issue is ever label-less). Do not use `gh issue close --comment`: on an already-closed issue it drops the comment and still exits 0.
-2. **Filed-issue line** (what you opened in S1–S4): fixed in this pass → comment with the fold-back SHA and close it; not fixed, or waiting on the user → keep it open, add the project's decision/blocked label, assign or @-mention whoever moves next, and say so in the report.
-3. **Self-check.** `gh issue list --state open --search '[handoff]'` must leave only issues you can justify. End the report with three lines: `closed #…` / `filed #…` / `still open #…, why`.
+1. **Landed.** `gh issue comment <n>` with the landing summary — folded commit SHA, gate commands, test counts — **then** `gh issue close <n>`, **then** flip labels (add the new label before removing the old one, so no issue is ever label-less). Do not use `gh issue close --comment`: on an already-closed issue it drops the comment and still exits 0.
+2. **Not landed.** A ticket whose patch was dropped, folded elsewhere, or failed the gates stays **open**, with a comment saying exactly which patch and why. Silently closing it makes the tracker lie about what shipped.
+3. **Self-check.** End the report with the table you actually walked: `#101 → 0001 → 3f2a1c9 closed`, `#104 → 0004 → open (patch dropped, behaviour gap)`, plus the total `closed / open`.
 
 ## Cleanup — the Unpacked Temp Content Must Go
 
-Only `patches/*.patch` has lasting value in a handoff package; `HANDOFF.md`, the doc's side files and your `fix-spec/` tree are scaffolding. Once the handoff is landed, delete them:
+Only `patches/*.patch` has lasting value in a handoff package; `HANDOFF.md`, the doc's side files, the `issues/` tree and your `fix-spec/` are scaffolding. Once the handoff is landed and closed out, delete them:
 
-- Unpack dir (`handoff-*/`, a `mktemp -d` path), fix-spec dir, logs, exported intermediates.
+- Unpack dir (`handoff-*/`, a `mktemp -d` path), fix-spec dir, the `mapping.json` left in the worktree, logs, exported intermediates.
 - List before deleting (iron rule 5), delete only what you created, no wildcards, nothing in shared locations such as `~/.cache`.
 - Exception: a worktree left half-applied by a stopped `git am` is evidence — keep it until the user has seen it, then delete it.
 - Verify: `git status --porcelain -uall` is empty and the unpack dir no longer exists. A leftover unpack dir is how the next handoff gets confused with the last one.
@@ -112,9 +110,9 @@ Only `patches/*.patch` has lasting value in a handoff package; `HANDOFF.md`, the
 6. A failing test is reported to the user, not silently accommodated by editing the assertion.
 7. `git am`, `cherry-pick` and `rebase` trigger no `pre-commit` hook — only `pre-push` can still catch the damage. Confirm hooks are installed in the current worktree before you work; if you were explicitly told to isolate in a clone, install hooks there first.
 8. **Work in the user's worktree.** Never clone or copy the project just to verify or land a patch. Complex projects lose tens of minutes to hours on a fresh clone plus dependency setup, for zero gain.
-9. **A problem you found but did not file does not exist.** Every confirmed defect goes to GitHub as an issue in the pass that found it — deduped, with the reproducing command — and the report cites its number.
-10. **Nothing in scope stays dangling after landing.** Tickets and filed issues both end closed (with the fold-back SHA) or open with a label and a named owner. `gh issue close --comment` is not a substitute for comment-then-close.
-11. **The unpacked temp content is not an artifact.** Unpack dir, fix-spec dir and logs are deleted at S8, and you verify they are gone rather than assuming.
+9. **The package's issues belong on GitHub, not in the zip.** Import them (`-DryRun` first) before replaying, build the `patch ↔ #number` mapping from the resulting `mapping.json`, and never guess a number that does not correspond.
+10. **Nothing in scope stays dangling after landing.** Every mapped ticket ends closed with its fold-back SHA, or open with a comment naming the patch and the reason. `gh issue close --comment` is not a substitute for comment-then-close.
+11. **The unpacked temp content is not an artifact.** Unpack dir, `issues/` tree, fix-spec dir, `mapping.json` and logs are deleted at S8, and you verify they are gone rather than assuming.
 
 ## How to Write Acceptance Criteria
 
@@ -142,7 +140,7 @@ Green build plus green tests is not feature completeness. Shape or snapshot asse
 - [references/handoff-audit.md](references/handoff-audit.md) — classifying claims, the usual lies, report format
 - [references/git-mechanics.md](references/git-mechanics.md) — hook trigger matrix, `git am` failure triage, fold preconditions, author rewrite
 - [references/field-notes.md](references/field-notes.md) — real error-to-API table from one landed series
-- [references/issue-closeout.md](references/issue-closeout.md) — when to file, the issue body template, dedupe, the state machine, `gh` failure modes
+- [references/issue-import.md](references/issue-import.md) — importing the package's issues, the mapping table, close-out by mapping, `gh` failure modes
 {%- else -%}
 # 补丁交接包验收与合入（Patch Handoff）
 
@@ -167,9 +165,8 @@ Green build plus green tests is not feature completeness. Shape or snapshot asse
 | 格式检查位置 | CI 是否有独立的 `fmt --check` / `lint` 步骤 | linter 过了不代表格式过 |
 | 钩子安装 | `git config core.hooksPath`；在当前工作区跑仓库的安装脚本（若未装） | 钩子是每个工作区自己的配置，不随 clone 传播 |
 | 作者身份 | `normalize-authors.sh --print-identity` —— owner 取自 `origin` URL + `git config user.email`；**禁止手填或从包里读** | 包里的作者多为合成占位身份，手填名字就是乱填的源头 |
-| issue 仓库 | 文档引用的编号 + 仓库名 | 关单是落地的一部分，不是收尾补充 |
-| issue 写入目标 | `gh repo view --json nameWithOwner`；编号在本仓库是否真存在（`gh issue view <n>`） | fork 里 `gh` 默认指向上游仓库，发错仓等于白发 |
-| issue 状态流 | `gh label list`；项目现有的在办 / 待定标签 | 不知道翻哪个标签，结果就是只关单不翻标签，看板从此失真 |
+| issue 条目来源 | 包里带了什么：`issues/*.md`（front matter）、文档里的工单表、或只写了编号 | 没有清单就没有 patch↔issue 映射，S7 无从关单 |
+| 导入目标 | `gh repo view --json nameWithOwner`；`gh label list`；文档引用的编号逐个 `gh issue view <n>` | fork 里 `gh` 默认打上游仓库；标签不存在会让整批建单失败 |
 
 ## 快速开始
 
@@ -179,6 +176,11 @@ BASE="origin/$(git rev-parse --abbrev-ref origin/HEAD | sed 's|^origin/||')"
 git status -sb; git rev-list --count "$BASE"..HEAD     # 必须干净且为 0
 
 .agents/skills/patch-handoff/scripts/inspect-handoff-package.sh "$PKG"   # 落库前体检
+
+# 包里带 issue 条目时：先导入成真实 issue，留住 key -> 编号 的映射
+pwsh .agents/skills/issue-sync/scripts/issue-push.ps1 -Repo <owner/name> \
+    -InputDir <dir>/issues -Mapping ./issue-mapping.json -DryRun   # 去掉 -DryRun 才真正建单
+
 .agents/skills/patch-handoff/scripts/normalize-authors.sh "$BASE" --print-identity  # 确认归一目标身份
 .agents/skills/patch-handoff/scripts/replay-patch-series.sh <dir>/patches <fix-spec-dir> "$BASE"
 
@@ -191,47 +193,41 @@ git status -sb; git rev-list --count "$BASE"..HEAD     # 必须干净且为 0
 
 | 步 | 动作 | 要点 |
 | :-- | :--- | :--- |
-| S1 | 体检 | 清点补丁、作者、涉及文件；把文档声称的基线与真实基线对照；确认的每处不符当场上 issue（先查重） |
+| S1 | 体检 | 清点补丁、作者、涉及文件；把文档声称的基线与真实基线对照；**把包里的 issue 条目导入 GitHub**（先 `-DryRun` 再真建），建立 patch↔issue 映射 |
 | S2 | 落提交 | 按序 `git am patches/*.patch`；失败先判基线，再 `--show-current-patch` |
-| S3 | 修编译 | 自上而下跑门禁链；语法错会掩盖类型错，每修完一类必须重跑；修不掉的立刻建单 |
+| S3 | 修编译 | 自上而下跑门禁链；语法错会掩盖类型错，每修完一类必须重跑 |
 | S4 | 折回 | 把修复折进引入缺陷的那条提交，保持一单一提交 |
 | S5 | 作者与推送 | **不传名字/邮箱**运行 `normalize-authors.sh "$BASE"`，身份自动从仓库解析（保留 author date），再 `push --force-with-lease` |
 | S6 | 同步 | 强推后 `fetch --prune --force` 再 `reset --hard`，**不要** `git pull` |
-| S7 | issue 收口 | **两条线都要收**：逐条关闭已实现工单（先评论、再关闭、后翻标签），以及 S1–S4 建的问题单（已修的贴折回 SHA 关闭，未修的带标签留开并指明下一步归谁） |
-| S8 | 清理 | 删掉自己创建的临时内容：解包目录、fix-spec 目录、日志，逐个验证已消失。不应存在临时克隆——不要为了验收而克隆项目 |
+| S7 | issue 收口 | 按映射逐条走：已落地的工单评论贴折回 SHA → `close` → 翻标签；没有对应补丁落地的工单保持 open，并把这个原因写进评论 |
+| S8 | 清理 | 删掉自己创建的临时内容：解包目录、fix-spec 目录、导入产生的 mapping、日志，逐个验证已消失。不应存在临时克隆——不要为了验收而克隆项目 |
 
-## 交接时发现的问题，直接落成 issue
+## 包里的 issue，先上传到 GitHub
 
-报告里的文字只会被读一遍，然后烂掉；issue 有个编号，谁都能指着它说话。验收过程中确认的每一处问题，**在发现它的那一轮就建单**，不要攒：
+交接包通常把工单也一起带过来——`issues/*.md`（front matter 带 `key` / `title` / `labels` / `parent` / `blocked_by`），有时只是 `HANDOFF.md` 里的一张工单表。这些工单是补丁序列背后的计划，不该留在 zip 里。**落补丁之前**先把它们推上 GitHub，文档里每一条声称才对得上一个能点开的编号。
 
-- 交付的补丁集编译不过，或文档声称的结论复现不出来。
-- 范围缺口：声称实现了但补丁里没有，或文档点名的工单没有对应补丁。
-- 测试看不见的行为缺口，而用户还没拍板。
-- 你主动决定不修的任何东西。
+1. **预演。** `issue-push.ps1 -DryRun` 只打印将要创建的 issue、父子链接与 `blocked_by` 边，不碰远端。
+2. **建单。** 去掉 `-DryRun` 真跑。脚本幂等——重跑只补缺口——并产出 `mapping.json`（本地 `key` → 真实编号）。
+3. **建映射。** 用 mapping 拼出 `补丁 NNNN ↔ #编号` 表（文档原本就写了编号的，逐个 `gh issue view` 核对）。S7 就按这张表走；没有编号的补丁，意味着那张工单还没上 GitHub。
+4. **回填。** push 会把 `number` 与 `url` 写回 issue 文件——留着它，下一份交接包就不必靠猜来对齐。
+5. **项目里没有 `issue-sync` 技能**（它不是基线技能）：按依赖顺序逐条 `gh issue create --title ... --body-file ...`，映射表手工记。慢一点，契约一样。
+6. **映射绝不许猜。** 补丁标题与工单标题对不上就直接停手问用户——猜错编号关掉的是别人的工单，比留一张开着更糟。
 
-建单规矩：
+注意「上传交接包的 issue」与「自己发现的问题」是两件事：你验收中新发现的缺陷**不开新单**，写进报告；用户要留痕的话，就评论在对应工单下面。要建单先问用户。
 
-1. **先查重。** `gh issue list --state all --search '"<症状>"'`；已有同因的单就补一条评论，不要开第二张。
-2. **一个缺陷一张单。** 标题 `[handoff] <包名>: <一句话症状>`；正文写清：包名 + 补丁编号、声称 vs 实测、能复现的命令、什么算修好。
-3. **用项目已有标签**（`gh label list`），不要为一次交接自造一套标签体系。
-4. **报告里回指编号。** 每条遗留行都要带 `#编号`——没有编号的那一行，就是你忘了建的单。
-5. **没有 `gh`、没有写权限、或 `gh` 指向 fork 的上游仓库**：在报告里明说，并把你本该执行的命令原样贴出来。绝不允许静默退回成纯文字。
+## issue 收口 —— 交接完成后按映射逐条走
 
-建单不是装饰：S7 必须给每一张单一个终态。
+推送完（S5–S6）之后，映射表里每一张工单都要落到一个你说得出的状态：
 
-## issue 收口 —— 交接完成后，一条都不许悬着
-
-两条线都跑，每条都要落到一个你说得出的状态：
-
-1. **工单线**（文档映射的 ticket）：逐条 `gh issue comment <n>` 写落地摘要——折回提交 SHA、验收命令、测试通过数——**然后** `gh issue close <n>`，**最后**翻标签（先加新标签再撤旧标签，中间不留无标签态）。不要用 `gh issue close --comment`：对已关闭的 issue 它会丢掉评论却仍返回 0。
-2. **问题线**（你在 S1–S4 建的单）：本轮已修掉的 → 评论贴折回 SHA 再关闭；没修、或在等用户决定的 → 保持 open，补上项目的待定/阻塞标签，指派或 @ 到下一步的负责人，并在报告里写明。
-3. **自检。** `gh issue list --state open --search '[handoff]'` 剩下的必须只剩你解释得清的那几张。报告收尾固定三行：`已关闭 #…` / `新建 #…` / `仍开 #…，原因`。
+1. **已落地。** `gh issue comment <n>` 写落地摘要——折回提交 SHA、验收命令、测试通过数——**然后** `gh issue close <n>`，**最后**翻标签（先加新标签再撤旧标签，中间不留无标签态）。不要用 `gh issue close --comment`：对已关闭的 issue 它会丢掉评论却仍返回 0。
+2. **没落地。** 补丁被丢弃、折到别处、或过不了门禁的工单保持 **open**，评论里写清是哪一条补丁、为什么。静悄悄关掉，等于让看板谎报发版内容。
+3. **自检。** 报告收尾贴出你实际走过的那张表：`#101 → 0001 → 3f2a1c9 已关闭`、`#104 → 0004 → 仍开（补丁丢弃，行为缺口）`，再给一行合计 `已关 / 仍开`。
 
 ## 清理 —— 解包出来的临时内容必须消失
 
-交接包里只有 `patches/*.patch` 有长期价值；`HANDOFF.md`、文档附带文件、你自己的 `fix-spec/` 都是脚手架。交接落完之后删干净：
+交接包里只有 `patches/*.patch` 有长期价值；`HANDOFF.md`、文档附带文件、`issues/` 目录、你自己的 `fix-spec/` 都是脚手架。交接落地并收口之后删干净：
 
-- 解包目录（`handoff-*/`、`mktemp -d` 出来的路径）、fix-spec 目录、日志、导出中间文件。
+- 解包目录（`handoff-*/`、`mktemp -d` 出来的路径）、fix-spec 目录、落在工作树里的 `mapping.json`、日志、导出中间文件。
 - 删之前先 `ls` 列清单（铁律 5），只删自己创建的，禁通配符，不碰 `~/.cache` 这类共享位置。
 - 例外：`git am` 中途停下留下的半应用工作树是证据——留着交用户看，用户确认后再删。
 - 收尾校验：`git status --porcelain -uall` 为空，解包目录确认已不存在。留一个解包目录，下一份交接包就会和上一份搅在一起。
@@ -246,9 +242,9 @@ git status -sb; git rev-list --count "$BASE"..HEAD     # 必须干净且为 0
 6. 测试失败先反馈用户，不擅自改断言把失败糊过去。
 7. `git am` / `cherry-pick` / `rebase` 都不触发 `pre-commit`，只有 `pre-push` 拦得住；干活前先确认当前工作区钩子已装（若被明确要求隔离到克隆，则先在克隆里装钩子）。
 8. **在用户的工作区里干活。** 绝不为验收或落补丁而克隆、复制项目——复杂项目重新克隆加重装依赖要耗掉几十分钟到几小时，收益为零。
-9. **发现了却没建单的问题等于不存在。** 每处确认的缺陷都在发现它的那一轮进 GitHub issue（先查重、带复现命令），报告里引用编号。
-10. **落地后范围内的 issue 不许悬着。** 工单与你建的单，一律以「带折回 SHA 的关闭」或「带标签 + 明确责任人的留开」收尾；`gh issue close --comment` 不能替代「先评论再关闭」。
-11. **解包临时内容不是产物。** 解包目录、fix-spec、日志在 S8 删除，并且要验证已消失，而不是假设。
+9. **包里的 issue 属于 GitHub，不属于 zip。** 落补丁前先导入（先 `-DryRun`），用产出的 `mapping.json` 建立 `补丁 ↔ #编号` 映射；对不上的绝不猜编号。
+10. **落地后映射里的工单不许悬着。** 每张单要么带折回 SHA 关闭，要么保持 open 并在评论里写清是哪条补丁、为什么没落地；`gh issue close --comment` 不能替代「先评论再关闭」。
+11. **解包临时内容不是产物。** 解包目录、`issues/` 目录、fix-spec、`mapping.json`、日志在 S8 删除，并且要验证已消失，而不是假设。
 
 ## 验收判据怎么写
 
@@ -276,7 +272,7 @@ git status -sb; git rev-list --count "$BASE"..HEAD     # 必须干净且为 0
 - [references/handoff-audit.md](references/handoff-audit.md) —— 声明分类、常见谎报、报告格式
 - [references/git-mechanics.md](references/git-mechanics.md) —— 钩子触发面矩阵、`git am` 失败诊断、折叠前提、作者重写
 - [references/field-notes.md](references/field-notes.md) —— 一次真实落地的「报错 → 真实 API」对照
-- [references/issue-closeout.md](references/issue-closeout.md) —— 何时建单、正文模板、查重、状态机、`gh` 的失败模式
+- [references/issue-import.md](references/issue-import.md) —— 交接包 issue 的导入、映射表、按映射收口、`gh` 的失败模式
 {%- endif %}
 <!-- PENGJ_TEMPLATE_END -->
 
