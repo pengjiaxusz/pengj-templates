@@ -1,3 +1,6 @@
 name = "Just"
 description = "跨平台 justfile 主入口：托管块框架区按所选层装配排队与语言配方，块外项目专属区归用户所有"
 depends = ["common"]
+
+# 配套技能：勾选本层即自动带上 just 配方编写技能，避免「有 justfile 却裸跑 cargo run」。
+skills = ["write-just"]
