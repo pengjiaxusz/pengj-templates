@@ -68,7 +68,6 @@ cargo run -p pengj-templates-cli -- create my-app --layers rust --edition 2024 -
 cargo run -p pengj-templates-cli -- create my-app --layers agent --skills commit,caveman   # 只生成选中的技能
 cargo run -p pengj-templates-cli -- create my-app --layers rust --skill-lang en --no-commit-zh  # 全英文项目：所有文案与提交信息均为英文
 cargo run -p pengj-templates-cli -- update --dir ./my-app                # 同步模板更新
-cargo run -p pengj-templates-cli -- update --dir ./my-app --commit --push  # 同步 + 精准暂存 + 提交 + 推送，一条命令收口
 cargo run -p pengj-templates-cli -- add-layer --dir ./my-app --layers just,bque  # 存量项目增量加层
 cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # 巡检半接入与托管块漂移
 cargo run -p pengj-templates-cli -- check-lang --dir ./my-app           # 校验文案语言轴（en 零汉字；zh 文案含中文）

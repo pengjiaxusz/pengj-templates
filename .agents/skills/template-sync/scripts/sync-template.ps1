@@ -3,15 +3,13 @@
     Layered template sync, batch update, and selective commit pipeline (Template Sync Fast-Track)
 
 .DESCRIPTION
-    Batch wrapper around `pengj-templates-cli update`. The CLI owns the sync itself and the
-    closing steps (selective staging, conventional commit, push); this script only adds what a
-    batch run needs on top of it:
+    Automates template sync, audit, and selective commit workflow across single or multiple projects:
     1. Sub-second detection of pengj-templates-cli binary (local target build > PATH > fallback cargo run);
     2. Batch project directories (-Projects @(...));
     3. Default dry run mode: rapid diagnosis of alignment and drift states via audit;
-    4. Single-shot update on -Apply with -SyncSkills enabled by default, committing and pushing
-       through `update --commit --push` so the staging/commit rules live in exactly one place;
-    5. Summary table across the batch.
+    4. Single-shot update on -Apply with -SyncSkills enabled by default;
+    5. Selective staging red-line enforcement: strictly stages only template-affected files and manifest, never git add .;
+    6. Automatic selective commit and push on -Apply by default (-NoCommit / -NoPush to opt out), so applied projects never leave template updates uncommitted.
 
 .PARAMETER Projects
     List of target project paths. Supports multiple paths e.g. @("D:\repo1", "D:\repo2"). Defaults to @("."). 
@@ -20,8 +18,7 @@
     Execute actual update. If omitted, performs read-only pre-flight audit (Dry Run).
 
 .PARAMETER SyncSkills
-    Force-align pure skill assets that were locally modified (default $true). Untouched assets
-    sync on their own; this flag is the aggressive override.
+    Align and overwrite managed skill assets and scripts directly (default $true).
 
 .PARAMETER Commit
     Kept for compatibility: the selective commit is the DEFAULT on -Apply. Use -NoCommit to disable it.
@@ -36,8 +33,7 @@
     Skip the automatic push but still create the selective commit.
 
 .PARAMETER CommitMessage
-    Custom commit message. If omitted, `update` derives the subject from the target project's
-    `.pengj-templates/gate.toml` (scope whitelist + subject language).
+    Custom commit message. If omitted, the language follows the target project's commit_zh option (Chinese or English Conventional Commit subject).
 
 .PARAMETER Diff
     Display detailed drift diffs in pre-flight mode.
@@ -84,6 +80,8 @@ function Find-CliCommand {
     $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 # Walk up to repository root (detect Cargo.toml)
     $curr = $scriptDir
+    # The script itself sits at <root>/<a>/<b>/<c>/scripts/<file>, so the repository
+    # root is more than 6 levels up in some checkouts; keep some headroom.
     for ($i = 0; $i -lt 8; $i++) {
         if (Test-Path (Join-Path $curr "Cargo.toml")) {
             # Both artifacts can exist in development: pick the newest one, so a freshly built
@@ -140,20 +138,79 @@ function Invoke-Cli {
     }
 }
 
-$summaryRows = @()
-$hasAnyViolations = $false
+function Invoke-Git {
+    param(
+        [string]$WorkingDir,
+        [string[]]$CommandArgs
+    )
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "git"
+    $psi.Arguments = ($CommandArgs -join " ")
+    $psi.WorkingDirectory = $WorkingDir
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
 
-# The closing steps live in the CLI (`update --commit`). Projects pick up this script with a
-# template update, while the binary in PATH is only replaced when the user reinstalls it, so an
-# old CLI is a real state: detect it once and degrade loudly instead of failing mid-batch.
-$cliSupportsCommit = $true
-if ($doCommit) {
-    $helpRes = Invoke-Cli -CommandArgs @("update", "--help")
-    $cliSupportsCommit = ($helpRes.Output -match "--commit")
-    if (-not $cliSupportsCommit) {
-        Write-Warning "This pengj-templates-cli does not support 'update --commit'; the sync will run without committing. Upgrade the CLI (see 'pengj-templates-cli check-update') to close the loop again."
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $p.StandardOutput.ReadToEnd()
+    $stderr = $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+
+    return [PSCustomObject]@{
+        ExitCode = $p.ExitCode
+        Output   = $stdout.Trim()
+        Error    = $stderr.Trim()
     }
 }
+
+function Get-DefaultCommitMessage {
+    param([string]$ProjectDir)
+    $scope = "template"
+    # The commit gate keeps the scope whitelist in `.pengj-templates/gate.toml`:
+    # `commit.scopes = []` means "any scope allowed".
+    $gateConfigPath = Join-Path $ProjectDir ".pengj-templates/gate.toml"
+    if (Test-Path $gateConfigPath) {
+        $config = Get-Content $gateConfigPath -Raw
+        if ($config -match "commit\.scopes\s*=\s*\[(?<scopes>[^\]]*)\]") {
+            $scopes = $Matches["scopes"]
+            if ($scopes.Trim() -ne "") {
+                if ($scopes -notmatch "['""]template['""]") {
+                    if ($scopes -match "['""]ai-skill['""]") {
+                        $scope = "ai-skill"
+                    } else {
+                        $scope = ""
+                    }
+                }
+            }
+        }
+    }
+    # Commit language axis: follow the applied project's commit_zh, otherwise the
+    # commit-msg hook rejects the generated commit subject.
+    $commitZh = $true
+    $manifestPath = Join-Path $ProjectDir ".pengj-templates/manifest.json"
+    if (Test-Path $manifestPath) {
+        try {
+            $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+            if ($null -ne $manifest.options.commit_zh) {
+                $commitZh = [bool]$manifest.options.commit_zh
+            }
+        } catch {
+            Write-Warning "Cannot read commit_zh from manifest, assuming Chinese: $($_.Exception.Message)"
+        }
+    }
+
+    # Rendered from the commit_zh axis: an EN-commit project never contains CJK text.
+    $localizedSubject = '同步分层模板更新'
+    if (-not $commitZh) { $localizedSubject = "sync layered template updates" }
+    if ($scope) { return "chore($scope): $localizedSubject" }
+    return "chore: $localizedSubject"
+}
+
+$summaryRows = @()
+$hasAnyViolations = $false
 
 $targetProjects = @()
 foreach ($p in $Projects) {
@@ -236,18 +293,6 @@ foreach ($rawProj in $targetProjects) {
     if ($SyncSkills) {
         $updateArgs += "--sync-skills"
     }
-    # Staging / commit / push belong to the CLI: `--commit` only stages the paths this run
-    # touched plus the manifest, and the subject comes from the project's own gate rules.
-    if ($doCommit -and $cliSupportsCommit) {
-        $updateArgs += "--commit"
-        if ($doPush) {
-            $updateArgs += "--push"
-        }
-        if ($CommitMessage) {
-            $updateArgs += "--message"
-            $updateArgs += "`"$CommitMessage`""
-        }
-    }
 
     $updateRes = Invoke-Cli -CommandArgs $updateArgs
     if ($updateRes.ExitCode -ne 0) {
@@ -257,7 +302,7 @@ foreach ($rawProj in $targetProjects) {
 
     Write-Host $updateRes.Output
 
-    # Parse the report for the summary table (the counts are informational; git work is done by the CLI)
+    # Parse files affected by update
     $updatedFiles = @()
     $createdFiles = @()
     $conflictedFiles = @()
@@ -275,22 +320,49 @@ foreach ($rawProj in $targetProjects) {
         }
     }
 
+    $stagedFiles = @()
+    # Selective staging red line: only git add files modified by update and manifest
+    $candidateFiles = @($updatedFiles + $createdFiles + @(".pengj-templates/manifest.json")) | Select-Object -Unique
+    foreach ($rel in $candidateFiles) {
+        $fullPath = Join-Path $projDir $rel
+        if (Test-Path $fullPath) {
+            $addRes = Invoke-Git -WorkingDir $projDir -CommandArgs @("add", "`"$rel`"")
+            if ($addRes.ExitCode -eq 0) {
+                $stagedFiles += $rel
+            } else {
+                Write-Warning "[$projectName] Staging file failed: $rel - $($addRes.Error)"
+            }
+        }
+    }
+
     $commitStatus = "Skipped Commit"
     $pushStatus = "Skipped Push"
 
     if ($doCommit) {
-        if (-not $cliSupportsCommit) {
-            $commitStatus = "CLI Too Old"
-        } elseif ($updateRes.Output -match '\[(?:\u63d0\u4ea4|Committed?)\]\s+(?!.*\u8df3\u8fc7)') {
-            $commitStatus = "Committed"
-        } elseif ($updateRes.Output -match '\[(?:\u63d0\u4ea4|Committed?)\]') {
-            $commitStatus = "No changes"
-            $pushStatus = "No changes"
+        $cachedDiff = Invoke-Git -WorkingDir $projDir -CommandArgs @("diff", "--cached", "--name-only")
+        if ($cachedDiff.Output) {
+            $msg = if ($CommitMessage) { $CommitMessage } else { Get-DefaultCommitMessage -ProjectDir $projDir }
+            Write-Host "  -> Selectively committing changes: $msg" -ForegroundColor Yellow
+            $cRes = Invoke-Git -WorkingDir $projDir -CommandArgs @("commit", "-m", "`"$msg`"")
+            if ($cRes.ExitCode -ne 0) {
+                Write-Error "[$projectName] git commit failed: $($cRes.Error) $($cRes.Output)"
+                $commitStatus = "Commit Failed"
+            } else {
+                $commitStatus = "Committed"
+                if ($doPush) {
+                    Write-Host "  -> Pushing to remote repository..." -ForegroundColor Yellow
+                    $pRes = Invoke-Git -WorkingDir $projDir -CommandArgs @("push")
+                    if ($pRes.ExitCode -ne 0) {
+                        Write-Error "[$projectName] git push failed: $($pRes.Error) $($pRes.Output)"
+                        $pushStatus = "Push Failed"
+                    } else {
+                        $pushStatus = "Pushed"
+                    }
+                }
+            }
         } else {
-            $commitStatus = "Commit Skipped"
-        }
-        if ($doPush -and $updateRes.Output -match '\[(?:\u63a8\u9001|Pushed)\]') {
-            $pushStatus = "Pushed"
+            $commitStatus = "No staged changes"
+            $pushStatus = "No changes"
         }
     }
 

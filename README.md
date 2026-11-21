@@ -70,7 +70,6 @@ cargo run -p pengj-templates-cli -- create my-app --layers rust --edition 2024 -
 cargo run -p pengj-templates-cli -- create my-app --layers agent --skills commit,caveman   # only the selected skills
 cargo run -p pengj-templates-cli -- create my-app --layers rust --skill-lang en --no-commit-zh  # all-English project: every string and commit message in English
 cargo run -p pengj-templates-cli -- update --dir ./my-app                # sync template updates
-cargo run -p pengj-templates-cli -- update --dir ./my-app --commit --push  # sync, selectively stage, commit and push in one go
 cargo run -p pengj-templates-cli -- add-layer --dir ./my-app --layers just,bque  # add layers to an existing project
 cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # audit half-wired setups and managed-block drift
 cargo run -p pengj-templates-cli -- check-lang --dir ./my-app           # audit docs follow the language axis (en: no Han; zh: Chinese copy)

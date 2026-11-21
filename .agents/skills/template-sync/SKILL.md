@@ -15,28 +15,15 @@ description: >-
 
 ## 快速开始
 
-### 一条命令（推荐）
+### 极速流水线通道（推荐）
 
-`update` 自己就能闭环：同步、精准暂存（绝不 `git add .`）、按项目门禁规则生成约定式提交、推送：
-
-```powershell
-pengj-templates-cli update --dir <目标项目目录> --commit --push
-```
-
-- `--commit`：只暂存本次真正动过的路径加 `.pengj-templates/manifest.json` 并提交，工作区里别人的脏改动不会被卷进来。
-- `--push`：隐含 `--commit`；`--message "..."` 覆盖自动推导的主题（必须与 `--commit` 同时给）。
-- scope 与主题语言都读目标项目自己的 `.pengj-templates/gate.toml`，生成的信息一次就能过 `commit-msg`；没有门禁配置时语言退回 manifest 的 `commit_zh`。
-- 没有任何差异就不提交，直接说明「跳过」，不制造空提交。
-- `--sync-skills` 仍是 opt-in 的激进档：它强推**本地已改动过**的纯技能资产（未改动的本来就自动同步）。
-
-### 批量与预检
+优先调用技能内置的极速流水线脚本 `sync-template.ps1`。该脚本毫秒级直调预编译二进制产物、支持批量项目目录、原生守护「精准暂存红线（严禁 `git add .`）」、并可在单次工具调用内闭环「扫描 -> 更新 -> 精准暂存 -> 约定提交 -> 推送」：
 
 ```powershell
-# 先只读巡检，再批量更新；每个仓库各自提交、各自推送
-pengj-templates-cli audit --dirs <目录1,目录2> --diff
-pengj-templates-cli update --dirs <目录1,目录2> --commit --push
+# 快速预检：1 秒内快速诊断单项目或多项目的漂移状态（Dry Run）
+pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<项目目录1>", "<项目目录2>")
 
-# 需要巡检汇总表时再用极速脚本（内部转调同一条 CLI，不再自己实现暂存与提交）
+# 一键流水线：批量更新、精准暂存、生成约定式提交并推送到远端（默认行为，一次调用全自动闭环）
 pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<项目目录1>", "<项目目录2>") -Apply
 ```
 
@@ -48,8 +35,8 @@ pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<项目
 # 0. 巡检项目模板对齐状态（支持单目录 --dir 或多目录 --dirs，只读排查篡改与漂移）
 cargo run -p pengj-templates-cli -- audit --dirs <目录1,目录2> --diff
 
-# 1. 更新已纳管项目（--commit/--push 负责收口，见上）
-cargo run -p pengj-templates-cli -- update --dirs <目录1,目录2> --commit --push
+# 1. 更新已纳管项目（建议带上 --sync-skills 确保纯技能资产平滑对齐覆盖）
+cargo run -p pengj-templates-cli -- update --dirs <目录1,目录2> --sync-skills
 
 # 2. 纳管/应用模板到存量项目（尚无 manifest）
 cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <层1,层2> [选项]
@@ -67,13 +54,13 @@ cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <�
 
 ### 2A. Update 模式（同步上游更新）
 
-1. 直接跑更新命令，收口由它自己完成：
+1. 执行极速脚本或更新命令：
    ```powershell
-   # 一条命令：同步 -> 精准暂存 -> 约定式提交 -> 推送
-   cargo run -p pengj-templates-cli -- update --dir <目标项目目录> --commit --push
-
-   # 批量（每个仓库各自提交、各自推送）
+   # 推荐：极速流水线脚本（默认自动提交并推送被应用的项目）
    pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<目标项目目录>") -Apply
+
+   # 或通过 CLI 直接调用（随后按步骤 4 提交被应用的项目）
+   cargo run -p pengj-templates-cli -- update --dir <目标项目目录> --sync-skills
    ```
 2. 引擎自动从 manifest 读取固化的选项（`edition`、`skills`、`skill_lang` 等）并重渲染比对：
    - **纯受管技能资产（`.agents/skills/`）**：开启 `--sync-skills` 时（极速脚本默认启用），纯工具技能与脚本即使无托管块也会平滑对齐覆盖为最新模板版本，不判定为冲突；

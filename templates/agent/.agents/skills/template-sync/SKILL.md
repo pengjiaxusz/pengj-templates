@@ -18,41 +18,28 @@ Workflow for auditing downstream project alignment, updating downstream projects
 
 ## Quick Start
 
-### One command (recommended)
+### Fast-Track Pipeline (Recommended)
 
-`update` closes the loop itself: sync, selective staging (never `git add .`), a conventional commit derived from the project's own gate rules, and the push:
-
-```powershell
-pengj-templates-cli update --dir <project-dir> --commit --push
-```
-
-- `--commit` stages exactly the paths this run touched plus `.pengj-templates/manifest.json`, and commits them; unrelated dirty files in the worktree are never swept in.
-- `--push` implies `--commit`; `--message "..."` overrides the derived subject (it requires `--commit`).
-- Scope and subject language are read from the project's `.pengj-templates/gate.toml`, so the message passes `commit-msg` on the first try. Without a gate config the language falls back to the manifest's `commit_zh`.
-- Nothing changed -> nothing is committed, and the run says so instead of building an empty commit.
-- `--sync-skills` stays opt-in for the aggressive case: it force-aligns pure skill assets that were **locally modified** (untouched ones already sync on their own).
-
-### Batch and pre-flight
+Prefer running the bundled fast-track pipeline script `sync-template.ps1`. It detects precompiled binaries for sub-second startup, supports batch project directories, strictly enforces the selective staging red line (never `git add .`), and can close the loop (audit -> update -> selective add -> commit -> push) in a single tool call:
 
 ```powershell
-# Audit first (read-only), then update + commit + push each repository separately
-pengj-templates-cli audit --dirs <dir1,dir2> --diff
-pengj-templates-cli update --dirs <dir1,dir2> --commit --push
+# Fast-track dry-run audit for one or multiple projects
+pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<project-dir-1>", "<project-dir-2>")
 
-# Or the fast-track script when you also want the audit summary table
+# Fast-track one-click batch update with selective staging, commit and push (default)
 pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<project-dir-1>", "<project-dir-2>") -Apply
 ```
 
 ### Direct CLI Commands
 
-Run from the `pengj-templates` repo or ensure `pengj-templates-cli` is in PATH / `PENGJ_TEMPLATES` is set:
+Run from `pengj-templates` repo or ensure `pengj-templates-cli` is in PATH / `PENGJ_TEMPLATES` is set:
 
 ```powershell
 # 0. Audit template alignment & drifts (supports single --dir or batch --dirs)
 cargo run -p pengj-templates-cli -- audit --dirs <dir1,dir2> --diff
 
-# 1. Update managed projects (--commit/--push close the loop, see above)
-cargo run -p pengj-templates-cli -- update --dirs <dir1,dir2> --commit --push
+# 1. Update managed projects (with --sync-skills to align pure skill assets without blocks)
+cargo run -p pengj-templates-cli -- update --dirs <dir1,dir2> --sync-skills
 
 # 2. Adopt / Apply templates to an existing project (no manifest yet)
 cargo run -p pengj-templates-cli -- adopt --dir <project-dir> --layers <layer1,layer2> [options]
@@ -70,13 +57,13 @@ Check whether the target project has `.pengj-templates/manifest.json`:
 
 ### 2A. Update Mode (Sync Upstream Changes)
 
-1. Run the update alone and let it close the loop:
+1. Run the fast-track script or CLI update:
    ```powershell
-   # One command: sync -> selective staging -> conventional commit -> push
-   cargo run -p pengj-templates-cli -- update --dir <project-dir> --commit --push
-
-   # Batch (each repository is committed and pushed separately)
+   # Recommended: fast-track script (commits and pushes the applied project by default)
    pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<project-dir>") -Apply
+
+   # Or via CLI directly (then follow Step 4 to commit the applied project)
+   cargo run -p pengj-templates-cli -- update --dir <project-dir> --sync-skills
    ```
 2. The engine reads `.pengj-templates/manifest.json` to reuse original options (`edition`, `skills`, `skill_lang`, etc.) and performs baseline-driven sync:
    - **Pure skill assets (`.agents/skills/`)**: When `--sync-skills` is enabled (default in fast-track script), pure skills and helper scripts without managed blocks are cleanly updated to the latest template without raising false conflicts.
@@ -181,28 +168,15 @@ Inspect the CLI execution report:
 
 ## 快速开始
 
-### 一条命令（推荐）
+### 极速流水线通道（推荐）
 
-`update` 自己就能闭环：同步、精准暂存（绝不 `git add .`）、按项目门禁规则生成约定式提交、推送：
-
-```powershell
-pengj-templates-cli update --dir <目标项目目录> --commit --push
-```
-
-- `--commit`：只暂存本次真正动过的路径加 `.pengj-templates/manifest.json` 并提交，工作区里别人的脏改动不会被卷进来。
-- `--push`：隐含 `--commit`；`--message "..."` 覆盖自动推导的主题（必须与 `--commit` 同时给）。
-- scope 与主题语言都读目标项目自己的 `.pengj-templates/gate.toml`，生成的信息一次就能过 `commit-msg`；没有门禁配置时语言退回 manifest 的 `commit_zh`。
-- 没有任何差异就不提交，直接说明「跳过」，不制造空提交。
-- `--sync-skills` 仍是 opt-in 的激进档：它强推**本地已改动过**的纯技能资产（未改动的本来就自动同步）。
-
-### 批量与预检
+优先调用技能内置的极速流水线脚本 `sync-template.ps1`。该脚本毫秒级直调预编译二进制产物、支持批量项目目录、原生守护「精准暂存红线（严禁 `git add .`）」、并可在单次工具调用内闭环「扫描 -> 更新 -> 精准暂存 -> 约定提交 -> 推送」：
 
 ```powershell
-# 先只读巡检，再批量更新；每个仓库各自提交、各自推送
-pengj-templates-cli audit --dirs <目录1,目录2> --diff
-pengj-templates-cli update --dirs <目录1,目录2> --commit --push
+# 快速预检：1 秒内快速诊断单项目或多项目的漂移状态（Dry Run）
+pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<项目目录1>", "<项目目录2>")
 
-# 需要巡检汇总表时再用极速脚本（内部转调同一条 CLI，不再自己实现暂存与提交）
+# 一键流水线：批量更新、精准暂存、生成约定式提交并推送到远端（默认行为，一次调用全自动闭环）
 pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<项目目录1>", "<项目目录2>") -Apply
 ```
 
@@ -214,8 +188,8 @@ pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<项目
 # 0. 巡检项目模板对齐状态（支持单目录 --dir 或多目录 --dirs，只读排查篡改与漂移）
 cargo run -p pengj-templates-cli -- audit --dirs <目录1,目录2> --diff
 
-# 1. 更新已纳管项目（--commit/--push 负责收口，见上）
-cargo run -p pengj-templates-cli -- update --dirs <目录1,目录2> --commit --push
+# 1. 更新已纳管项目（建议带上 --sync-skills 确保纯技能资产平滑对齐覆盖）
+cargo run -p pengj-templates-cli -- update --dirs <目录1,目录2> --sync-skills
 
 # 2. 纳管/应用模板到存量项目（尚无 manifest）
 cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <层1,层2> [选项]
@@ -233,13 +207,13 @@ cargo run -p pengj-templates-cli -- adopt --dir <目标项目目录> --layers <�
 
 ### 2A. Update 模式（同步上游更新）
 
-1. 直接跑更新命令，收口由它自己完成：
+1. 执行极速脚本或更新命令：
    ```powershell
-   # 一条命令：同步 -> 精准暂存 -> 约定式提交 -> 推送
-   cargo run -p pengj-templates-cli -- update --dir <目标项目目录> --commit --push
-
-   # 批量（每个仓库各自提交、各自推送）
+   # 推荐：极速流水线脚本（默认自动提交并推送被应用的项目）
    pwsh .agents/skills/template-sync/scripts/sync-template.ps1 -Projects @("<目标项目目录>") -Apply
+
+   # 或通过 CLI 直接调用（随后按步骤 4 提交被应用的项目）
+   cargo run -p pengj-templates-cli -- update --dir <目标项目目录> --sync-skills
    ```
 2. 引擎自动从 manifest 读取固化的选项（`edition`、`skills`、`skill_lang` 等）并重渲染比对：
    - **纯受管技能资产（`.agents/skills/`）**：开启 `--sync-skills` 时（极速脚本默认启用），纯工具技能与脚本即使无托管块也会平滑对齐覆盖为最新模板版本，不判定为冲突；
