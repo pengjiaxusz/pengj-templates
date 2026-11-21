@@ -1,4 +1,4 @@
-# Shared helpers for issue-sync scripts. Dot-source this file; do not run it.
+# Shared helpers for the issue scripts. Dot-source this file; do not run it.
 # All identifiers, comments, and log lines are English by repo convention.
 
 Set-StrictMode -Version Latest

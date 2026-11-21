@@ -7,7 +7,7 @@ A handoff package carries tickets as often as it carries patches, and a ticket i
 
 | Shape | Looks like | How to import |
 | :--- | :--- | :--- |
-| Issue bundle | `issues/NNNN-*.md` with `key` / `title` / `labels` / `parent` / `blocked_by` front matter | `issue-push.ps1` — the same format `issue-sync` pulls and pushes |
+| Issue bundle | `issues/NNNN-*.md` with `key` / `title` / `labels` / `parent` / `blocked_by` front matter | `issue-push.ps1` — the bundle format this skill's own scripts read and write |
 | Table in the doc | a markdown table mapping patch → ticket → title | turn each row into an issue file with a `key`, then push the directory |
 | Bare numbers | the doc just cites `#102–#113` | nothing to import; verify each with `gh issue view <n>` and reuse the numbers |
 
@@ -23,17 +23,17 @@ The bundle form is the one to prefer, because it carries the dependency wiring (
 
 ```powershell
 # preview: every create, parent link and blocked_by edge, no remote writes
-pwsh .agents/skills/issue-sync/scripts/issue-push.ps1 -Repo <owner/name> `
+pwsh .agents/skills/patch-handoff/scripts/issue-push.ps1 -Repo <owner/name> `
     -InputDir <pkg>/issues -Mapping ./issue-mapping.json -DryRun
 
 # create; add -Resume if it stops on its time budget
-pwsh .agents/skills/issue-sync/scripts/issue-push.ps1 -Repo <owner/name> `
+pwsh .agents/skills/patch-handoff/scripts/issue-push.ps1 -Repo <owner/name> `
     -InputDir <pkg>/issues -Mapping ./issue-mapping.json
 ```
 
 It writes `issue-mapping.json` (`key` → real number), backfills `number` / `url` into the issue files, links parents as sub-issues and dependencies as native `blocked_by`.
 
-**No `issue-sync` skill in the project** (it is not a baseline skill): `gh issue create --title ... --body-file ...` one by one, in dependency order, and record the numbers by hand in the same mapping shape. Same contract, slower.
+The script is part of this skill (see [issue-sync.md](./issue-sync.md)); there is no extra skill to install.
 
 ## 4. The mapping table
 
@@ -77,7 +77,7 @@ Sources, in order of reliability: the doc's own patch↔ticket table → the num
 
 | 形态 | 长什么样 | 怎么导入 |
 | :--- | :--- | :--- |
-| issue 包 | `issues/NNNN-*.md`，front matter 带 `key` / `title` / `labels` / `parent` / `blocked_by` | `issue-push.ps1` —— 与 `issue-sync` 的导出/推送同一套格式 |
+| issue 包 | `issues/NNNN-*.md`，front matter 带 `key` / `title` / `labels` / `parent` / `blocked_by` | `issue-push.ps1` —— 本技能自带脚本读写的同一套格式 |
 | 文档里的表 | 一张 markdown 表：补丁 → 工单 → 标题 | 每行转成一个带 `key` 的 issue 文件，再推整个目录 |
 | 只有编号 | 文档直接写 `#102–#113` | 无需导入；逐个 `gh issue view <n>` 核实并沿用编号 |
 
@@ -93,17 +93,17 @@ Sources, in order of reliability: the doc's own patch↔ticket table → the num
 
 ```powershell
 # 预演：打印每次创建、父子链接与 blocked_by 边，不写远端
-pwsh .agents/skills/issue-sync/scripts/issue-push.ps1 -Repo <owner/name> `
+pwsh .agents/skills/patch-handoff/scripts/issue-push.ps1 -Repo <owner/name> `
     -InputDir <pkg>/issues -Mapping ./issue-mapping.json -DryRun
 
 # 真建；撞到时间预算就加 -Resume 续跑
-pwsh .agents/skills/issue-sync/scripts/issue-push.ps1 -Repo <owner/name> `
+pwsh .agents/skills/patch-handoff/scripts/issue-push.ps1 -Repo <owner/name> `
     -InputDir <pkg>/issues -Mapping ./issue-mapping.json
 ```
 
 它产出 `issue-mapping.json`（`key` → 真实编号），把 `number` / `url` 回填进 issue 文件，并把 parent 挂成 sub-issue、依赖连成原生 `blocked_by`。
 
-**项目里没有 `issue-sync` 技能**（它不是基线技能）：按依赖顺序逐条 `gh issue create --title ... --body-file ...`，再按同样的形状手工记映射。契约相同，只是慢。
+脚本属于本技能（见 [issue-sync.md](./issue-sync.md)），不需要额外安装任何技能。
 
 ## 四、映射表
 

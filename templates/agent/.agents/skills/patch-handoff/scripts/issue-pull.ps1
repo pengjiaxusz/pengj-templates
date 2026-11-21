@@ -20,7 +20,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot 'issue-sync-common.ps1')
+. (Join-Path $PSScriptRoot 'issue-common.ps1')
 
 Assert-GhAvailable
 Assert-RepoFormat -Repo $Repo

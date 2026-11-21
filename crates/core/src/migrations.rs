@@ -71,6 +71,16 @@ pub const MIGRATIONS: &[MigrationNote] = &[
                  环境自检改用 `just doctor`（common 层的 doctor 已含 bque 检测）。update 会删掉未被\
                  改动过的 bque.just，本地改过的会保留并报冲突",
     },
+    MigrationNote {
+        version: "0.81.0",
+        summary: "`issue-sync` 不再是独立技能：它的脚本（`issue-pull.ps1` / `issue-push.ps1` / \
+                  `issue-common.ps1`）、导出模板与说明文档并入基线技能 `patch-handoff`\
+                  （`.agents/skills/patch-handoff/scripts/` 与 `references/issue-sync.md`），\
+                  因此每个项目都拿得到，不必再单独勾选",
+        action: "update 会删掉 `.agents/skills/issue-sync/` 整目录并从 manifest 的技能清单里清理该名字；\
+                 项目里凡是引用旧路径的说明（`.agents/skills/issue-sync/scripts/issue-push.ps1` 等）\
+                 改成 `.agents/skills/patch-handoff/scripts/`，其余调用参数与产物格式不变",
+    },
 ];
 
 /// 当前工具的版本（crate 版本即发布版本）
@@ -155,7 +165,8 @@ mod tests {
         assert!(notes_between("99.0.0", current_version()).is_empty());
     }
 
-    /// 表的版本必须能解析、按升序排列、字段非空——这是给未来的自己设的路障。
+    /// 表的版本必须能解析、按版本升序（同版本可有多条：一次发布可以带多个破坏性变更）、
+    /// 字段非空——这是给未来的自己设的路障。
     #[test]
     fn table_is_well_formed() {
         let mut last = (0u64, 0u64, 0u64);
@@ -163,7 +174,7 @@ mod tests {
             let v = parse_version(note.version).unwrap_or_else(|| {
                 panic!("迁移表里的版本 {} 不可解析", note.version);
             });
-            assert!(v > last, "迁移表必须按版本升序：{} 乱序", note.version);
+            assert!(v >= last, "迁移表必须按版本升序：{} 乱序", note.version);
             last = v;
             assert!(!note.summary.trim().is_empty());
             assert!(!note.action.trim().is_empty());
