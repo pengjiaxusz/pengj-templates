@@ -5119,6 +5119,8 @@ description = \"x\"
         assert!(zh_md.contains("回复前提交门禁"));
         assert!(zh_md.contains("规划模式（`/plan` / `/boost`）特别约束"));
         assert!(zh_md.contains("所有改动必须已提交并推送到远端（commit & push）"));
+        assert!(zh_md.contains("跨仓改动"));
+        assert!(zh_md.contains("禁止征询"));
 
         // 2. With commit_and_push = true (en)
         let mut opts_en = BTreeMap::new();
@@ -5135,6 +5137,8 @@ description = \"x\"
         .unwrap();
         assert!(en_md.contains("Pre-Response Commit Gate (Mandatory Barrier — No Accumulation)"));
         assert!(en_md.contains("Planning Modes (`/plan` / `/boost`) Enforcement"));
+        assert!(en_md.contains("Cross-Repository Changes"));
+        assert!(en_md.contains("No Consent Round-Trip"));
         assert!(en_md.contains(
             "**Task Conclusion**: Before concluding any task or delivering final responses"
         ));
