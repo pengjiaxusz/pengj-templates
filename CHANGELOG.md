@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.78.0...v0.79.0) (2026-11-21)
+
+
+### Features
+
+* **templates:** 新增 issue-sync 技能搬运 GitHub Issues ([44c42e8](https://github.com/pengjiaxusz/pengj-templates/commit/44c42e861c9b0ed9147d040563367595f0313ad2))
+
 ## [0.78.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.77.1...v0.78.0) (2026-11-21)
 
 
