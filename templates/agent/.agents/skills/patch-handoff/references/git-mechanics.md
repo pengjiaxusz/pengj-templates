@@ -17,7 +17,7 @@ Consequences:
 
 - A series landed with `git am` never passed the project's commit-time checks (formatting, language guards, message rules). The only remaining backstop is `pre-push`.
 - Do not try to repair in `pre-applypatch`: writing files and `git add`-ing them inside that hook does not reach the commit — `git am` runs `read-tree` afterwards, which wipes the index and leaves only a dirty worktree. That hook can reject, never amend.
-- Hooks live in `.git/config` (`core.hooksPath`). They do not travel with a clone. In a throwaway clone, run the repo's hook installer first, or `pre-push` simply does not exist.
+- Hooks live in `.git/config` (`core.hooksPath`). They are per-worktree config and do not travel. Confirm they are installed in the current worktree, or `pre-push` simply does not exist. (If the user explicitly told you to isolate in a clone, install hooks there first.)
 - Proof the backstop is live: the push output shows the hook's own log lines. No log lines means no hook.
 
 ## 2. `git am` failure triage
@@ -72,7 +72,7 @@ git reset --hard <remote>/<branch>
 
 `git pull` after a force push merges the old history back in; `reset --hard` is the correct verb. If the branch is a submodule pointer in a parent repo, expect the parent to show the submodule as modified — that is a pointer difference, not damage. Do not commit or revert the parent on the user's behalf.
 
-Also note: shared build caches (`CARGO_TARGET_DIR`, `node_modules` in a shared location) mean a throwaway clone can materialize gigabytes of build output. Clean it up in S8.
+Also note: shared build caches (`CARGO_TARGET_DIR`, `node_modules` in a shared location) let a fresh clone materialize gigabytes of build output all over again — one more reason to work in place instead of re-cloning. If you were explicitly told to isolate in a clone, clean up what you created in S8.
 {% else %}
 # 落补丁集时的 Git 机制
 
@@ -92,7 +92,7 @@ Also note: shared build caches (`CARGO_TARGET_DIR`, `node_modules` in a shared l
 
 - 用 `git am` 落的序列，天然没经过项目的提交期检查（格式、语言守卫、消息规范）。唯一还拦得住的兜底是 `pre-push`。
 - 别在 `pre-applypatch` 里修补：在钩子里写文件 + `git add` 进不了提交——`git am` 之后会 `read-tree` 冲掉索引，只留一棵脏工作树。这个钩子只能拦，不能改。
-- 钩子存在 `.git/config`（`core.hooksPath`），不随 clone 传播。临时克隆里必须先跑仓库的钩子安装脚本，否则 `pre-push` 等于不存在。
+- 钩子存在 `.git/config`（`core.hooksPath`），是每个工作区自己的配置，不随仓库传播。在当前工作区确认已装钩子，否则 `pre-push` 等于不存在。（若用户明确要求隔离到克隆，则先在克隆里装。）
 - 兜底真的生效的证据：推送输出里有钩子自己的日志行。没有日志行就是没钩子。
 
 ## 二、`git am` 失败诊断
@@ -147,5 +147,5 @@ git reset --hard <remote>/<branch>
 
 强推后不要 `git pull`——它会把旧历史合回来；正确的动词是 `reset --hard`。若这个分支在父仓里是子模块指针，父仓会显示子模块已修改——那是指针差异，不是损坏，不要替用户提交或回滚父仓。
 
-另外：共享构建缓存（`CARGO_TARGET_DIR`、放在公共位置的 `node_modules`）会让临时克隆凭空长出几十 GB 构建产物，S8 必须清掉。
+另外：共享构建缓存（`CARGO_TARGET_DIR`、放在公共位置的 `node_modules`）会让一次新克隆又把几十 GB 构建产物重新物化一遍——这也是就地干活、别重新克隆的理由之一。若被明确要求隔离到克隆，记得在 S8 清掉自己创建的东西。
 {% endif %}
