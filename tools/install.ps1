@@ -208,3 +208,8 @@ Write-Host (T "  pwsh -File .pengj-templates/scripts/doctor.ps1 -Fix   # 没有 
 Write-Host (T "  pengj-templates-cli gate check       # 直接运行代码语言守卫" "  pengj-templates-cli gate check       # run the code language guard directly") -ForegroundColor Gray
 Write-Host ""
 Write-Host (T "当前会话及新开的终端窗口均可直接使用。" "Ready to use in the current session and in new terminal windows.") -ForegroundColor Green
+
+# 10. Next time, upgrade from the CLI itself.
+Write-Host ""
+Write-Host (T "以后升级不用再跑这个脚本:" "Next time, upgrade without this script:") -ForegroundColor Cyan
+Write-Host (T "  pengj-templates-cli self update       # 二进制与 templates 一起换" "  pengj-templates-cli self update       # binary and templates replaced together") -ForegroundColor Gray

@@ -35,7 +35,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 /// 当前编译进二进制的版本号（release-please 写入 `Cargo.toml`）。
-const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const REPO: &str = "pengjiaxusz/pengj-templates";
 const API_URL: &str = "https://api.github.com/repos/pengjiaxusz/pengj-templates/releases/latest";
 const REDIRECT_URL: &str = "https://github.com/pengjiaxusz/pengj-templates/releases/latest";
@@ -305,12 +305,38 @@ fn notice_due(state: &State, now: u64, latest: &Version, interval: Duration) -> 
 // 联网取版本
 // ---------------------------------------------------------------------------
 
-fn agent(timeout: Duration) -> ureq::Agent {
-    ureq::AgentBuilder::new()
+/// 联网代理：`self update` 要下载几十 MB 的便携包，公司网络/代理环境下
+/// 读不到系统代理就直接失败，所以显式认这几个环境变量。
+///
+/// 只做「有就用」：解析不了就退化成直连，不因为代理配置写错而让命令不可用。
+fn proxy_from_env() -> Option<ureq::Proxy> {
+    let raw = [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+    ]
+    .iter()
+    .find_map(|name| env_string(name))?;
+    let url = if raw.contains("://") {
+        raw
+    } else {
+        format!("http://{raw}")
+    };
+    ureq::Proxy::new(&url).ok()
+}
+
+pub(crate) fn agent(timeout: Duration) -> ureq::Agent {
+    let mut builder = ureq::AgentBuilder::new()
         .user_agent(USER_AGENT)
         .timeout_connect(timeout.min(Duration::from_secs(3)))
-        .timeout(timeout)
-        .build()
+        .timeout(timeout);
+    if let Some(proxy) = proxy_from_env() {
+        builder = builder.proxy(proxy);
+    }
+    builder.build()
 }
 
 /// 取最新正式版版本号。
@@ -326,6 +352,26 @@ fn fetch_latest(timeout: Duration) -> Result<Version, String> {
         Ok(version) => Ok(version),
         Err(api_error) => fetch_from_redirect(REDIRECT_URL, timeout).map_err(|_| api_error),
     }
+}
+
+/// 供 `self update` 复用：同步取最新发布版版本号。
+pub fn latest_version(timeout: Duration) -> anyhow::Result<Version> {
+    fetch_latest(timeout).map_err(|error| anyhow::anyhow!("{error}"))
+}
+
+/// 升级完成后把缓存对齐到实际装上的版本。
+///
+/// 不写这一笔的话，下一次运行还是会照着旧缓存提示「有新版本可用」，
+/// 明明刚升过却一直在催。
+pub fn record_installed(version: &Version) {
+    let Some(path) = state_path() else {
+        return;
+    };
+    let mut state = load_state(&path);
+    state.latest_version = Some(version.to_string());
+    state.notified_version = Some(version.to_string());
+    state.notified_at = Some(unix_now());
+    save_state(&path, &state);
 }
 
 fn fetch_from_api(url: &str, timeout: Duration) -> Result<Version, String> {
@@ -565,15 +611,17 @@ pub fn run_check(options: &CheckOptions) -> anyhow::Result<bool> {
 // 文案
 // ---------------------------------------------------------------------------
 
-/// 升级命令：两种平台各一行，与本仓库一键安装脚本保持同一个地址。
+/// 升级命令：自升级已经内建，不再需要 curl 一条龙。
+///
+/// 保留一行回退地址：装着的还是「没有 `self update` 的旧版本」时，
+/// 只能靠引导脚本把自己换成新版，这一步之后就都用命令了。
 fn upgrade_hint() -> String {
-    if cfg!(windows) {
-        format!("升级: irm https://github.com/{REPO}/releases/latest/download/install.ps1 | iex")
+    let legacy = if cfg!(windows) {
+        format!("irm https://github.com/{REPO}/releases/latest/download/install.ps1 | iex")
     } else {
-        format!(
-            "升级: curl -fsSL https://github.com/{REPO}/releases/latest/download/install.sh | sh"
-        )
-    }
+        format!("curl -fsSL https://github.com/{REPO}/releases/latest/download/install.sh | sh")
+    };
+    format!("升级: pengj-templates-cli self update\n  旧版本不认这个命令时: {legacy}")
 }
 
 fn render_notice(latest: &Version, current: &Version) -> String {

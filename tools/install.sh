@@ -134,3 +134,8 @@ echo "$(t '提交门禁随此二进制一起发布，按项目分别激活:' 'Th
 echo "  just doctor --fix                 # $(t '在已生成的项目内' 'inside a generated project')"
 echo "  sh .pengj-templates/scripts/doctor.sh --fix        # $(t '没有 just 时' 'without just')"
 echo "  pengj-templates-cli gate check    # $(t '直接运行代码语言守卫' 'run the code language guard directly')"
+
+# 9. Next time, upgrade from the CLI itself.
+echo ""
+echo "$(t '以后升级不用再跑这个脚本:' 'Next time, upgrade without this script:')"
+echo "  pengj-templates-cli self update   # $(t '二进制与 templates 一起换' 'binary and templates replaced together')"

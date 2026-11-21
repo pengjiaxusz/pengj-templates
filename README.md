@@ -57,6 +57,17 @@ pengj-templates-cli create my-app --layers rust
 
 > An older install is replaced in place; the template tree and the binary are upgraded together, so you never end up with a new CLI against stale templates. To point at a different template root temporarily, set the `PENGJ_TEMPLATES` environment variable.
 
+Upgrading later does not need the installer again:
+
+```bash
+pengj-templates-cli self update                            # latest release; binary + templates replaced together
+pengj-templates-cli self update --version 0.79.0 --force   # roll back to a pinned version
+pengj-templates-cli self update --from-source --dry-run    # preview where a local build would land
+pengj-templates-cli self update --from-source              # inside the repo: cargo build --release, then install
+```
+
+`self update` replaces **the program installed on this machine**; the managed artifacts inside a project are a separate layer — run `pengj-templates-cli update --dir .` in that project to follow. Other copies on `PATH` (scoop, `~/.cargo/bin`, …) are refreshed too, so "upgraded but the command still runs the old version" cannot happen.
+
 ### CLI
 
 The examples below use `cargo run` (development mode). If you installed the CLI, just write `pengj-templates-cli`.
@@ -95,7 +106,7 @@ Options for the `agent` layer (only effective when the agent layer is selected):
 
 ### Update notices (the CLI's own version)
 
-The CLI checks GitHub for a newer release at most once a day and, when there is one, prints a single upgrade line after the command finishes (every Release ships `install.ps1` / `install.sh`, so re-running the installer is the upgrade — the binary and the template tree are replaced together, never "new CLI, stale templates").
+The CLI checks GitHub for a newer release at most once a day and, when there is one, prints the upgrade command `pengj-templates-cli self update` after the command finishes — the binary and the template tree are replaced together, never "new CLI, stale templates". The notice only appears when stderr is a terminal, so CI and pipelines stay quiet; `--no-update-check` / `PENGJ_NO_UPDATE_CHECK=1` turns it off entirely.
 
 ```bash
 pengj-templates-cli check-update          # check now (blocking); the exit code never depends on the answer

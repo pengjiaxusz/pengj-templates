@@ -97,6 +97,10 @@ create NAME LAYERS="rust" OUTPUT=".":
 update DIR=".":
     @bque run -- cargo run -q -p pengj-templates-cli -- update --dir {{DIR}}
 
+# 用当前代码升级本机的 CLI 与模板（日常开发替代 install.ps1：拿得到未发布的改动）
+upgrade:
+    @bque run -- cargo run -q -p pengj-templates-cli -- self update --from-source
+
 # MCP 安装与巡检（例：just mcp list   /   just mcp add renderdoc   /   just mcp doctor）
 mcp *ARGS:
     @bque run -- cargo run -q -p pengj-templates-cli -- mcp {{ARGS}}

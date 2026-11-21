@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 
+mod self_update;
 mod update;
 
 #[derive(Parser)]
@@ -227,6 +228,16 @@ enum Command {
     /// 后台更新检查本体（内部使用，不由用户直接调用）
     #[command(name = "__update-check", hide = true)]
     BackgroundUpdateCheck,
+    /// 更新本工具自身（二进制 + 运行时模板）
+    ///
+    /// 与 `update` 是两层事：`update` 把模板同步进项目，`self update` 换的是
+    /// 装在机器上的这个程序。默认取 GitHub Releases 的最新版，`--from-source`
+    /// 用当前工作区的构建产物（拿得到未发布的改动）。
+    #[command(name = "self")]
+    SelfCmd {
+        #[command(subcommand)]
+        cmd: SelfCommand,
+    },
 }
 
 #[derive(Subcommand, Clone)]
@@ -394,6 +405,34 @@ enum RepoCommand {
     },
 }
 
+#[derive(Subcommand, Clone)]
+enum SelfCommand {
+    /// 升级安装根下的 CLI 与模板（默认最新发布版；--from-source 用本机构建）
+    Update {
+        /// 用当前工作区的源码构建后安装，而不是下载发布包
+        #[arg(long = "from-source")]
+        from_source: bool,
+        /// 指定版本（回滚用；缺省取最新发布版）
+        #[arg(long, value_name = "VERSION")]
+        version: Option<String>,
+        /// 同版本也重装、允许降级
+        #[arg(long)]
+        force: bool,
+        /// 只打印计划，不落盘
+        #[arg(long = "dry-run")]
+        dry_run: bool,
+        /// 不刷新 PATH 上的其它副本
+        #[arg(long = "no-path-refresh")]
+        no_path_refresh: bool,
+        /// --from-source 的工作区根（缺省从当前目录向上找）
+        #[arg(long, value_name = "DIR")]
+        workspace: Option<PathBuf>,
+        /// 查询版本的联网超时（秒，默认 8）
+        #[arg(long, value_name = "SECONDS")]
+        timeout: Option<u64>,
+    },
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     // 后台更新检查本体：先于一切分发处理，不加载模板、也不会再触发一次检查
@@ -406,7 +445,7 @@ fn main() -> anyhow::Result<()> {
     let skip = cli.no_update_check
         || matches!(
             cli.command,
-            Command::Gate { .. } | Command::CheckUpdate { .. }
+            Command::Gate { .. } | Command::CheckUpdate { .. } | Command::SelfCmd { .. }
         );
     update::begin(skip);
     let result = run(cli);
@@ -427,6 +466,10 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     // repo 子命令只作用于项目目录，不依赖模板目录，提前分发
     if let Command::Repo { cmd } = &cli.command {
         return cmd_repo(cmd.clone());
+    }
+    // self 子命令作用于装在机器上的程序本身，同样不依赖模板目录
+    if let Command::SelfCmd { cmd } = &cli.command {
+        return cmd_self(cmd.clone());
     }
     // mcp 子命令作用于机器上的客户端配置，不依赖模板目录，提前分发
     if let Command::Mcp { cmd } = &cli.command {
@@ -580,6 +623,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Subrepo { .. } => unreachable!("subrepo 子命令已在加载模板前分发"),
         Command::Worktree { .. } => unreachable!("worktree 子命令已在加载模板前分发"),
         Command::CheckUpdate { .. } => unreachable!("check-update 子命令已在加载模板前分发"),
+        Command::SelfCmd { .. } => unreachable!("self 子命令已在加载模板前分发"),
         Command::BackgroundUpdateCheck => unreachable!("后台更新检查已在入口处分发"),
     }
 }
@@ -1067,6 +1111,28 @@ fn load_catalog() -> anyhow::Result<pengj_mcp::Catalog> {
                 .map(|d| d.join("catalog"))
         });
     pengj_mcp::Catalog::load(dir.as_deref()).context("加载 MCP 配方目录失败")
+}
+
+fn cmd_self(cmd: SelfCommand) -> anyhow::Result<()> {
+    match cmd {
+        SelfCommand::Update {
+            from_source,
+            version,
+            force,
+            dry_run,
+            no_path_refresh,
+            workspace,
+            timeout,
+        } => self_update::run(&self_update::Options {
+            from_source,
+            version,
+            force,
+            dry_run,
+            no_path_refresh,
+            workspace,
+            timeout,
+        }),
+    }
 }
 
 fn cmd_mcp(cmd: McpCommand) -> anyhow::Result<()> {

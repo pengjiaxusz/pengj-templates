@@ -57,6 +57,17 @@ pengj-templates-cli create my-app --layers rust
 
 > 已有旧版会被脚本热替换；模板目录与二进制一起升级，不会出现「CLI 新、模板旧」的错配。想临时用别的模板根目录，设 `PENGJ_TEMPLATES` 环境变量即可覆盖。
 
+装好之后升级不必再回到安装脚本：
+
+```bash
+pengj-templates-cli self update                            # 最新发布版，二进制 + templates 一起换
+pengj-templates-cli self update --version 0.79.0 --force   # 回滚到指定版本
+pengj-templates-cli self update --from-source --dry-run    # 先看本机构建会落到哪
+pengj-templates-cli self update --from-source              # 在仓库里跑：cargo build --release 后装到本机
+```
+
+`self update` 换的是**装在机器上的这个程序**；项目里的受管产物是另一层，要跟进就在项目里跑 `pengj-templates-cli update --dir .`。升级完会自动刷新 `PATH` 上的其它副本（scoop / `~/.cargo/bin` 之类），不会出现「升了但敲命令还是旧的」。
+
 ### CLI
 
 以下示例用 `cargo run`（开发态）。已安装的用户直接写 `pengj-templates-cli` 即可。
@@ -93,7 +104,7 @@ cargo run -p pengj-templates-cli -- check-update                       # 查 CLI
 
 ### 更新检查（CLI 自身版本）
 
-CLI 自带更新检查：每天最多问一次 GitHub「有没有新版本」，有更新就在命令跑完后提示一行升级命令（Release 里每版都带 `install.ps1` / `install.sh`，重跑安装脚本即完成升级——二进制与模板一起换，不会出现「CLI 新、模板旧」）。
+CLI 自带更新检查：每天最多问一次 GitHub「有没有新版本」，有更新就在命令跑完后提示升级命令 `pengj-templates-cli self update`——二进制与模板一起换，不会出现「CLI 新、模板旧」。检查只在 stderr 是终端时提示，CI 与管道里完全安静；`--no-update-check` / `PENGJ_NO_UPDATE_CHECK=1` 可关掉。
 
 ```bash
 pengj-templates-cli check-update          # 立即检查（同步联网，退出码不受结果影响）

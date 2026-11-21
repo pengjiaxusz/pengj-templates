@@ -19,3 +19,11 @@ anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ureq.workspace = true
+
+# `self update` 的解包能力按平台分开：Windows 的便携包是 zip，Unix 是 tar.gz。
+[target.'cfg(windows)'.dependencies]
+zip.workspace = true
+
+[target.'cfg(not(windows))'.dependencies]
+tar.workspace = true
+flate2.workspace = true

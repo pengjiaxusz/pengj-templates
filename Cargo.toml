@@ -16,6 +16,11 @@ thiserror = "2"
 # 更新检查只需要一次 HTTPS GET；去掉 gzip/字符集等附加特性，避免拖大依赖树
 ureq = { version = "2", default-features = false, features = ["tls"] }
 sha2 = "0.11"
+# `self update` 要解开发布便携包：Windows 是 zip，Unix 是 tar.gz。
+# 按平台分别引入，各平台只编自己需要的那一套。
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tar = "0.4"
+flate2 = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 toml = "0.8"
