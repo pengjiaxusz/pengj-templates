@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.79.0...v0.80.0) (2026-11-21)
+
+
+### Features
+
+* **templates:** 新增 patch-handoff 技能验收离线补丁交接包 ([d1018c6](https://github.com/pengjiaxusz/pengj-templates/commit/d1018c6da1e9f6022f13a20f392f5e1dfe1a54fb))
+
 ## [0.79.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.78.0...v0.79.0) (2026-11-21)
 
 
