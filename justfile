@@ -50,11 +50,11 @@ export CARGO_TARGET_DIR := `pengj-templates-cli worktree target-dir --dir .`
 # 运行提交门禁：gate <子命令>
 # 子命令：audit（代码语言守卫）/ commit-msg <文件> / fmt / hooks install / selftest
 gate *ARGS:
-    cargo run -q -p pengj-templates-cli -- gate {{ARGS}}
+    @just q-run cargo run -q -p pengj-templates-cli -- gate {{ARGS}}
 
 # 安装 git 钩子（core.hooksPath=.githooks）
 gate-hooks:
-    cargo run -q -p pengj-templates-cli -- gate hooks install
+    @just q-run cargo run -q -p pengj-templates-cli -- gate hooks install
 
 # ---------- Rust 构建与检查 ----------
 
@@ -90,19 +90,19 @@ build FLAGS="":
 
 # 列出可用层
 layers:
-    cargo run -q -p pengj-templates-cli -- list-layers
+    @just q-run cargo run -q -p pengj-templates-cli -- list-layers
 
 # 生成新项目（例：just create my-app  或  just create my-app common,gate,agent  或  just create my-app rust-workspace "D:\out"）
 create NAME LAYERS="rust" OUTPUT=".":
-    cargo run -q -p pengj-templates-cli -- create {{NAME}} --layers {{LAYERS}} --output {{OUTPUT}}
+    @just q-run cargo run -q -p pengj-templates-cli -- create {{NAME}} --layers {{LAYERS}} --output {{OUTPUT}}
 
 # 同步模板更新到已生成的项目（例：just update ./my-app）
 update DIR=".":
-    cargo run -q -p pengj-templates-cli -- update --dir {{DIR}}
+    @just q-run cargo run -q -p pengj-templates-cli -- update --dir {{DIR}}
 
 # MCP 安装与巡检（例：just mcp list   /   just mcp add renderdoc   /   just mcp doctor）
 mcp *ARGS:
-    cargo run -q -p pengj-templates-cli -- mcp {{ARGS}}
+    @just q-run cargo run -q -p pengj-templates-cli -- mcp {{ARGS}}
 
 # ---------- 综合 ----------
 

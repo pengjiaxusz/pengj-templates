@@ -154,7 +154,7 @@
     ".pengj-templates\\scripts\\doctor.sh": "09a0cced4d15de78edafd302364ce559444ca62026fb66fd2cb0243213fb1b2d",
     "AGENTS.md": "cea8bbea56d5ebb930f5211c8f43ebdb3a6240eb255831a0d94cd47bbf03fe10",
     "Cargo.toml": "53130b1a688cbae224b0ebe55f910c099580b36f7390b690783b298a27bf3cb2",
-    "justfile": "b76f6e95c87a049600e1bacae53dfadd598210b7aaed96b7084301e9d59cf546",
+    "justfile": "ae26a36d9f5530a82c4c4d5a855736a1f3e6b81d25576d31b082ce637af40946",
     "rust-toolchain.toml": "7271c211635386654befb235ed54aef12efe46376c4fe41c497c8d23bc1572ec"
   }
 }
