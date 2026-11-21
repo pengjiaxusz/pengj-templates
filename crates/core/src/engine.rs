@@ -390,7 +390,7 @@ const SKILLS_ROOT: &str = ".agents/skills";
 /// 这些技能承担的是「项目离开模板仓库后仍能自举」的能力，一旦缺失，
 /// 项目只能回头找外部工具才能完成校验，与技能本身的设计目标相悖。
 /// 显式传空技能列表（`skills: []`）视为完全不要技能，此时不注入基线。
-const BASELINE_SKILLS: &[&str] = &["mcp-bootstrap"];
+const BASELINE_SKILLS: &[&str] = &["mcp-bootstrap", "patch-handoff"];
 
 /// 从选项解析选中的技能集合；`None` 表示未指定（包含全部技能，向后兼容）
 fn selected_skills(options: &BTreeMap<String, serde_json::Value>) -> Option<BTreeSet<String>> {
@@ -3040,7 +3040,7 @@ mod tests {
 
     #[test]
     fn ensure_baseline_skills_updates_persisted_option() {
-        let available: BTreeSet<String> = ["caveman", "mcp-bootstrap"]
+        let available: BTreeSet<String> = ["caveman", "mcp-bootstrap", "patch-handoff"]
             .iter()
             .map(|s| s.to_string())
             .collect();
@@ -3049,7 +3049,7 @@ mod tests {
         ensure_baseline_skills(&mut opts, &available);
         let arr = opts["skills"].as_array().unwrap();
         let names: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
-        assert_eq!(names, vec!["caveman", "mcp-bootstrap"]);
+        assert_eq!(names, vec!["caveman", "mcp-bootstrap", "patch-handoff"]);
 
         // 模板里没有该技能时不应凭空写入
         let empty_available = BTreeSet::new();
