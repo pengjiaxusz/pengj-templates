@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | `common` | 所有仓库共用：`.gitignore`、`.pengj-templates/scripts/doctor.*` 环境自检脚本 | 所有仓库 |
 | `just` | 唯一的根 `justfile` 主入口：托管块框架区 + 块外项目专属区，按层 import 语言/排队配方；提供 `doctor` 入口 | 需要统一任务入口的仓库 |
-| `bque` | Windows 全局编译排队：`.pengj-templates/just/bque.just`（`queue-*` / `queue-doctor` / `q-run` / `q-bench`） | 需要跨工作树排队与纯净跑分 |
+| `bque` | Windows 全局编译排队，只做声明：并入 `bque` 技能、让 `doctor` 检测本机安装；不产出配方——`just` 包装带不动 bque 自己的 `--cwd` / `--observer` / `--priority`，重型命令直接 `bque run --` | 需要跨工作树排队与纯净跑分 |
 | `gate` | 提交门禁：`.pengj-templates/gate.toml` 配置 + `.githooks/*` 钩子（约定式提交校验、代码语言守卫、rustfmt），纯 Rust 实现、零第三方依赖；自动带上 `ci` 层在服务端执行同一套规则 | 需要 Git 钩子的仓库 |
 | `ci` | 服务端门禁：GitHub Actions 在 PR/合并队列/主干推送时校验提交标题与代码语言，附必需状态检查 ruleset 与 PR 自查模板 | 托管在 GitHub 上的仓库 |
 | `agent` | AI 编码助手规范（`AGENTS.md`），按所选层/选项生成 rust、中文编程等约定 | 希望 agent 遵循规范 |
@@ -81,7 +81,7 @@ cargo run -p pengj-templates-cli -- worktree create feature-a --dir ./my-app  # 
 cargo run -p pengj-templates-cli -- check-update                       # 查 CLI 自身有没有新版本
 ```
 
-**just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`bque` / `gate` / `rust` / `rust-workspace` / `subrepo` / `worktree` 层分别产出 `.pengj-templates/just/bque.just`、`gate.just`、`rust.just`、`rust-workspace.just`、`subrepo.just`、`worktree.just`，全部依赖 `just`；`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾某个层会自动带上它在 `layer.toml` 里声明的配套技能（`skills = [...]`），层不会孤零零落地而没有文档：`just` → `write-just`、`bque` → `bque`、`subrepo` → `subrepo-sync`、`worktree` → `worktree`；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。
+**just / bque 排队装配**：根 `justfile` 由 `just` 层统一产出，框架区在 `# PENGJ_TEMPLATE_START/END` 托管块内（`set shell`、`default`、按层条件 `import`），块外的项目专属区归用户所有、`update` 只替换块内。`gate` / `rust` / `rust-workspace` / `subrepo` / `worktree` 层分别产出 `.pengj-templates/just/gate.just`、`rust.just`、`rust-workspace.just`、`subrepo.just`、`worktree.just`，全部依赖 `just`；`bque` 层**有意不产出配方**，只做排队声明（技能 + doctor 检测）——`just` 包装能转发命令却带不动 bque 自己的 `--cwd` / `--observer` / `--priority`，所以重型命令在项目配方里直接 `bque run -- <cmd>`。`options["just_recipes"] = "none"` 可关闭语言配方导入，让已有自定义编排的老项目只接入排队基础设施。勾某个层会自动带上它在 `layer.toml` 里声明的配套技能（`skills = [...]`），层不会孤零零落地而没有文档：`just` → `write-just`、`bque` → `bque`、`subrepo` → `subrepo-sync`、`worktree` → `worktree`；`audit` 会提示半接入与缺少 justfile 托管块的项目。bque 是 Windows 全局锁，Unix / CI 下同一批配方直跑透传。详见 [`templates/README.md`](templates/README.md)。
 
 **子仓库与工作树**：`subrepo` 层只产出一份机器可读的登记表（`.pengj-templates/subrepo.toml`，托管说明块 + 归项目的 `[[subrepo]]` 条目），技能、配方与体检命令读的都是它，因此三方对「有哪些外部子仓库」永远不会分歧。`worktree` 层把共享编译目录定为**主工作树的 `target/`**，由构建配方注入 `CARGO_TARGET_DIR` 到链接工作树——推导只有一份，配方与 `just wt-check` 读同一个值。共享的只有中间产物：最终二进制在该目录里路径固定，并行工作树会互相覆盖，运行产物的隔离仍归项目自理；同时因为目录在主工作树里，`cargo clean` 会一并清掉所有工作树的中间产物（ADR 0004）。两层都**不**往 `.cargo/config.toml` 里写 `target-dir`：那个文件走结构化合并，重复的表头会让整文件不予写盘。
 
@@ -213,7 +213,7 @@ gh api -X POST "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/rul
 | `.pengj-templates/manifest.json` | 引擎写入的项目清单：层列表、选项与模板托管文件哈希 |
 | `.pengj-templates/gate.toml` | `gate` 层产出的门禁配置（列入 `update_ignore`：配置值归项目所有） |
 | `.pengj-templates/scripts/doctor.sh` / `.ps1` + `doctor.d/` | `common` 层的环境自检本体与自定义检查扩展点 |
-| `.pengj-templates/just/*.just` | `bque` / `gate` / `rust` / `rust-workspace` / `subrepo` / `worktree` 层产出的配方模块，由根 `justfile` 条件 import |
+| `.pengj-templates/just/*.just` | `gate` / `rust` / `rust-workspace` / `subrepo` / `worktree` 层产出的配方模块，由根 `justfile` 条件 import |
 | `.pengj-templates/subrepo.toml` | `subrepo` 层的机器可读登记表（托管说明块 + 归项目的条目） |
 | `.githooks/` | `gate` 层的 git 钩子，`core.hooksPath` 指向它 |
 

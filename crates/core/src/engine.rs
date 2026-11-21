@@ -6645,7 +6645,7 @@ body
                 .unwrap();
         assert!(contains_cjk(&zh_lint), "zh 项目应保留中文文案");
         let zh_just =
-            std::fs::read_to_string(tmp.join("lang_zh").join(".pengj-templates/just/bque.just"))
+            std::fs::read_to_string(tmp.join("lang_zh").join(".pengj-templates/just/gate.just"))
                 .unwrap();
         assert!(contains_cjk(&zh_just), "zh 项目应保留中文注释");
 

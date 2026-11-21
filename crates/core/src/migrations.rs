@@ -61,6 +61,16 @@ pub const MIGRATIONS: &[MigrationNote] = &[
                  已指向项目内之后可直接删除。此后在主工作树里 `cargo clean` 会一并清掉所有工作树的\
                  中间产物",
     },
+    MigrationNote {
+        version: "0.81.0",
+        summary: "bque 层不再产出 `.pengj-templates/just/bque.just`：`q-run` / `q-bench` / `queue-*` \
+                  配方撤掉，根 justfile 托管块里的 bque import 随 update 一起消失（该包装只能转发命令，\
+                  传不进 bque 自己的 `--cwd` / `--observer` / `--priority`）",
+        action: "项目专属区里对 `just q-run` / `just q-bench` / `just queue-*` 的调用改成原生 \
+                 `bque run -- <cmd>` / `bque bench -- <cmd>` / `bque status|clean|pause|resume`；\
+                 环境自检改用 `just doctor`（common 层的 doctor 已含 bque 检测）。update 会删掉未被\
+                 改动过的 bque.just，本地改过的会保留并报冲突",
+    },
 ];
 
 /// 当前工具的版本（crate 版本即发布版本）

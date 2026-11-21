@@ -27,10 +27,12 @@ Applies when `bque` is in the project's `layers`. On Windows the recipe takes th
 | `ctest --output-on-failure` | `just test` | `bque run -- ctest …` | `ctest …` |
 | `pnpm build` / `tsc` | `just build` | `bque run -- pnpm build` | `pnpm build` |
 | `cargo fmt` | `just fmt` | direct (lightweight) | direct |
-| ad-hoc heavy command | `just q-run <cmd>` | `bque run -- <cmd>` | `<cmd>` |
-| ad-hoc benchmark | `just q-bench <cmd>` | `bque bench -- <cmd>` | `<cmd>` |
+| ad-hoc heavy command | — (no wrapper) | `bque run -- <cmd>` | `<cmd>` |
+| ad-hoc benchmark | — (no wrapper) | `bque bench -- <cmd>` | `<cmd>` |
 
-Do not add a `--` separator after `q-run` / `q-bench` — it becomes part of the wrapped command.
+Ad-hoc commands have no wrapper recipe: a `just` wrapper can forward the command but not bque's own
+flags (`--cwd`, `--observer`, `--priority`), so the shell is the right place. Promote a recurring one
+to a recipe of its own.
 
 ## 2. Attribute pairs
 
@@ -83,10 +85,11 @@ This is the current layer's legitimate downgrade, not the recommended end state.
 | `ctest --output-on-failure` | `just test` | `bque run -- ctest …` | `ctest …` |
 | `pnpm build` / `tsc` | `just build` | `bque run -- pnpm build` | `pnpm build` |
 | `cargo fmt` | `just fmt` | 直跑（轻量） | 直跑 |
-| 临时重命令 | `just q-run <命令>` | `bque run -- <命令>` | `<命令>` |
-| 临时跑分 | `just q-bench <命令>` | `bque bench -- <命令>` | `<命令>` |
+| 临时重命令 | —（无包装配方） | `bque run -- <命令>` | `<命令>` |
+| 临时跑分 | —（无包装配方） | `bque bench -- <命令>` | `<命令>` |
 
-`q-run` / `q-bench` 后面不要加 `--`——它会成为被包装命令的一部分。
+临时命令不设包装配方：`just` 包装只能转发命令，传不进 bque 自己的 `--cwd` / `--observer` /
+`--priority`，这类调用本来就该在命令行里写。反复要用的，就单独写成一条配方。
 
 ## 2. 属性成对
 
