@@ -21,7 +21,7 @@ Only the last class is dangerous: it takes a claim that no green command contrad
 2. **Wrong baseline SHA.** The patch context often reveals the real base — the commit where it applies cleanly.
 3. **Gates named incorrectly.** The doc names commands the project does not have, or skips the formatting step that CI enforces.
 4. **Counts inflated.** "N tests passing" refers to an older run, or to a subset, or counts ignored tests.
-5. **Synthetic authorship.** Placeholder identity like `dev@project.local`, which must not reach the shared branch.
+5. **Synthetic authorship.** Placeholder identity like `dev@project.local`, or a name the upstream agent invented. Fix with `scripts/normalize-authors.sh <base>` **without** name/email, so only the repo-owner identity resolved from `origin` + `git config user.email` reaches the shared branch.
 
 ## 3. Acceptance criteria you write
 
@@ -73,7 +73,7 @@ Stop before touching the remote when: the series applies but the mapping is brok
 2. **基线 SHA 写错。** 补丁上下文往往会暴露真实基线——就是它能干净应用的那个提交。
 3. **门禁名写错。** 文档点的命令项目里没有，或漏掉 CI 强制的那道格式检查。
 4. **数字虚高。** 「N 个测试通过」来自更早一轮、或某个子集、或把 ignored 也算进去了。
-5. **合成作者。** 类似 `dev@project.local` 的占位身份，绝不能进共享分支。
+5. **合成作者。** 类似 `dev@project.local` 的占位身份，或上游 agent 自己编的名字。用 `scripts/normalize-authors.sh <base>` **不传名字/邮箱**修正，只让从 `origin` + `git config user.email` 解析出的仓库拥有者身份进入共享分支。
 
 ## 三、你自己写验收判据
 
