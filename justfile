@@ -7,9 +7,6 @@ set shell := ["pwsh", "-NoProfile", "-Command"]
 set allow-duplicate-recipes := true
 
 
-import '.pengj-templates/just/bque.just'
-
-
 
 import '.pengj-templates/just/worktree.just'
 
@@ -32,7 +29,7 @@ doctor *ARGS:
 
 # ---------------------------------------------------------------------------
 # 项目专属区：模板更新只替换上方托管块，本区域归项目所有、完整保留。
-# 重型任务统一走 `just q-run <cmd>`，性能跑分走 `just q-bench <cmd>`。
+# 重型任务直接走 `bque run -- <cmd>`，性能跑分走 `bque bench -- <cmd>`（bque 层不再产出包装配方）。
 # ---------------------------------------------------------------------------
 
 # justfile for pengj-templates
@@ -50,11 +47,11 @@ export CARGO_TARGET_DIR := `pengj-templates-cli worktree target-dir --dir .`
 # 运行提交门禁：gate <子命令>
 # 子命令：audit（代码语言守卫）/ commit-msg <文件> / fmt / hooks install / selftest
 gate *ARGS:
-    @just q-run cargo run -q -p pengj-templates-cli -- gate {{ARGS}}
+    @bque run -- cargo run -q -p pengj-templates-cli -- gate {{ARGS}}
 
 # 安装 git 钩子（core.hooksPath=.githooks）
 gate-hooks:
-    @just q-run cargo run -q -p pengj-templates-cli -- gate hooks install
+    @bque run -- cargo run -q -p pengj-templates-cli -- gate hooks install
 
 # ---------- Rust 构建与检查 ----------
 
@@ -90,19 +87,19 @@ build FLAGS="":
 
 # 列出可用层
 layers:
-    @just q-run cargo run -q -p pengj-templates-cli -- list-layers
+    @bque run -- cargo run -q -p pengj-templates-cli -- list-layers
 
 # 生成新项目（例：just create my-app  或  just create my-app common,gate,agent  或  just create my-app rust-workspace "D:\out"）
 create NAME LAYERS="rust" OUTPUT=".":
-    @just q-run cargo run -q -p pengj-templates-cli -- create {{NAME}} --layers {{LAYERS}} --output {{OUTPUT}}
+    @bque run -- cargo run -q -p pengj-templates-cli -- create {{NAME}} --layers {{LAYERS}} --output {{OUTPUT}}
 
 # 同步模板更新到已生成的项目（例：just update ./my-app）
 update DIR=".":
-    @just q-run cargo run -q -p pengj-templates-cli -- update --dir {{DIR}}
+    @bque run -- cargo run -q -p pengj-templates-cli -- update --dir {{DIR}}
 
 # MCP 安装与巡检（例：just mcp list   /   just mcp add renderdoc   /   just mcp doctor）
 mcp *ARGS:
-    @just q-run cargo run -q -p pengj-templates-cli -- mcp {{ARGS}}
+    @bque run -- cargo run -q -p pengj-templates-cli -- mcp {{ARGS}}
 
 # ---------- 综合 ----------
 
