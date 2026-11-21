@@ -1,6 +1,6 @@
 {
   "tool": "pengj-templates",
-  "version": "0.80.0",
+  "version": "0.80.1",
   "project_name": "pengj-templates",
   "layers": [
     "common",

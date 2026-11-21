@@ -15,6 +15,8 @@ Usage: check-just.sh [--dir <project-root>]
 Scan <project-root>/justfile and <project-root>/.pengj-templates/just/*.just
 for raw heavy commands (cargo run/build/clippy/test/bench/check, ninja,
 cmake --build, ctest, pnpm build, tsc) that are not wrapped by bque.
+Both `bque run -- <command>` and the layer's `just q-run <command>` /
+`just q-bench <command>` wrappers count as queued.
 
 Rules:
   - [unix] recipes pass through raw commands by design and are skipped.
@@ -22,7 +24,8 @@ Rules:
     recipe or in an un-attributed recipe is an ERROR.
   - When the bque layer is absent, the same finding is only an INFO note
     (the legitimate downgrade of the current layer).
-  - A bque call inside a [unix] recipe is a WARNING.
+  - A direct bque call inside a [unix] recipe is a WARNING; `just q-run`
+    and `just q-bench` are not, because they already pass through on Unix.
 
 Exit codes:
   0  no errors (info/warning notes may still be printed)
@@ -130,9 +133,13 @@ FNR == 1 {
              cmd ~ /(^|[^[:alnum:]_-])ctest([^[:alnum:]_-]|$)/ || \
              cmd ~ /pnpm[[:space:]]+(build|run)/ || \
              cmd ~ /(^|[^[:alnum:]_-])tsc([^[:alnum:]_-]|$)/)
-    wrapped = (cmd ~ /bque[[:space:]]+(run|bench)[[:space:]]+--/)
+    # Both direct bque calls (including --cwd style) and the q-run / q-bench
+    # q-bench recipes count as queued.
+    direct_bque = (cmd ~ /bque[[:space:]]+(run|bench)[[:space:]]+/)
+    just_queue  = (cmd ~ /(^|[[:space:]])just[[:space:]]+q-(run|bench)([[:space:]]|$)/)
+    wrapped = (direct_bque || just_queue)
 
-    if (wrapped && current == "unix") {
+    if (direct_bque && current == "unix") {
         warnings++
         print "WARN: " FILENAME ":" FNR ": bque call inside a [unix] recipe; Unix should pass through"
         next
