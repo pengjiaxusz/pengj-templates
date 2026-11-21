@@ -43,9 +43,9 @@ Four blocks, always:
 1. **Where and what** — which worktree, which base, which commit range, in what order.
 2. **Per-file findings** — `file : problem : fix`, one row per repair, including repairs that were purely mechanical.
 3. **Gate results** — each command with its conclusion and the test count.
-4. **Open items** — documentation errors, behavioural gaps tests cannot see, anything the user must decide.
+4. **Open items** — documentation errors, behavioural gaps tests cannot see, anything the user must decide. Each row carries the `#number` of the issue you filed for it, plus its final state: closed with the fold-back SHA, or open with a label and an owner.
 
-Never summarise a landed series as "implemented and verified" without disclosing what was broken on arrival. The user reads the report to decide whether to trust the upstream agent again.
+Never summarise a landed series as "implemented and verified" without disclosing what was broken on arrival. The user reads the report to decide whether to trust the upstream agent again — and the issue numbers are what let them act on it after the report is read once.
 
 ## 5. When to stop and ask
 
@@ -95,9 +95,9 @@ Stop before touching the remote when: the series applies but the mapping is brok
 1. **在哪、干了什么** —— 哪个工作树、哪个基线、什么提交区间、什么顺序。
 2. **逐文件结论** —— `文件 : 问题 : 修法`，一条修复一行，纯机械的也要写。
 3. **门禁结果** —— 每条命令的结论与测试通过数。
-4. **遗留问题** —— 文档错误、测试看不见的行为缺口、需要用户拍板的事。
+4. **遗留问题** —— 文档错误、测试看不见的行为缺口、需要用户拍板的事。每行都要带对应 issue 的 `#编号` 与终态：带折回 SHA 的已关闭，或带标签 + 责任人的仍开启。
 
-绝不能把落地的补丁集只写成「已实现并验收通过」而不披露到手时坏在哪。用户是据此判断能不能再信任上游那个 agent。
+绝不能把落地的补丁集只写成「已实现并验收通过」而不披露到手时坏在哪。用户是据此判断能不能再信任上游那个 agent——而 issue 编号，是让报告被读完一遍之后仍然能被追下去的抓手。
 
 ## 五、什么时候停下来问
 
