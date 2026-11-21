@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 
+mod sync_commit;
 mod update;
 
 #[derive(Parser)]
@@ -94,6 +95,15 @@ enum Command {
         /// 纯受管技能资产与脚本直接对齐覆盖（即使无托管块也不判定为冲突）
         #[arg(long)]
         sync_skills: bool,
+        /// 同步完成后把本次改动精确暂存并提交（只暂存报告点名的路径，绝不 git add .）
+        #[arg(long)]
+        commit: bool,
+        /// 提交后立即推送（隐含 --commit）
+        #[arg(long)]
+        push: bool,
+        /// 覆盖自动推导的提交信息（配合 --commit；默认按门禁规则推导）
+        #[arg(long, requires = "commit")]
+        message: Option<String>,
     },
     /// 给已纳管项目增量加层（合并层清单后按新层重渲染，不做全量重纳管）
     AddLayer {
@@ -484,10 +494,19 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             dir,
             dirs,
             sync_skills,
+            commit,
+            push,
+            message,
         } => {
             let targets = match dirs {
                 Some(ds) if !ds.is_empty() => ds,
                 _ => vec![dir],
+            };
+            let finish = sync_commit::FinishOptions {
+                // --push 单独给出时同样要提交，否则推送的是上一次提交
+                commit: commit || push,
+                push,
+                message,
             };
             for d in &targets {
                 if targets.len() > 1 {
@@ -496,7 +515,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
                         d.display()
                     );
                 }
-                cmd_update(&templates, d, sync_skills)?;
+                cmd_update(&templates, d, sync_skills, &finish)?;
             }
             Ok(())
         }
@@ -715,6 +734,7 @@ fn cmd_update(
     templates: &pengj_core::Templates,
     dir: &Path,
     sync_skills: bool,
+    finish: &sync_commit::FinishOptions,
 ) -> anyhow::Result<()> {
     let opts = pengj_core::UpdateOptions { sync_skills };
     let report = pengj_core::update_project_with_options(templates, dir, &opts)
@@ -752,7 +772,23 @@ fn cmd_update(
         println!("  [清理] 技能 {name}（模板中已无此技能，已从技能清单移除）");
     }
     print_migrations(&report.migrations);
+    print_finish(sync_commit::finish(dir, &report, finish)?);
     Ok(())
+}
+
+/// 打印收口结果：暂存/提交/推送，或「没有差异所以什么都没做」。
+fn print_finish(report: Option<sync_commit::FinishReport>) {
+    let Some(report) = report else {
+        return;
+    };
+    if report.staged == 0 {
+        println!("  [提交] 本次同步没有产生差异，跳过提交与推送");
+        return;
+    }
+    println!("  [提交] {}（{} 个文件）", report.message, report.staged);
+    if report.pushed {
+        println!("  [推送] 已推送到远端");
+    }
 }
 
 /// 打印跨过的破坏性模板变更。这些变更引擎无法自动迁移，只能由人看一眼。
