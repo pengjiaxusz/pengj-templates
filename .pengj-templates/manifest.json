@@ -1,6 +1,6 @@
 {
   "tool": "pengj-templates",
-  "version": "0.76.1",
+  "version": "0.80.0",
   "project_name": "pengj-templates",
   "layers": [
     "common",
@@ -148,7 +148,7 @@
     ".pengj-templates\\scripts\\doctor.d\\README.md": "ad85d611af101327951a12b7bd1c186bdc6cf4da2ddd781b5fdbe4e9fc4361f6",
     ".pengj-templates\\scripts\\doctor.ps1": "ba89071f75d9a868ebb63f1e6a78df369812233350ef7d65b1315aaa3e610615",
     ".pengj-templates\\scripts\\doctor.sh": "09a0cced4d15de78edafd302364ce559444ca62026fb66fd2cb0243213fb1b2d",
-    "AGENTS.md": "134e32fded5699e08839ecc80c656c915807022c89df0ec0822eb76ae9d84431",
+    "AGENTS.md": "cea8bbea56d5ebb930f5211c8f43ebdb3a6240eb255831a0d94cd47bbf03fe10",
     "Cargo.toml": "53130b1a688cbae224b0ebe55f910c099580b36f7390b690783b298a27bf3cb2",
     "justfile": "b76f6e95c87a049600e1bacae53dfadd598210b7aaed96b7084301e9d59cf546",
     "rust-toolchain.toml": "7271c211635386654befb235ed54aef12efe46376c4fe41c497c8d23bc1572ec"
