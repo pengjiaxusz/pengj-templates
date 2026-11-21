@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.80.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.80.0...v0.80.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **ci:** 兜住失效 base 与反引号命令替换 ([af07f5c](https://github.com/pengjiaxusz/pengj-templates/commit/af07f5c95b5234124c4a80f8411e82992b1fed58))
+
 ## [0.80.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.79.0...v0.80.0) (2026-11-21)
 
 
