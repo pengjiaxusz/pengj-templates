@@ -39,9 +39,10 @@ Always push immediately after committing to prevent work loss.
 - **Pre-Response Commit Gate (Mandatory Barrier — No Accumulation)**: Whenever files (code, tests, or docs) are created, modified, or deleted in the current turn and have passed verification (builds/tests pass), **you MUST run the commit workflow (completeness checks, split commits, and `git push`) as the very last tool-calling step BEFORE stopping to output your final response to the user**. Never leave verified changes sitting in the working directory before yielding control; never defer committing until the end of a multi-turn conversation or wait for the user to prompt `/commit`.
   - **Planning Modes (`/plan` / `/boost`) Enforcement**: In planning modes, creating or updating `walkthrough.md` does NOT conclude the task; **you are strictly forbidden from stopping after writing a walkthrough — you MUST proceed immediately to commit and push before finishing your turn**.
   - **Cross-Repository Changes (multi-repo / submodules / downstream template syncs)**: Commit and push **every** repository separately, each following its own `AGENTS.md` and project-specific workflow. When one repository references another, **children first, then the parent pointer** (push the referenced repository, e.g. unbound-ui, before the superproject bumps its pointer), and push the batch-synced template repository last.
+  - **Dirty Worktree — Only Your Own Changes**: Stage only the paths you changed for this task (`git add <path>`); never `git add .` or `git commit -a`. If `git status` still lists changes outside your task (another session or the user is mid-edit), **commit your own paths and skip the push** — never format, repair or revert those files just to satisfy a pre-push gate, and never wait for them to finish. Report which repository was committed but left unpushed and why; the session that owns those edits pushes them.
   - **No Consent Round-Trip**: Committing and pushing are part of the task. **Never** ask "shall I commit?", "your changes are mixed into that branch — want me to handle it?", or "should I commit per repo convention?" — that hands the decision back to the user. Stop and ask only when a check fails, a conflict cannot be resolved safely, or the user must choose a branch/merge strategy; otherwise commit and push, then report every repository's commit and push result.
   - **Exemptions**: Committing is only skipped if the turn is purely conversational (zero file changes in `git status`) or if tests/builds failed and you are stopping specifically to ask the user for diagnostic input.
-- **Task Conclusion**: Before concluding any task or delivering final responses, the working tree must be clean and all commits pushed to the remote repository.
+- **Task Conclusion**: Before concluding any task, all of **your own** changes must be committed and pushed. The one exception is a repository whose worktree still carries someone else's uncommitted edits: commit your own paths there and deliberately leave it unpushed.
 {%- else %}
 - **Code modification & milestone completion**: Whenever files are modified and verified, run this commit workflow before reporting back to the user or proceeding to the next step.
 - **Task conclusion**: Before concluding any task, ensure the working tree is clean.
@@ -57,6 +58,7 @@ If this change touches module boundaries, public APIs, data flow, lifecycle, or 
 
 ### 1.3 Commit Format & Immediate Push
 `git commit -m "<type>(<scope>): <subject>"` followed immediately by `git push`.
+Re-check `git status` right before pushing: if it still lists changes outside your task, commit and stop there — do not push and do not touch those files (see the Dirty Worktree rule in 1.1).
 {% if options["commit_zh"] %}
 - Subject in Chinese (at least 2 Chinese characters; strictly forbidden to write pure English subjects).
 - Type/scope in English (`feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`).
@@ -148,9 +150,10 @@ Detailed rebase and conflict resolution steps: [references/rebase-conflict.md](r
 - **代码修改与阶段性完工（回复前提交门禁（硬性拦截，禁止堆积））**：凡本轮对话有任何代码/文档文件的创建、修改或删除，且通过了构建与测试验证，**在停止工具调用并向用户输出最终回复前，必须将运行提交流程（完整性检查、语义拆分、commit 与 `git push`）作为最后一个工具调用步骤**。严禁在工作区留存已验证的代码修改就结束工具调用向用户汇报；严禁在多轮对话中拖延堆积改动或等待用户催促 `/commit`。
   - **规划模式（`/plan` / `/boost`）特别约束**：即使在规划模式下生成或更新了 `walkthrough.md`，写完文档亦绝不等于任务完结；**严禁仅写完 walkthrough 就直接交差，必须紧随其后执行 commit 与 push，未提交推送前严禁结束对话汇报**。
   - **跨仓改动（多仓 / submodule / 模板下游）**：每个仓库各自按其 `AGENTS.md` 与项目专属提交流程独立 commit & push，一个都不能留。有引用关系时**先子仓、后父仓指针**（unbound-ui 之类的被引用仓先 push，superproject 才引得到新提交），最后再推送批量同步的模板仓库。
+  - **脏工作区——只管自己改的内容**：只 `git add <路径>` 本次任务改的文件，严禁 `git add .` / `git commit -a`。若 `git status` 仍列出本次任务之外的改动（另一个会话或用户正在改），**提交自己的那部分并跳过 push**：不要为了过 pre-push 去格式化、修复或还原那些文件，也不要等它们改完。汇报时写明哪个仓库只提交未推送及原因，由正在改那个工作区的会话负责推送。
   - **禁止征询**：提交与推送是任务本身的一部分，**严禁**用「要不要我提交」「改动混在你的分支里，要不要我处理」「要我按各仓规范提交吗」这类问题把决定权抛回用户。仅当检查失败、冲突无法安全裁决、或必须由用户选择分支/合并策略时才停下说明；其余情况直接按规范提交推送，并在汇报里列出每个仓库的 commit 与推送结果。
   - **无需提交的豁免情况**：仅当本轮对话为纯问答/无任何文件变动，或构建/测试失败正在排查取证阶段且需向用户提问时，方可不提交。
-- **任务收尾要求**：任何开发或维护任务结束、向用户做最终交差前，工作区必须保持干净，所有改动必须已提交并推送到远端（commit & push）。
+- **任务收尾要求**：任何任务收尾前，**自己**的改动必须已提交并推送。唯一例外是工作区里还有别人未提交改动的仓库：在那里只提交自己的部分，刻意不推送。
 {%- else %}
 - **代码修改与阶段性完工**：凡存在已通过验证的代码修改，在汇报前运行提交流程完成提交。
 - **任务收尾**：任何任务收尾前，确保工作区修改已提交。
@@ -166,6 +169,7 @@ Detailed rebase and conflict resolution steps: [references/rebase-conflict.md](r
 
 ### 1.3 提交格式与立即推送
 执行 `git commit -m "<type>(<scope>): <标题>"` 后立即 `git push`。
+推送前复查 `git status`：若仍有本次任务之外的改动，提交后就此停手——不推送，也不去碰那些文件（见 1.1 的脏工作区规则）。
 {% if options["commit_zh"] %}
 - 标题用中文短句（至少包含 2 个汉字，严禁写纯英文标题）；
 - type/scope 用英文（`feat` `fix` `docs` `style` `refactor` `perf` `test` `build` `ci` `chore` `revert`）；

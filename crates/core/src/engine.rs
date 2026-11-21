@@ -5118,9 +5118,11 @@ description = \"x\"
         .unwrap();
         assert!(zh_md.contains("回复前提交门禁"));
         assert!(zh_md.contains("规划模式（`/plan` / `/boost`）特别约束"));
-        assert!(zh_md.contains("所有改动必须已提交并推送到远端（commit & push）"));
+        assert!(zh_md.contains("**自己**的改动必须已提交并推送"));
+        assert!(zh_md.contains("只提交自己的部分，刻意不推送"));
         assert!(zh_md.contains("跨仓改动"));
         assert!(zh_md.contains("禁止征询"));
+        assert!(zh_md.contains("脏工作区"));
 
         // 2. With commit_and_push = true (en)
         let mut opts_en = BTreeMap::new();
@@ -5139,9 +5141,9 @@ description = \"x\"
         assert!(en_md.contains("Planning Modes (`/plan` / `/boost`) Enforcement"));
         assert!(en_md.contains("Cross-Repository Changes"));
         assert!(en_md.contains("No Consent Round-Trip"));
-        assert!(en_md.contains(
-            "**Task Conclusion**: Before concluding any task or delivering final responses"
-        ));
+        assert!(en_md.contains("Dirty Worktree"));
+        assert!(en_md.contains("all of **your own** changes must be committed and pushed"));
+        assert!(en_md.contains("deliberately leave it unpushed"));
 
         // 3. With commit_and_push = false (zh)
         let mut opts_off = BTreeMap::new();

@@ -6,7 +6,7 @@
 - **Build and test**: Run `just check` / `just test`.
 {%- endif %}
 {%- if options["commit_and_push"] %}
-- **Commit before reply**: Commit & push verified changes before replying, following each repository's own commit workflow; never ask whether to commit. For multi-repo changes (submodules, downstream template syncs) commit every repository separately, children before the parent pointer (conventional commit: `type(scope): subject`).
+- **Commit before reply**: Stage only your own paths and commit & push them before replying, following each repository's own commit workflow; never ask whether to commit. When the worktree still carries someone else's uncommitted edits, commit your part but do not push and do not touch those files. For multi-repo changes (submodules, downstream template syncs) commit every repository separately, children before the parent pointer (conventional commit: `type(scope): subject`).
 {%- endif %}
 - **Code comments**: Comments must be in English.
 {%- if 'gate' in layers %}
@@ -37,7 +37,7 @@
 - **构建与测试**：统一走 `just check` / `just test`。
 {%- endif %}
 {%- if options["commit_and_push"] %}
-- **回复前提交**：验证通过后按所在仓库自己的提交流程直接 commit & push 再回复，不得征询是否提交；跨仓改动（submodule、模板下游）逐仓分别提交，先子仓后父仓指针（约定式提交：`type(scope): {% if options["commit_zh"] %}中文摘要{% else %}英文摘要{% endif %}`）。
+- **回复前提交**：验证通过后只提交自己改的路径，按所在仓库自己的提交流程 commit & push 再回复，不得征询是否提交；工作区还有别人未提交的改动时只提交不推送，也不去修那些文件；跨仓改动（submodule、模板下游）逐仓分别提交，先子仓后父仓指针（约定式提交：`type(scope): {% if options["commit_zh"] %}中文摘要{% else %}英文摘要{% endif %}`）。
 {%- endif %}
 - **代码注释**：注释强制中文，专有名词保留英文。
 {%- if 'gate' in layers %}
