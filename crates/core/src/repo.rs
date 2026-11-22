@@ -5,6 +5,7 @@
 //! - 只补缺失项，不覆盖真实目录或指向别处的链接；
 //! - 链接目标必须未跟踪且被忽略，避免污染 `git status`；
 //! - 子模块只初始化未初始化的，不移动已有工作树；
+//! - 子模块路径是符号链接时不碰它：那是用户共享出去的同一份检出；
 //! - 重复执行无副作用。
 
 use crate::error::{CoreError, Result};
@@ -288,50 +289,131 @@ fn has_tracked_symlinks(root: &Path) -> Result<bool> {
 // 子模块
 // ---------------------------------------------------------------------------
 
-fn missing_submodules(root: &Path) -> Result<Vec<String>> {
+/// 一次子模块巡检的结果。
+///
+/// `linked` 是从索引里拿到、但工作区路径是符号链接的子模块：用户把同一份检出
+/// 共享给了多个项目，`git submodule` 会直接拒绝这种路径
+/// （`expected submodule path ... not to be a symbolic link`），所以整体跳过。
+struct SubmoduleScan {
+    missing: Vec<String>,
+    linked: Vec<String>,
+}
+
+fn scan_submodules(root: &Path) -> Result<SubmoduleScan> {
     if !root.join(".gitmodules").is_file() {
-        return Ok(Vec::new());
+        return Ok(SubmoduleScan {
+            missing: Vec::new(),
+            linked: Vec::new(),
+        });
     }
-    let listing = git_stdout(root, &["submodule", "status"])?;
-    let mut paths = Vec::new();
-    for line in listing.lines() {
-        // 未初始化的子模块行以 `-` 开头；已初始化的是 ` `、`+` 或 `U`。
-        if let Some(rest) = line.strip_prefix('-') {
-            let mut fields = rest.split_whitespace();
-            let _sha = fields.next();
-            if let Some(path) = fields.next() {
-                paths.push(path.to_string());
+
+    let mut missing = Vec::new();
+    let mut linked = Vec::new();
+    let mut candidates = Vec::new();
+    for path in submodule_paths(root)? {
+        if std::fs::symlink_metadata(root.join(&path))
+            .map(|meta| meta.file_type().is_symlink())
+            .unwrap_or(false)
+        {
+            linked.push(path);
+        } else {
+            candidates.push(path);
+        }
+    }
+
+    if !candidates.is_empty() {
+        let mut args = vec!["submodule", "status", "--"];
+        args.extend(candidates.iter().map(String::as_str));
+        let listing = git_stdout(root, &args)?;
+        for line in listing.lines() {
+            // 未初始化的子模块行以 `-` 开头；已初始化的是 ` `、`+` 或 `U`。
+            if let Some(rest) = line.strip_prefix('-') {
+                let mut fields = rest.split_whitespace();
+                let _sha = fields.next();
+                if let Some(path) = fields.next() {
+                    missing.push(path.to_string());
+                }
             }
         }
     }
-    Ok(paths)
+    Ok(SubmoduleScan { missing, linked })
+}
+
+/// 从索引读取 gitlink 路径；不读工作区，避免符号链接让 git 直接报错。
+fn submodule_paths(root: &Path) -> Result<Vec<String>> {
+    let listing = git_stdout(root, &["ls-files", "-s", "-z"])?;
+    Ok(listing
+        .split('\0')
+        .filter_map(|entry| {
+            // 每项形如 `160000 <sha> <stage>\t<path>`。
+            let (meta, path) = entry.split_once('\t')?;
+            meta.starts_with("160000 ").then(|| path.to_string())
+        })
+        .collect())
+}
+
+fn linked_note(linked: &[String]) -> String {
+    if linked.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "；另有 {} 个符号链接子模块（外部共享检出）已跳过",
+            linked.len()
+        )
+    }
 }
 
 fn check_submodules(root: &Path, items: &mut Vec<RepoItem>) -> Result<()> {
-    let missing = missing_submodules(root)?;
-    if missing.is_empty() {
-        return Ok(());
+    let scan = scan_submodules(root)?;
+    if !scan.missing.is_empty() {
+        items.push(item(
+            "submodules",
+            RepoStatus::Missing,
+            format!(
+                "{} 个子模块未初始化；运行 repo init 修复{}",
+                scan.missing.len(),
+                linked_note(&scan.linked)
+            ),
+        ));
+    } else if !scan.linked.is_empty() {
+        items.push(item(
+            "submodules",
+            RepoStatus::Ok,
+            format!(
+                "{} 个符号链接子模块（外部共享检出），跳过初始化",
+                scan.linked.len()
+            ),
+        ));
     }
-    items.push(item(
-        "submodules",
-        RepoStatus::Missing,
-        format!("{} 个子模块未初始化；运行 repo init 修复", missing.len()),
-    ));
     Ok(())
 }
 
 fn init_submodules(root: &Path, items: &mut Vec<RepoItem>) -> Result<()> {
-    let missing = missing_submodules(root)?;
-    if missing.is_empty() {
+    let scan = scan_submodules(root)?;
+    if scan.missing.is_empty() {
+        if !scan.linked.is_empty() {
+            items.push(item(
+                "submodules",
+                RepoStatus::Ok,
+                format!(
+                    "{} 个符号链接子模块（外部共享检出），跳过初始化",
+                    scan.linked.len()
+                ),
+            ));
+        }
         return Ok(());
     }
     let mut args = vec!["submodule", "update", "--init", "--"];
-    args.extend(missing.iter().map(String::as_str));
+    args.extend(scan.missing.iter().map(String::as_str));
     git_stdout(root, &args)?;
     items.push(item(
         "submodules",
         RepoStatus::Created,
-        format!("已初始化 {} 个子模块", missing.len()),
+        format!(
+            "已初始化 {} 个子模块{}",
+            scan.missing.len(),
+            linked_note(&scan.linked)
+        ),
     ));
     Ok(())
 }
@@ -520,6 +602,33 @@ mod tests {
         assert!(status.success(), "git init 失败");
     }
 
+    fn git_run(root: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(["-c", "user.email=test@example.com", "-c", "user.name=test"])
+            .args(args)
+            .current_dir(root)
+            .status()
+            .expect("执行 git");
+        assert!(status.success(), "git {args:?} 失败");
+    }
+
+    /// 平台不支持创建目录符号链接时（Windows 未开启开发者模式）返回 false。
+    fn try_dir_symlink(target: &Path, link: &Path) -> bool {
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target, link).is_ok()
+        }
+        #[cfg(windows)]
+        {
+            std::os::windows::fs::symlink_dir(target, link).is_ok()
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = (target, link);
+            false
+        }
+    }
+
     #[test]
     fn default_links_require_agents_directory() {
         let root = temp_root("defaults");
@@ -619,6 +728,53 @@ mod tests {
         assert!(!report.ok);
         assert!(!root.join(".trae").exists());
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn init_skips_symlinked_submodules() {
+        let root = temp_root("symlink-sub");
+        git_init(&root);
+        let source = temp_root("symlink-sub-src");
+        git_init(&source);
+        git_run(&source, &["commit", "-q", "--allow-empty", "-m", "init"]);
+
+        let source_arg = source.to_string_lossy().to_string();
+        git_run(
+            &root,
+            &[
+                "-c",
+                "protocol.file.allow=always",
+                "submodule",
+                "add",
+                "-q",
+                &source_arg,
+                "submodules/shared",
+            ],
+        );
+        git_run(&root, &["commit", "-q", "-m", "add submodule"]);
+
+        // 把子模块工作区换成指向共享检出的符号链接，模拟多个项目共用同一份。
+        let submodule_dir = root.join("submodules/shared");
+        fs::remove_dir_all(&submodule_dir).expect("移除子模块工作区");
+        if !try_dir_symlink(&source, &submodule_dir) {
+            let _ = fs::remove_dir_all(&root);
+            let _ = fs::remove_dir_all(&source);
+            return;
+        }
+
+        let report = repo_init(&root, &[], true).unwrap();
+        assert!(report.ok, "{report:?}");
+        assert!(fs::symlink_metadata(&submodule_dir)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert!(report
+            .items
+            .iter()
+            .any(|item| item.name == "submodules" && item.status == RepoStatus::Ok));
+
+        fs::remove_dir_all(&root).ok();
+        fs::remove_dir_all(&source).ok();
     }
 
     #[test]
