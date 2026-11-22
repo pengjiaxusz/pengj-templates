@@ -10,7 +10,7 @@
 
 | 层 | 内容 | 适用 |
 | --- | --- | --- |
-| `common` | 所有仓库共用：`.gitignore`、`.pengj-templates/scripts/doctor.*` 环境自检脚本 | 所有仓库 |
+| `common` | 所有仓库共用：`.gitignore`、`.pengj-templates/scripts/doctor.d/` 自定义环境检查扩展点 | 所有仓库 |
 | `just` | 唯一的根 `justfile` 主入口：托管块框架区 + 块外项目专属区，按层 import 语言/排队配方；提供 `doctor` 入口 | 需要统一任务入口的仓库 |
 | `bque` | Windows 全局编译排队，只做声明：并入 `bque` 技能、让 `doctor` 检测本机安装；不产出配方——`just` 包装带不动 bque 自己的 `--cwd` / `--observer` / `--priority`，重型命令直接 `bque run --` | 需要跨工作树排队与纯净跑分 |
 | `gate` | 提交门禁：`.pengj-templates/gate.toml` 配置 + `.githooks/*` 钩子（约定式提交校验、代码语言守卫、rustfmt），纯 Rust 实现、零第三方依赖；自动带上 `ci` 层在服务端执行同一套规则 | 需要 Git 钩子的仓库 |
@@ -31,7 +31,7 @@
 - **MCP 安装**：Rust（`crates/mcp`）— 配方目录 + 客户端适配 + 真实握手巡检，机器级（跨项目）配置
 - **仓库初始化**：Rust（`crates/core/src/repo.rs`，CLI 入口 `repo init/status`）— 工作区客户端链接、仓库级 Git 配置与子模块补缺，供 `just doctor --fix` 调用，不依赖模板层
 - **提交门禁**：Rust（`crates/gate`）— 约定式提交校验、代码语言守卫、rustfmt 暂存格式化；零第三方依赖，已收编为内部库，唯一入口是 `pengj-templates-cli gate`
-- **CLI**：clap（`crates/cli`，命令 `pengj-templates-cli`），全仓库唯一入口；内置 `repo` 与 `gate` 子命令
+- **CLI**：clap（`crates/cli`，命令 `pengj-templates-cli`），全仓库唯一入口；内置 `doctor`、`repo` 与 `gate` 子命令
 
 ## 使用
 
@@ -82,6 +82,7 @@ cargo run -p pengj-templates-cli -- update --dir ./my-app                # 同�
 cargo run -p pengj-templates-cli -- add-layer --dir ./my-app --layers just,bque  # 存量项目增量加层
 cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # 巡检半接入与托管块漂移
 cargo run -p pengj-templates-cli -- check-lang --dir ./my-app           # 校验文案语言轴（en 零汉字；zh 文案含中文）
+cargo run -p pengj-templates-cli -- doctor --dir ./my-app               # 环境自检（加 --fix 激活钩子、工作区链接与共享编译目录）
 cargo run -p pengj-templates-cli -- repo status --dir ./my-app          # 检查工作区链接、Git 配置与子模块
 cargo run -p pengj-templates-cli -- repo init --dir ./my-app            # 创建缺失的工作区链接（幂等，不覆盖）
 cargo run -p pengj-templates-cli -- subrepo list --dir ./my-app         # 把机器可读的子仓库登记表渲染成清单
@@ -180,7 +181,7 @@ cargo run -p pengj-templates-cli -- mcp remove renderdoc [--purge]      # 摘注
 
 `.vscode/settings.json` 的模板配置在**项目根已有 `*.code-workspace` 文件时并入工作区文件的 `settings` 节点**（不新建独立 settings 文件）；没有工作区文件时才创建/维护 `.vscode/settings.json`。
 
-gate 层用法：门禁是纯 Rust 实现，没有任何 Node 依赖，且已收编进 `pengj-templates-cli`——装一个二进制就同时拿到模板引擎、MCP 安装器和提交门禁。生成项目后先 `git init`，再执行一次 `just doctor --fix`（无 just 时用 `sh .pengj-templates/scripts/doctor.sh --fix` / `pwsh -NoProfile -File .pengj-templates/scripts/doctor.ps1 -Fix`）——它检查工具链、把 `core.hooksPath` 指向 `.githooks`，并确认 CLI 在 PATH 上；CLI 安装器不再写全局钩子。门禁只在 CLI 里实现：没装 CLI 时钩子会拦下提交并打印安装命令，本地没有兜底规则。`gate` 层会自动带上 `ci` 层，服务端跑的是同一个二进制。`core.hooksPath` 存在 `.git/config` 里，不会随克隆传播，所以新克隆后同样跑一次 doctor 即可。
+gate 层用法：门禁是纯 Rust 实现，没有任何 Node 依赖，且已收编进 `pengj-templates-cli`——装一个二进制就同时拿到模板引擎、MCP 安装器和提交门禁。生成项目后先 `git init`，再执行一次 `just doctor --fix`（无 just 时用 `pengj-templates-cli doctor --fix`，单独激活钩子用 `pengj-templates-cli gate hooks install`）——它检查工具链并在进程内把 `core.hooksPath` 指向 `.githooks`；CLI 安装器不再写全局钩子。门禁只在 CLI 里实现：没装 CLI 时钩子会拦下提交并打印安装命令，本地没有兜底规则。`gate` 层会自动带上 `ci` 层，服务端跑的是同一个二进制。`core.hooksPath` 存在 `.git/config` 里，不会随克隆传播，所以新克隆后同样跑一次 doctor 即可。
 
 scope 策略：现在省略 `commit.scopes` 或留空列表都会**拒绝一切 `(scope)`**（fail-closed），旧的「空列表表示接受任意 scope」行为已移除。设 `commit.scopes = ["*"]` 放行任意 scope，或填入 crate 名收紧为白名单。本次改动之前生成的项目里写的是 `commit.scopes = []`，升级 CLI 后会开始拒绝带 scope 的标题——在 `.pengj-templates/gate.toml` 里加上 `["*"]` 即可恢复旧行为。
 
@@ -193,9 +194,9 @@ scope 策略：现在省略 `commit.scopes` 或留空列表都会**拒绝一切 
 - **本地**：`commit-msg`、`pre-commit` 与 `pre-push` 拦下提交或推送，打印安装命令后退出——不放行，也不用一套更宽松的 shell 规则顶替。
 - **服务端**：`ci` 层的 `gate` 任务跑的是同一个二进制，`.github/rulesets/gate.json` 把它设成必需状态检查，PR 一样过不去。CI 失败时把可操作的修复提示写进 `GITHUB_STEP_SUMMARY`，PR 页面直接能看到该怎么改。
 
-钩子激活本身不需要 CLI：`just doctor --fix`（或 `sh .pengj-templates/scripts/doctor.sh --fix`）调用 `.githooks/install.sh`，它只用 git 与 POSIX shell 就把 `core.hooksPath` 指向 `.githooks` 并补上可执行位；`just gate-hooks-local` 是同一个脚本的裸入口。装 CLI：Windows 用 `irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex`，Unix 用 `curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh`。
+装 CLI：Windows 用 `irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex`，Unix 用 `curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh`。装好后跑 `just doctor --fix`（或 `pengj-templates-cli doctor --fix` / `pengj-templates-cli gate hooks install`）即可在进程内把 `core.hooksPath` 指向 `.githooks` 并补上索引可执行位。
 
-环境自检本身在 `.pengj-templates/scripts/doctor.sh` / `.pengj-templates/scripts/doctor.ps1`，只检查已选层用到的工具；把 `*.sh`（Unix）/ `*.ps1`（Windows）放进 `.pengj-templates/scripts/doctor.d/` 即可追加项目自己的检查，退出码非 0 记为失败，`--fix` 会设置 `DOCTOR_FIX=1` 让自定义检查自行修复。
+环境自检本身内置在 `pengj-templates-cli doctor`（支持 `--dir`、`--fix`、`--lang zh|en`、`--json`），只检查已选层与技能用到的工具与能力；把 `*.sh`（Unix）/ `*.ps1`（Windows）放进 `.pengj-templates/scripts/doctor.d/` 即可追加项目自己的检查，退出码非 0 记为失败，`--fix` 会设置 `DOCTOR_FIX=1` 让自定义检查自行修复。
 
 ruleset 需要维护者执行一次才会生效：
 
@@ -223,7 +224,7 @@ gh api -X POST "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/rul
 | `justfile` | `just` 层托管（just 只认项目根的 `justfile`，搬不走） |
 | `.pengj-templates/manifest.json` | 引擎写入的项目清单：层列表、选项与模板托管文件哈希 |
 | `.pengj-templates/gate.toml` | `gate` 层产出的门禁配置（列入 `update_ignore`：配置值归项目所有） |
-| `.pengj-templates/scripts/doctor.sh` / `.ps1` + `doctor.d/` | `common` 层的环境自检本体与自定义检查扩展点 |
+| `.pengj-templates/scripts/doctor.d/` | `common` 层的自定义环境检查扩展点（由 `pengj-templates-cli doctor` 执行） |
 | `.pengj-templates/just/*.just` | `gate` / `rust` / `rust-workspace` / `subrepo` / `worktree` 层产出的配方模块，由根 `justfile` 条件 import |
 | `.pengj-templates/subrepo.toml` | `subrepo` 层的机器可读登记表（托管说明块 + 归项目的条目） |
 | `.githooks/` | `gate` 层的 git 钩子，`core.hooksPath` 指向它 |

@@ -34,13 +34,8 @@ default:
     @just --list
 
 # {% if options["skill_lang"] == "en" %}Environment check: toolchain + commit hooks + agent workspace links (extend with .pengj-templates/scripts/doctor.d/){% else %}环境自检：工具链、提交钩子与工作区链接（可用 .pengj-templates/scripts/doctor.d/ 扩展）{% endif %}
-[unix]
 doctor *ARGS:
-    @sh .pengj-templates/scripts/doctor.sh {% raw %}{{ARGS}}{% endraw %}
-# {% if options["skill_lang"] == "en" %}Environment check: toolchain + commit hooks + agent workspace links (extend with .pengj-templates/scripts/doctor.d/){% else %}环境自检：工具链、提交钩子与工作区链接（可用 .pengj-templates/scripts/doctor.d/ 扩展）{% endif %}
-[windows]
-doctor *ARGS:
-    @pwsh -NoProfile -File .pengj-templates/scripts/doctor.ps1 {% raw %}{{ARGS}}{% endraw %}
+    @pengj-templates-cli doctor --dir . {% raw %}{{ARGS}}{% endraw %}
 # PENGJ_TEMPLATE_END
 
 # ---------------------------------------------------------------------------

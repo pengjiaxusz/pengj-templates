@@ -13,7 +13,7 @@
 - [ ] {% if options["skill_lang"] | default("zh") == "en" %}The `gate` check is green.{% else %}`gate` 这项检查是绿的。{% endif %}
 
 {% if options["skill_lang"] | default("zh") == "en" %}
-> The check runs on the server, so it needs nothing from your machine. To catch the same problems before pushing, enable the local gate once: `sh .githooks/install.sh`.
+> The check runs on the server, so it needs nothing from your machine. To catch the same problems before pushing, enable the local gate once: `just doctor --fix` (or `pengj-templates-cli gate hooks install`).
 {% else %}
-> 这项检查跑在服务端，不依赖你的机器。想在推送前就发现同样的问题，本地门禁启用一次即可：`sh .githooks/install.sh`。
+> 这项检查跑在服务端，不依赖你的机器。想在推送前就发现同样的问题，本地门禁启用一次即可：`just doctor --fix`（或 `pengj-templates-cli gate hooks install`）。
 {% endif %}

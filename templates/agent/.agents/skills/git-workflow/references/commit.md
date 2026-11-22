@@ -40,7 +40,7 @@ git config --get core.hooksPath   # expected: .githooks
 If it is empty or points elsewhere, run:
 
 ```bash
-just doctor --fix        # or: sh .pengj-templates/scripts/doctor.sh --fix
+just doctor --fix        # or: pengj-templates-cli doctor --fix
 ```
 
 The doctor checks the toolchain and activates the hooks without installing anything. If `core.hooksPath` belongs to another tool, it reports the conflict and leaves it alone.
@@ -156,7 +156,7 @@ git config --get core.hooksPath   # 期望输出：.githooks
 为空或指向别处时执行：
 
 ```bash
-just doctor --fix        # 或：sh .pengj-templates/scripts/doctor.sh --fix
+just doctor --fix        # 或：pengj-templates-cli doctor --fix
 ```
 
 doctor 会检查工具链并在不安装任何东西的前提下激活钩子；若 `core.hooksPath` 属于别的工具，只报告冲突、不覆盖。

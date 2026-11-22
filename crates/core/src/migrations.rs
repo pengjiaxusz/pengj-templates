@@ -81,6 +81,18 @@ pub const MIGRATIONS: &[MigrationNote] = &[
                  项目里凡是引用旧路径的说明（`.agents/skills/issue-sync/scripts/issue-push.ps1` 等）\
                  改成 `.agents/skills/patch-handoff/scripts/`，其余调用参数与产物格式不变",
     },
+    MigrationNote {
+        version: "0.82.0",
+        summary: "环境自检与钩子激活收编进 `pengj-templates-cli doctor`：`common` 层不再产出 \
+                  `.pengj-templates/scripts/doctor.sh` / `doctor.ps1`，`gate` 层不再产出 \
+                  `.githooks/install.sh` 与 `just gate-hooks-local` 配方，`--install-cli` 退役；\
+                  根 `justfile` 的 `doctor` 配方合并为单条跨平台直调命令",
+        action: "存量项目跑 `update` 会自动清理未改动过的 `doctor.sh` / `doctor.ps1` 与 \
+                 `.githooks/install.sh`（本地改过的会保留并报冲突）；此后环境自检与初始化统一跑 \
+                 `just doctor [--fix]` 或 `pengj-templates-cli doctor [--fix]`，单独激活钩子用 \
+                 `pengj-templates-cli gate hooks install`，项目自定义检查继续放 \
+                 `.pengj-templates/scripts/doctor.d/`",
+    },
 ];
 
 /// 当前工具的版本（crate 版本即发布版本）

@@ -5396,16 +5396,15 @@ description = \"x\"
         let zh_root = tmp.join("no_cli_zh");
         let en_root = tmp.join("no_cli_en");
 
-        // -- 启用入口：零依赖（激活钩子不需要 CLI） --
-        let install =
-            std::fs::read_to_string(zh_root.join(".githooks").join("install.sh")).unwrap();
+        // -- 钩子激活与环境自检已收编进 CLI：不再产出独立 install.sh / doctor.* 脚本 --
         assert!(
-            install.contains("core.hooksPath"),
-            "启用脚本必须写 core.hooksPath"
+            !zh_root.join(".githooks").join("install.sh").exists(),
+            "钩子激活已收编进 CLI，模板不得再产出 .githooks/install.sh"
         );
         assert!(
-            install.contains("update-index --chmod=+x"),
-            "启用脚本必须把可执行位写进索引"
+            !zh_root.join(".pengj-templates/scripts/doctor.sh").exists()
+                && !zh_root.join(".pengj-templates/scripts/doctor.ps1").exists(),
+            "环境自检已收编进 CLI，模板不得再产出 doctor.sh / doctor.ps1"
         );
 
         // -- 只有一套实现：模板不再产出兜底脚本 --
@@ -5436,7 +5435,12 @@ description = \"x\"
             "pre-commit 不得再有兜底分支"
         );
 
-        // -- 配方入口 --
+        // -- 配方入口：justfile 直调 CLI doctor，gate.just 不再含 gate-hooks-local --
+        let justfile = std::fs::read_to_string(zh_root.join("justfile")).unwrap();
+        assert!(
+            justfile.contains("pengj-templates-cli doctor --dir ."),
+            "justfile 的 doctor 配方必须直调 pengj-templates-cli doctor --dir .: {justfile}"
+        );
         let gate_just = std::fs::read_to_string(
             zh_root
                 .join(".pengj-templates")
@@ -5445,8 +5449,8 @@ description = \"x\"
         )
         .unwrap();
         assert!(
-            gate_just.contains("gate-hooks-local") && gate_just.contains("install.sh"),
-            "just 配方必须给出激活钩子的裸入口"
+            !gate_just.contains("gate-hooks-local") && !gate_just.contains("install.sh"),
+            "gate.just 不得再包含旧的 gate-hooks-local 或 install.sh: {gate_just}"
         );
 
         // -- 服务端第一道：workflow --
@@ -6342,17 +6346,20 @@ body
             "勾选工作树层应自动带上工作树技能，实际: {skills:?}"
         );
 
-        // 自检脚本随层条件启用（两套脚本同步）
+        // 自检已收编进 CLI：不再产出 doctor.sh / doctor.ps1，justfile 直调 CLI doctor
         for script in [
             ".pengj-templates/scripts/doctor.sh",
             ".pengj-templates/scripts/doctor.ps1",
         ] {
-            let text = std::fs::read_to_string(proj.join(script)).unwrap();
             assert!(
-                text.contains("worktree check"),
-                "{script} 应转发共享目录体检"
+                !proj.join(script).exists(),
+                "环境自检已收编进 CLI，不得再产出 {script}"
             );
         }
+        assert!(
+            justfile.contains("pengj-templates-cli doctor --dir ."),
+            "justfile 必须直调 pengj-templates-cli doctor --dir .: {justfile}"
+        );
 
         // 反向断言：不勾选时产物与检查都不出现
         let plain = vec![
@@ -6375,9 +6382,15 @@ body
             !plain_rust.contains("CARGO_TARGET_DIR"),
             "不勾选工作树层时构建配方不得注入共享目录: {plain_rust}"
         );
-        let plain_doctor =
-            std::fs::read_to_string(plain_dir.join(".pengj-templates/scripts/doctor.sh")).unwrap();
-        assert!(!plain_doctor.contains("worktree check"));
+        assert!(
+            !plain_dir
+                .join(".pengj-templates/scripts/doctor.sh")
+                .exists()
+                && !plain_dir
+                    .join(".pengj-templates/scripts/doctor.ps1")
+                    .exists(),
+            "环境自检已收编进 CLI，不得再产出 doctor 脚本"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -6407,10 +6420,16 @@ body
         let sub_dir = tmp.join("only_sub");
         assert!(sub_dir.join(crate::subrepo::SUBREPO_REGISTRY_REL).is_file());
         assert!(!sub_dir.join(".pengj-templates/just/worktree.just").exists());
-        let sub_doctor =
-            std::fs::read_to_string(sub_dir.join(".pengj-templates/scripts/doctor.sh")).unwrap();
-        assert!(sub_doctor.contains("subrepo check"));
-        assert!(!sub_doctor.contains("worktree check"));
+        assert!(
+            !sub_dir.join(".pengj-templates/scripts/doctor.sh").exists()
+                && !sub_dir.join(".pengj-templates/scripts/doctor.ps1").exists(),
+            "环境自检已收编进 CLI，不得再产出 doctor 脚本"
+        );
+        let sub_justfile = std::fs::read_to_string(sub_dir.join("justfile")).unwrap();
+        assert!(sub_justfile.contains("pengj-templates-cli doctor --dir ."));
+        let sub_manifest = ProjectManifest::load(&sub_dir).unwrap();
+        assert!(sub_manifest.layers.iter().any(|l| l == "subrepo"));
+        assert!(!sub_manifest.layers.iter().any(|l| l == "worktree"));
 
         let only_wt = vec![
             "common".to_string(),
@@ -6422,10 +6441,16 @@ body
         let wt_dir = tmp.join("only_wt");
         assert!(wt_dir.join(".pengj-templates/just/worktree.just").is_file());
         assert!(!wt_dir.join(crate::subrepo::SUBREPO_REGISTRY_REL).exists());
-        let wt_doctor =
-            std::fs::read_to_string(wt_dir.join(".pengj-templates/scripts/doctor.sh")).unwrap();
-        assert!(wt_doctor.contains("worktree check"));
-        assert!(!wt_doctor.contains("subrepo check"));
+        assert!(
+            !wt_dir.join(".pengj-templates/scripts/doctor.sh").exists()
+                && !wt_dir.join(".pengj-templates/scripts/doctor.ps1").exists(),
+            "环境自检已收编进 CLI，不得再产出 doctor 脚本"
+        );
+        let wt_justfile = std::fs::read_to_string(wt_dir.join("justfile")).unwrap();
+        assert!(wt_justfile.contains("pengj-templates-cli doctor --dir ."));
+        let wt_manifest = ProjectManifest::load(&wt_dir).unwrap();
+        assert!(wt_manifest.layers.iter().any(|l| l == "worktree"));
+        assert!(!wt_manifest.layers.iter().any(|l| l == "subrepo"));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -6655,26 +6680,29 @@ body
                 .unwrap();
         assert!(contains_cjk(&zh_just), "zh 项目应保留中文注释");
 
-        // doctor 脚本跟随 skill_lang 语言轴，并已移除 legacy 全局 gate 检测。
-        for script in [
-            ".pengj-templates/scripts/doctor.sh",
-            ".pengj-templates/scripts/doctor.ps1",
-        ] {
-            let zh_doctor = std::fs::read_to_string(tmp.join("lang_zh").join(script)).unwrap();
+        // doctor 与钩子激活已收编进 CLI：不再产出旧脚本，justfile 直调 CLI doctor，gate.just 无旧配方。
+        for dir_name in ["lang_zh", "lang_en"] {
+            let dir = tmp.join(dir_name);
+            for removed in [
+                ".pengj-templates/scripts/doctor.sh",
+                ".pengj-templates/scripts/doctor.ps1",
+                ".githooks/install.sh",
+            ] {
+                assert!(
+                    !dir.join(removed).exists(),
+                    "{dir_name} 不得再产出旧脚本 {removed}"
+                );
+            }
+            let justfile = std::fs::read_to_string(dir.join("justfile")).unwrap();
             assert!(
-                zh_doctor.contains("项目环境自检"),
-                "zh 项目的 {script} 应为中文文案"
+                justfile.contains("pengj-templates-cli doctor --dir ."),
+                "{dir_name} 的 justfile 必须直调 pengj-templates-cli doctor --dir ."
             );
+            let gate_just =
+                std::fs::read_to_string(dir.join(".pengj-templates/just/gate.just")).unwrap();
             assert!(
-                !zh_doctor.contains("legacy global")
-                    && !zh_doctor.contains("global_hooks")
-                    && !zh_doctor.contains("legacy_global"),
-                "{script} 不应残留 legacy 全局 gate 检测"
-            );
-            let en_doctor = std::fs::read_to_string(tmp.join("lang_en").join(script)).unwrap();
-            assert!(
-                en_doctor.contains("project environment check"),
-                "en 项目的 {script} 应为英文文案"
+                !gate_just.contains("gate-hooks-local"),
+                "{dir_name} 的 gate.just 不得再包含 gate-hooks-local"
             );
         }
 
@@ -6886,6 +6914,79 @@ body
         assert!(
             proj.join("README.md").is_file(),
             "报错前不得动磁盘，受管文件必须原样保留"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 存量项目若曾由旧模板记录了未改动的 `doctor.sh` / `doctor.ps1` 与 `.githooks/install.sh`，
+    /// 执行 `update_project` 后应自动清理这些旧脚本并记入 `removed`，同时保留 `doctor.d/`。
+    #[test]
+    fn update_cleans_up_legacy_doctor_and_hook_install_scripts() {
+        let templates = real_templates();
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-legacy-doctor-cleanup-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let layers = vec!["common".to_string(), "just".to_string(), "gate".to_string()];
+        let mut options = BTreeMap::new();
+        options.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        generate(&templates, "legacy_proj", &layers, options, &tmp).unwrap();
+        let proj = tmp.join("legacy_proj");
+
+        // 模拟旧版模板曾产出且未被用户修改过的三个脚本，并登记进 manifest
+        let legacy_files = [
+            (
+                ".pengj-templates/scripts/doctor.sh",
+                "#!/bin/sh\necho legacy doctor.sh\n",
+            ),
+            (
+                ".pengj-templates/scripts/doctor.ps1",
+                "# legacy doctor.ps1\nWrite-Host legacy\n",
+            ),
+            (
+                ".githooks/install.sh",
+                "#!/bin/sh\ngit config core.hooksPath .githooks\n",
+            ),
+        ];
+        let mut manifest = ProjectManifest::load(&proj).unwrap();
+        for (rel, content) in legacy_files {
+            write_test_file(proj.join(rel), content).unwrap();
+            manifest
+                .files
+                .insert(rel.to_string(), sha256_hex(content.as_bytes()));
+        }
+        manifest.save(&proj).unwrap();
+
+        let rep = update_project(&templates, &proj).unwrap();
+
+        for (rel, _) in legacy_files {
+            assert!(
+                !proj.join(rel).exists(),
+                "未改动的旧脚本 {rel} 应在 update 后被物理删除"
+            );
+            assert!(
+                rep.removed.iter().any(|r| r.replace('\\', "/") == rel),
+                "旧脚本 {rel} 应记入 removed，实际: {:?}",
+                rep.removed
+            );
+        }
+
+        let updated = ProjectManifest::load(&proj).unwrap();
+        for (rel, _) in legacy_files {
+            assert!(
+                !updated.files.keys().any(|k| k.replace('\\', "/") == rel),
+                "manifest 不应再残留已清理的旧脚本 {rel}"
+            );
+        }
+        assert!(
+            proj.join(".pengj-templates/scripts/doctor.d/README.md")
+                .is_file(),
+            "doctor.d 扩展点说明应原样保留"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);

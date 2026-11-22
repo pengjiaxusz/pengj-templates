@@ -10,7 +10,7 @@ Template content is split into layers by applicability. Layers compose freely at
 
 | Layer | Content | Applies to |
 | --- | --- | --- |
-| `common` | Shared by every repository: `.gitignore`, `.pengj-templates/scripts/doctor.*` environment check | All repositories |
+| `common` | Shared by every repository: `.gitignore`, `.pengj-templates/scripts/doctor.d/` custom environment-check extension point | All repositories |
 | `just` | The single root `justfile` entry point: managed framework block + project-owned area outside the block, importing language/queue recipes per layer; provides the `doctor` entry point | Repositories that want one unified task entry point |
 | `bque` | Windows global build queueing, as a declaration only: pulls in the `bque` skill and makes `doctor` probe the local install; ships no recipe, because a `just` wrapper cannot carry bque's own `--cwd` / `--observer` / `--priority` — heavy commands call `bque run --` directly | Repositories that need cross-worktree queueing and clean benchmarks |
 | `gate` | Commit gate: `.pengj-templates/gate.toml` config + `.githooks/*` hooks (conventional-commit validation, code language guard, rustfmt); pure Rust, zero third-party dependencies; implies the `ci` layer, which runs the same rules server-side | Repositories that want Git hooks |
@@ -31,7 +31,7 @@ Template files support minijinja placeholders (`{{ project_name }}`, `{{ project
 - **MCP installer**: Rust (`crates/mcp`) — recipe catalog, client adapters and real handshake checks; machine-level (cross-project) configuration
 - **Repository bootstrap**: Rust (`crates/core/src/repo.rs`, CLI entry `repo init/status`) — agent-client workspace links, repo-level Git config and submodule fill; called by `just doctor --fix` and independent of template layers
 - **Commit gate**: Rust (`crates/gate`) — conventional-commit validation, code language guard, staged-file rustfmt; zero third-party dependencies, now an internal library reached only through `pengj-templates-cli gate`
-- **CLI**: clap (`crates/cli`, command `pengj-templates-cli`), the single entry point of the whole repository; built-in `repo` and `gate` subcommands
+- **CLI**: clap (`crates/cli`, command `pengj-templates-cli`), the single entry point of the whole repository; built-in `doctor`, `repo` and `gate` subcommands
 
 ## Usage
 
@@ -84,6 +84,7 @@ cargo run -p pengj-templates-cli -- update --dir ./my-app                # sync 
 cargo run -p pengj-templates-cli -- add-layer --dir ./my-app --layers just,bque  # add layers to an existing project
 cargo run -p pengj-templates-cli -- audit --dir ./my-app                 # audit half-wired setups and managed-block drift
 cargo run -p pengj-templates-cli -- check-lang --dir ./my-app           # audit docs follow the language axis (en: no Han; zh: Chinese copy)
+cargo run -p pengj-templates-cli -- doctor --dir ./my-app               # environment check (add --fix to activate hooks, links & shared target)
 cargo run -p pengj-templates-cli -- repo status --dir ./my-app          # check workspace links, Git config and submodules
 cargo run -p pengj-templates-cli -- repo init --dir ./my-app            # create missing workspace links (idempotent, never overwrites)
 cargo run -p pengj-templates-cli -- subrepo list --dir ./my-app         # render the machine-readable subrepo registry as a list
@@ -182,7 +183,7 @@ Key points:
 
 The template configuration for `.vscode/settings.json` is merged into the `settings` node of the workspace file when the project root already has a `*.code-workspace` file (no separate settings file is created); only when there is no workspace file are `.vscode/settings.json` created / maintained.
 
-Using the gate layer: the gate is a pure Rust implementation with no Node dependency, and it now lives inside `pengj-templates-cli` — installing one binary gives you the template engine, the MCP installer and the commit gate at the same time. After generating a project, run `git init` first, then run `just doctor --fix` once (or `sh .pengj-templates/scripts/doctor.sh --fix` / `pwsh -NoProfile -File .pengj-templates/scripts/doctor.ps1 -Fix` without just) — it checks the toolchain, points `core.hooksPath` at `.githooks` and confirms the CLI is on PATH. The installers no longer write a global hook path. There is one implementation only: without the CLI the hooks block the commit and print the install command, so there is no local fallback rule set. The gate layer implies the `ci` layer, which runs the same binary. `core.hooksPath` lives in `.git/config` and never travels with a clone, so run the doctor once after a fresh clone too.
+Using the gate layer: the gate is a pure Rust implementation with no Node dependency, and it now lives inside `pengj-templates-cli` — installing one binary gives you the template engine, the MCP installer and the commit gate at the same time. After generating a project, run `git init` first, then run `just doctor --fix` once (or `pengj-templates-cli doctor --fix` without just; `pengj-templates-cli gate hooks install` to activate hooks alone) — it checks the toolchain and points `core.hooksPath` at `.githooks` in-process. The installers no longer write a global hook path. There is one implementation only: without the CLI the hooks block the commit and print the install command, so there is no local fallback rule set. The gate layer implies the `ci` layer, which runs the same binary. `core.hooksPath` lives in `.git/config` and never travels with a clone, so run the doctor once after a fresh clone too.
 
 Scope policy: an absent `commit.scopes` key or an empty list now **rejects every `(scope)`** (fail-closed); the old "empty means accept any" behaviour is gone. Set `commit.scopes = ["*"]` to accept any scope, or list crate names to pin a whitelist. Existing projects generated before this change carry `commit.scopes = []` and will start rejecting scoped headers once the CLI is upgraded — add `["*"]` to `.pengj-templates/gate.toml` to restore the old behaviour.
 
@@ -195,9 +196,9 @@ The gate has a single implementation — the rules live in `pengj-templates-cli`
 - **Locally**: `commit-msg`, `pre-commit` and `pre-push` block the commit or the push and exit with the install command — no pass-through, and no weaker shell rule set standing in.
 - **On the server**: the `gate` job of the `ci` layer runs the same binary, and `.github/rulesets/gate.json` makes it a required status check, so a pull request still cannot land. When a run fails the workflow writes an actionable summary into `GITHUB_STEP_SUMMARY`, so the pull request page says what to change.
 
-Activating the hooks does not need the CLI: `just doctor --fix` (or `sh .pengj-templates/scripts/doctor.sh --fix`) calls `.githooks/install.sh`, which only needs git and a POSIX shell to point `core.hooksPath` at `.githooks` and record the executable bit; `just gate-hooks-local` is the raw entry for the same script. To install the CLI: `irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex` on Windows, `curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh` on Unix.
+To install the CLI: `irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex` on Windows, `curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh` on Unix. Once installed, run `just doctor --fix` (or `pengj-templates-cli doctor --fix` / `pengj-templates-cli gate hooks install`) to point `core.hooksPath` at `.githooks` and record the executable bit in-process.
 
-The environment check itself lives in `.pengj-templates/scripts/doctor.sh` / `.pengj-templates/scripts/doctor.ps1` and only checks the tools the selected layers use. Add project-specific checks by dropping `*.sh` (Unix) or `*.ps1` (Windows) into `.pengj-templates/scripts/doctor.d/`; a non-zero exit is reported as a failure, and `--fix` sets `DOCTOR_FIX=1` so a custom check can repair its own tool.
+The environment check itself is built into `pengj-templates-cli doctor` (`--dir`, `--fix`, `--lang zh|en`, `--json`) and checks only the tools and capabilities the selected layers use. Add project-specific checks by dropping `*.sh` (Unix) or `*.ps1` (Windows) into `.pengj-templates/scripts/doctor.d/`; a non-zero exit is reported as a failure, and `--fix` sets `DOCTOR_FIX=1` so a custom check can repair its own tool.
 
 The ruleset takes effect after a maintainer applies it once:
 
@@ -225,7 +226,7 @@ Template output is kept in one directory; the root only carries what has to live
 | `justfile` | the `just` layer (just only reads a root `justfile`, so it cannot move) |
 | `.pengj-templates/manifest.json` | the manifest the engine writes: layers, options, hashes of template-managed files |
 | `.pengj-templates/gate.toml` | the gate config from the `gate` layer (listed in `update_ignore`: its values belong to the project) |
-| `.pengj-templates/scripts/doctor.sh` / `.ps1` + `doctor.d/` | the `common` layer's environment check and the custom-check extension point |
+| `.pengj-templates/scripts/doctor.d/` | the `common` layer's custom environment-check extension point (run by `pengj-templates-cli doctor`) |
 | `.pengj-templates/just/*.just` | recipe modules from `gate` / `rust` / `rust-workspace` / `subrepo` / `worktree`, conditionally imported by the root `justfile` |
 | `.pengj-templates/subrepo.toml` | the `subrepo` layer's machine-readable registry (managed doc block + project-owned entries) |
 | `.githooks/` | the `gate` layer's git hooks, the target of `core.hooksPath` |
