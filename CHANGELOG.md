@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.82.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.81.1...v0.82.0) (2026-11-22)
+
+
+### Features
+
+* **cli:** 新增 doctor 子命令支持按层自检、本地修复、双语与 JSON 输出 ([d635934](https://github.com/pengjiaxusz/pengj-templates/commit/d6359346a12130056b90bfd436ccd6cad6fba822))
+* **core:** 新增双语项目环境自检核心模块与子仓库双语体检接口 ([c618245](https://github.com/pengjiaxusz/pengj-templates/commit/c6182450962362eb130876afb672dc73033db975))
+* **gate:** 新增目录隔离且结构化返回的钩子安装与竞品检测接口 ([9f480cf](https://github.com/pengjiaxusz/pengj-templates/commit/9f480cf2fcd758693cb36b47ef15c8ccf0219da6))
+
 ## [0.81.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.81.0...v0.81.1) (2026-11-22)
 
 
