@@ -1,43 +1,54 @@
 <!-- PENGJ_TEMPLATE_START -->
+{%- set clone_url = repo_url if repo_url else "<repo-url>" -%}
 {%- if options["skill_lang"] | default("zh") == "en" %}
 # Contributing to {{ project_name }}
 
 ## 1. Clone & Prerequisites
 
-{% if 'subrepo' in layers -%}
+{% if has_submodules -%}
 - Clone with submodules initialized:
   ```sh
-  git clone --recursive <repo-url>
+  git clone --recursive {{ clone_url }}
   # If already cloned:
   git submodule update --init --recursive
   ```
+{% if 'subrepo' in layers -%}
 - Sub-repositories are tracked in `.pengj-templates/subrepo.toml` (single source of truth).
-{% else -%}
-- Clone the repository (add `--recursive` or run `git submodule update --init --recursive` if submodules are used).
 {% endif -%}
-- Ensure `pengj-templates-cli` is installed and on your `PATH` (default user bin: `${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin`).
+{% else -%}
+- Clone the repository:
+  ```sh
+  git clone {{ clone_url }}
+  ```
+{% endif -%}
+- Ensure `pengj-templates-cli` is installed and on your `PATH` (default user bin: `${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin` on Linux/macOS, `%LOCALAPPDATA%\pengj-templates\bin` on Windows).
 
 ## 2. Environment Check & Hook Setup
 
-`doctor` is the single initialization entry point for this repository (checks required toolchains, activates local Git hooks, creates agent workspace links, initializes submodules, and prepares shared build directories according to enabled layers):
+Run the bootstrap script to inspect your local environment (read-only by default; never downloads or modifies tools automatically):
+
+```sh
+# Linux / macOS
+sh .pengj-templates/scripts/doctor.sh
+# Windows (PowerShell)
+pwsh -File .pengj-templates/scripts/doctor.ps1
+```
 
 {% if 'just' in layers -%}
-```sh
-just doctor --fix   # inspect & auto-fix local repo state (offline)
-just doctor         # inspect only
-```
-- Without `just` installed yet, run the CLI directly:
+- If `just` is already installed, you can run `just doctor` directly (read-only by default).
+- When you are ready to activate local Git hooks, create agent workspace links, or fix local repo state (offline), pass `--fix` explicitly:
   ```sh
-  pengj-templates-cli doctor --dir . --fix
+  sh .pengj-templates/scripts/doctor.sh --fix   # or: just doctor --fix
   ```
 {% if 'gate' in layers -%}
-  - To activate only `.githooks`: `pengj-templates-cli gate hooks install` (sets `core.hooksPath=.githooks`).
+- To activate only `.githooks`: `pengj-templates-cli gate hooks install` (sets `core.hooksPath=.githooks`).
 {% endif -%}
 {% else -%}
-```sh
-pengj-templates-cli doctor --dir . --fix   # inspect & auto-fix local repo state (offline)
-pengj-templates-cli doctor --dir .         # inspect only
-```
+- You can also call the CLI directly (`pengj-templates-cli doctor --dir .`).
+- When you are ready to activate local Git hooks, create agent workspace links, or fix local repo state (offline), pass `--fix` explicitly:
+  ```sh
+  sh .pengj-templates/scripts/doctor.sh --fix   # or: pengj-templates-cli doctor --dir . --fix
+  ```
 {% if 'gate' in layers -%}
 - To activate only `.githooks`: `pengj-templates-cli gate hooks install` (sets `core.hooksPath=.githooks`).
 {% endif -%}
@@ -108,40 +119,50 @@ pengj-templates-cli doctor --dir .         # inspect only
 
 ## 1. 克隆与前置准备
 
-{% if 'subrepo' in layers -%}
+{% if has_submodules -%}
 - 首次克隆请连同子模块一起拉取：
   ```sh
-  git clone --recursive <repo-url>
+  git clone --recursive {{ clone_url }}
   # 若已克隆但未拉取子模块：
   git submodule update --init --recursive
   ```
+{% if 'subrepo' in layers -%}
 - 子仓库清单由 `.pengj-templates/subrepo.toml` 统一维护（唯一事实源）。
-{% else -%}
-- 克隆仓库（若仓库含子模块，请加 `--recursive` 或执行 `git submodule update --init --recursive`）。
 {% endif -%}
-- 确认本机已安装 `pengj-templates-cli` 并加入 `PATH`（默认目录：`${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin`）。
+{% else -%}
+- 克隆仓库：
+  ```sh
+  git clone {{ clone_url }}
+  ```
+{% endif -%}
+- 确认本机已安装 `pengj-templates-cli` 并加入 `PATH`（默认目录：Linux/macOS 为 `${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin`，Windows 为 `%LOCALAPPDATA%\pengj-templates\bin`）。
 
 ## 2. 环境自检与钩子初始化
 
-`doctor` 是本仓库的唯一初始化入口（按已选模板层检查工具链、激活本地 Git 钩子、创建 Agent 工作区链接、初始化子模块并准备共享编译目录）：
+运行引导脚本执行本地环境体检（默认只读，永不自动下载或修改工具）：
+
+```sh
+# Linux / macOS
+sh .pengj-templates/scripts/doctor.sh
+# Windows (PowerShell)
+pwsh -File .pengj-templates/scripts/doctor.ps1
+```
 
 {% if 'just' in layers -%}
-```sh
-just doctor --fix   # 自检并自动修复本地仓库状态（纯离线，不联网）
-just doctor         # 仅自检，不修改状态
-```
-- 本机尚未安装 `just` 时，可直接调用 CLI 回退命令：
+- 本机已安装 `just` 时，也可直接运行 `just doctor`（默认只读体检）。
+- 需要激活本地 Git 钩子、创建 Agent 工作区链接或修复本地仓库状态（纯离线）时，再显式追加 `--fix`：
   ```sh
-  pengj-templates-cli doctor --dir . --fix
+  sh .pengj-templates/scripts/doctor.sh --fix   # 或：just doctor --fix
   ```
 {% if 'gate' in layers -%}
-  - 仅激活 `.githooks` 时也可执行：`pengj-templates-cli gate hooks install`（写入 `core.hooksPath=.githooks`）。
+- 仅激活 `.githooks` 时也可执行：`pengj-templates-cli gate hooks install`（写入 `core.hooksPath=.githooks`）。
 {% endif -%}
 {% else -%}
-```sh
-pengj-templates-cli doctor --dir . --fix   # 自检并自动修复本地仓库状态（纯离线，不联网）
-pengj-templates-cli doctor --dir .         # 仅自检，不修改状态
-```
+- 也可直接调用 CLI：`pengj-templates-cli doctor --dir .`（默认只读体检）。
+- 需要激活本地 Git 钩子、创建 Agent 工作区链接或修复本地仓库状态（纯离线）时，再显式追加 `--fix`：
+  ```sh
+  sh .pengj-templates/scripts/doctor.sh --fix   # 或：pengj-templates-cli doctor --dir . --fix
+  ```
 {% if 'gate' in layers -%}
 - 仅激活 `.githooks` 时也可执行：`pengj-templates-cli gate hooks install`（写入 `core.hooksPath=.githooks`）。
 {% endif -%}
@@ -173,9 +194,9 @@ pengj-templates-cli doctor --dir .         # 仅自检，不修改状态
 {% endif -%}
 {% else -%}
 {% if 'rust-workspace' in layers -%}
-- Rust 工作区校验：`cargo fmt --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`。
+- Rust 工作区校验：`cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`。
 {% elif 'rust' in layers -%}
-- Rust 校验：`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings`、`cargo test`。
+- Rust 校验：`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`。
 {% endif -%}
 {% if 'bque' in layers -%}
 - Windows 下重型编译/测试请通过 `bque run -- <cmd>` 排队执行（基准测试用 `bque bench -- <cmd>`）。

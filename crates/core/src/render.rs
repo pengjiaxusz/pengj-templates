@@ -16,6 +16,8 @@ pub fn render_text(template: &str, ctx: &RenderContext) -> Result<String> {
             year => ctx.year,
             layers => ctx.layers,
             options => ctx.options,
+            has_submodules => ctx.has_submodules,
+            repo_url => ctx.repo_url,
         })
         .map_err(|e| CoreError::Render(e.to_string()))
 }

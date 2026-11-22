@@ -1105,7 +1105,8 @@ pub fn generate(
         templates.ensure_layer_skills(&mut options, &ordered, &available)?;
     }
 
-    let ctx = RenderContext::new(project_name, ordered.clone(), options.clone());
+    let ctx =
+        RenderContext::with_project_dir(project_name, ordered.clone(), options.clone(), &target);
     let fm = templates.build_file_map(&ordered, &options)?;
     let bytes_map = render_file_map(&fm, &ctx)?;
     let mut manifest = ProjectManifest {
@@ -1213,7 +1214,12 @@ pub fn adopt_project(
         templates.ensure_layer_skills(&mut options, &ordered, &available)?;
     }
 
-    let ctx = RenderContext::new(&project_name, ordered.clone(), options.clone());
+    let ctx = RenderContext::with_project_dir(
+        &project_name,
+        ordered.clone(),
+        options.clone(),
+        project_dir,
+    );
     let fm = templates.build_file_map(&ordered, &options)?;
     let bytes_map = render_file_map(&fm, &ctx)?;
     let ignores = templates.collect_update_ignores(&ordered)?;
@@ -1579,10 +1585,11 @@ pub fn update_project_with_options(
         // 层已启用但配套技能未勾选的存量项目，更新时自动补齐，避免半接入
         templates.ensure_layer_skills(&mut manifest.options, &ordered, &available_skills)?;
     }
-    let ctx = RenderContext::new(
+    let ctx = RenderContext::with_project_dir(
         &manifest.project_name,
         ordered.clone(),
         manifest.options.clone(),
+        project_dir,
     );
     let fm = templates.build_file_map(&ordered, &manifest.options)?;
     let bytes_map = render_file_map(&fm, &ctx)?;
@@ -2122,7 +2129,12 @@ pub fn audit_project(
             let _ = migrate_skills_option(&mut options, &available_skills);
         }
     }
-    let ctx = RenderContext::new(&manifest.project_name, ordered.clone(), options.clone());
+    let ctx = RenderContext::with_project_dir(
+        &manifest.project_name,
+        ordered.clone(),
+        options.clone(),
+        project_dir,
+    );
     let fm = templates.build_file_map(&ordered, &options)?;
     let bytes_map = render_file_map(&fm, &ctx)?;
     let ignores = templates.collect_update_ignores(&ordered)?;
@@ -5403,9 +5415,11 @@ description = \"x\"
             "钩子激活已收编进 CLI，模板不得再产出 .githooks/install.sh"
         );
         assert!(
-            !zh_root.join(".pengj-templates/scripts/doctor.sh").exists()
-                && !zh_root.join(".pengj-templates/scripts/doctor.ps1").exists(),
-            "环境自检已收编进 CLI，模板不得再产出 doctor.sh / doctor.ps1"
+            zh_root.join(".pengj-templates/scripts/doctor.sh").is_file()
+                && zh_root
+                    .join(".pengj-templates/scripts/doctor.ps1")
+                    .is_file(),
+            "common 层应产出双语无交互引导脚本 doctor.sh / doctor.ps1"
         );
 
         // -- 只有一套实现：模板不再产出兜底脚本 --
@@ -6347,14 +6361,14 @@ body
             "勾选工作树层应自动带上工作树技能，实际: {skills:?}"
         );
 
-        // 自检已收编进 CLI：不再产出 doctor.sh / doctor.ps1，justfile 直调 CLI doctor
+        // common 层产出薄引导脚本 doctor.sh / doctor.ps1，justfile 仍直调 CLI doctor
         for script in [
             ".pengj-templates/scripts/doctor.sh",
             ".pengj-templates/scripts/doctor.ps1",
         ] {
             assert!(
-                !proj.join(script).exists(),
-                "环境自检已收编进 CLI，不得再产出 {script}"
+                proj.join(script).is_file(),
+                "common 层应产出引导脚本 {script}"
             );
         }
         assert!(
@@ -6384,13 +6398,13 @@ body
             "不勾选工作树层时构建配方不得注入共享目录: {plain_rust}"
         );
         assert!(
-            !plain_dir
+            plain_dir
                 .join(".pengj-templates/scripts/doctor.sh")
-                .exists()
-                && !plain_dir
+                .is_file()
+                && plain_dir
                     .join(".pengj-templates/scripts/doctor.ps1")
-                    .exists(),
-            "环境自检已收编进 CLI，不得再产出 doctor 脚本"
+                    .is_file(),
+            "common 层应产出引导脚本 doctor.sh / doctor.ps1"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
@@ -6422,9 +6436,11 @@ body
         assert!(sub_dir.join(crate::subrepo::SUBREPO_REGISTRY_REL).is_file());
         assert!(!sub_dir.join(".pengj-templates/just/worktree.just").exists());
         assert!(
-            !sub_dir.join(".pengj-templates/scripts/doctor.sh").exists()
-                && !sub_dir.join(".pengj-templates/scripts/doctor.ps1").exists(),
-            "环境自检已收编进 CLI，不得再产出 doctor 脚本"
+            sub_dir.join(".pengj-templates/scripts/doctor.sh").is_file()
+                && sub_dir
+                    .join(".pengj-templates/scripts/doctor.ps1")
+                    .is_file(),
+            "common 层应产出引导脚本 doctor.sh / doctor.ps1"
         );
         let sub_justfile = std::fs::read_to_string(sub_dir.join("justfile")).unwrap();
         assert!(sub_justfile.contains("pengj-templates-cli doctor --dir ."));
@@ -6443,9 +6459,9 @@ body
         assert!(wt_dir.join(".pengj-templates/just/worktree.just").is_file());
         assert!(!wt_dir.join(crate::subrepo::SUBREPO_REGISTRY_REL).exists());
         assert!(
-            !wt_dir.join(".pengj-templates/scripts/doctor.sh").exists()
-                && !wt_dir.join(".pengj-templates/scripts/doctor.ps1").exists(),
-            "环境自检已收编进 CLI，不得再产出 doctor 脚本"
+            wt_dir.join(".pengj-templates/scripts/doctor.sh").is_file()
+                && wt_dir.join(".pengj-templates/scripts/doctor.ps1").is_file(),
+            "common 层应产出引导脚本 doctor.sh / doctor.ps1"
         );
         let wt_justfile = std::fs::read_to_string(wt_dir.join("justfile")).unwrap();
         assert!(wt_justfile.contains("pengj-templates-cli doctor --dir ."));
@@ -6681,17 +6697,20 @@ body
                 .unwrap();
         assert!(contains_cjk(&zh_just), "zh 项目应保留中文注释");
 
-        // doctor 与钩子激活已收编进 CLI：不再产出旧脚本，justfile 直调 CLI doctor，gate.just 无旧配方。
+        // 钩子激活已收编进 CLI（无 .githooks/install.sh），common 层产出双语引导脚本 doctor.{sh,ps1}，justfile 直调 CLI doctor，gate.just 无旧配方。
         for dir_name in ["lang_zh", "lang_en"] {
             let dir = tmp.join(dir_name);
-            for removed in [
+            assert!(
+                !dir.join(".githooks/install.sh").exists(),
+                "{dir_name} 不得再产出旧脚本 .githooks/install.sh"
+            );
+            for script in [
                 ".pengj-templates/scripts/doctor.sh",
                 ".pengj-templates/scripts/doctor.ps1",
-                ".githooks/install.sh",
             ] {
                 assert!(
-                    !dir.join(removed).exists(),
-                    "{dir_name} 不得再产出旧脚本 {removed}"
+                    dir.join(script).is_file(),
+                    "{dir_name} 应产出引导脚本 {script}"
                 );
             }
             let justfile = std::fs::read_to_string(dir.join("justfile")).unwrap();
@@ -6965,25 +6984,46 @@ body
 
         let rep = update_project(&templates, &proj).unwrap();
 
-        for (rel, _) in legacy_files {
+        // .githooks/install.sh 仍被清理；旧版 doctor.sh / doctor.ps1 则由新引导脚本覆盖升级
+        assert!(
+            !proj.join(".githooks/install.sh").exists(),
+            "未改动的旧脚本 .githooks/install.sh 应在 update 后被物理删除"
+        );
+        assert!(
+            rep.removed
+                .iter()
+                .any(|r| r.replace('\\', "/") == ".githooks/install.sh"),
+            "旧脚本 .githooks/install.sh 应记入 removed，实际: {:?}",
+            rep.removed
+        );
+        for rel in [
+            ".pengj-templates/scripts/doctor.sh",
+            ".pengj-templates/scripts/doctor.ps1",
+        ] {
             assert!(
-                !proj.join(rel).exists(),
-                "未改动的旧脚本 {rel} 应在 update 后被物理删除"
+                proj.join(rel).is_file(),
+                "引导脚本 {rel} 应在 update 后更新保留"
             );
             assert!(
-                rep.removed.iter().any(|r| r.replace('\\', "/") == rel),
-                "旧脚本 {rel} 应记入 removed，实际: {:?}",
-                rep.removed
+                rep.updated.iter().any(|u| u.replace('\\', "/") == rel),
+                "旧版 {rel} 应被升级并记入 updated，实际: {:?}",
+                rep.updated
+            );
+            let content = std::fs::read_to_string(proj.join(rel)).unwrap();
+            assert!(
+                !content.contains("legacy doctor"),
+                "{rel} 应已替换为最新引导脚本"
             );
         }
 
         let updated = ProjectManifest::load(&proj).unwrap();
-        for (rel, _) in legacy_files {
-            assert!(
-                !updated.files.keys().any(|k| k.replace('\\', "/") == rel),
-                "manifest 不应再残留已清理的旧脚本 {rel}"
-            );
-        }
+        assert!(
+            !updated
+                .files
+                .keys()
+                .any(|k| k.replace('\\', "/") == ".githooks/install.sh"),
+            "manifest 不应再残留已清理的旧脚本 .githooks/install.sh"
+        );
         assert!(
             proj.join(".pengj-templates/scripts/doctor.d/README.md")
                 .is_file(),
@@ -7029,8 +7069,10 @@ body
         let zh = std::fs::read_to_string(tmp.join("contrib_zh/CONTRIBUTING.md")).unwrap();
         assert!(zh.contains("<!-- PENGJ_TEMPLATE_START -->"));
         assert!(zh.contains("<!-- PENGJ_TEMPLATE_END -->"));
+        assert!(zh.contains("sh .pengj-templates/scripts/doctor.sh"));
+        assert!(zh.contains("pwsh -File .pengj-templates/scripts/doctor.ps1"));
+        assert!(zh.contains("just doctor"));
         assert!(zh.contains("just doctor --fix"));
-        assert!(zh.contains("pengj-templates-cli doctor --dir . --fix"));
         assert!(zh.contains("git clone --recursive"));
         assert!(zh.contains("git submodule update --init --recursive"));
         assert!(zh.contains("just gate-check"));
@@ -7045,8 +7087,10 @@ body
         let en = std::fs::read_to_string(tmp.join("contrib_en/CONTRIBUTING.md")).unwrap();
         assert!(en.contains("<!-- PENGJ_TEMPLATE_START -->"));
         assert!(en.contains("<!-- PENGJ_TEMPLATE_END -->"));
+        assert!(en.contains("sh .pengj-templates/scripts/doctor.sh"));
+        assert!(en.contains("pwsh -File .pengj-templates/scripts/doctor.ps1"));
+        assert!(en.contains("just doctor"));
         assert!(en.contains("just doctor --fix"));
-        assert!(en.contains("pengj-templates-cli doctor --dir . --fix"));
         assert!(en.contains("git clone --recursive"));
         assert!(en.contains("just gate-check"));
         assert!(en.contains("just subrepo-check"));
@@ -7091,7 +7135,11 @@ body
         )
         .unwrap();
         let bare = std::fs::read_to_string(tmp.join("contrib_bare/CONTRIBUTING.md")).unwrap();
+        assert!(bare.contains("sh .pengj-templates/scripts/doctor.sh"));
         assert!(bare.contains("pengj-templates-cli doctor --dir . --fix"));
+        assert!(bare.contains("git clone <repo-url>"));
+        assert!(!bare.contains("git clone --recursive"));
+        assert!(!bare.contains("若仓库含子模块"));
         assert!(!bare.contains("just doctor --fix"));
         assert!(!bare.contains("just gate-check"));
 
@@ -7191,6 +7239,89 @@ body
             "首次向无锚点文件置顶注入应计入 needs_review，实际: {:?}",
             legacy_rep.needs_review
         );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// 自动探测 `repo_url` 与 `has_submodules`：
+    /// - 无 `.gitmodules` 且未启用 `subrepo` 层时，生成 `git clone <https-url>`；
+    /// - 存在非空 `.gitmodules` 时，即使未启用 `subrepo` 层也生成 `git clone --recursive <https-url>`；
+    /// - `doctor.sh` 具备可执行位（Unix），中英文均通过 `i18n_audit`。
+    #[test]
+    fn contributing_and_doctor_scripts_auto_detect_repo_meta() {
+        let templates = real_templates();
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-contrib-meta-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let layers = vec!["common".to_string(), "just".to_string()];
+        let mut options = BTreeMap::new();
+        options.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        generate(&templates, "meta_proj", &layers, options, &tmp).unwrap();
+        let proj = tmp.join("meta_proj");
+
+        // 初始化 git 并设置 SSH origin
+        assert!(std::process::Command::new("git")
+            .arg("-C")
+            .arg(&proj)
+            .arg("init")
+            .status()
+            .unwrap()
+            .success());
+        assert!(std::process::Command::new("git")
+            .arg("-C")
+            .arg(&proj)
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "git@github.com:acme/meta-proj.git",
+            ])
+            .status()
+            .unwrap()
+            .success());
+
+        update_project(&templates, &proj).unwrap();
+        let contrib_no_sub = std::fs::read_to_string(proj.join("CONTRIBUTING.md")).unwrap();
+        assert!(
+            contrib_no_sub.contains("git clone https://github.com/acme/meta-proj.git"),
+            "应自动归一化 origin 为 HTTPS URL: {contrib_no_sub}"
+        );
+        assert!(
+            !contrib_no_sub.contains("git clone --recursive"),
+            "无子模块时不应出现 --recursive: {contrib_no_sub}"
+        );
+
+        // 添加非空 .gitmodules 后重新 update
+        std::fs::write(
+            proj.join(".gitmodules"),
+            "[submodule \"ext\"]\n\tpath = ext\n\turl = https://github.com/acme/ext.git\n",
+        )
+        .unwrap();
+        update_project(&templates, &proj).unwrap();
+        let contrib_with_sub = std::fs::read_to_string(proj.join("CONTRIBUTING.md")).unwrap();
+        assert!(
+            contrib_with_sub
+                .contains("git clone --recursive https://github.com/acme/meta-proj.git"),
+            "存在非空 .gitmodules 时应自动切换为 --recursive: {contrib_with_sub}"
+        );
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(proj.join(".pengj-templates/scripts/doctor.sh"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert!(
+                mode & 0o111 != 0,
+                "doctor.sh 必须保留可执行权限位，实际模式: {mode:o}"
+            );
+        }
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
