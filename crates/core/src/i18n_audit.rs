@@ -259,6 +259,7 @@ mod tests {
             ".pengj-templates/scripts/doctor.sh",
             ".pengj-templates/gate.toml",
             "AGENTS.md",
+            "CONTRIBUTING.md",
             ".pengj-templates/just/rust.just",
         ] {
             assert!(!is_machine_owned(path), "{path} 不应被当成机器产物");
