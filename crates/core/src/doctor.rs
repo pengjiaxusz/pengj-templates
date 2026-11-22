@@ -140,10 +140,14 @@ pub fn run_doctor(project_dir: &Path, opts: &DoctorOptions) -> Result<DoctorRepo
         items.push(check_pwsh_tool(lang));
     }
 
-    // 4. rust / rust-workspace 层：cargo、rustc
+    // 4. rust / rust-workspace 层：cargo、rustc（Linux 启用 use_lld 时额外检查 ld.lld）
     if has_layer(&manifest, "rust") || has_layer(&manifest, "rust-workspace") {
         items.push(check_cargo_tool(lang));
         items.push(check_rustc_tool(lang));
+        #[cfg(target_os = "linux")]
+        if uses_lld(&manifest) {
+            items.push(check_lld_tool(lang));
+        }
     }
 
     // 5. bque 层
@@ -334,6 +338,15 @@ fn has_skill(manifest: &ProjectManifest, name: &str) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(any(target_os = "linux", test))]
+fn uses_lld(manifest: &ProjectManifest) -> bool {
+    manifest
+        .options
+        .get("use_lld")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+}
+
 fn probe_tool_version(program: &str, args: &[&str]) -> Option<String> {
     let output = Command::new(program).args(args).output().ok()?;
     if !output.status.success() {
@@ -480,6 +493,44 @@ fn check_rustc_tool(lang: Lang) -> DoctorItem {
             summary: match lang {
                 Lang::Zh => "未找到 rustc；请安装 Rust 工具链".to_string(),
                 Lang::En => "rustc not found; install a Rust toolchain".to_string(),
+            },
+            details: Vec::new(),
+            output: None,
+        },
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn check_lld_tool(lang: Lang) -> DoctorItem {
+    // 模板在 Linux 的 .cargo/config.toml 启用 `-fuse-ld=lld`，实际由 gcc/clang 调用 `ld.lld`；
+    // `lld --version` 作为通用驱动会返回非零退出码，因此直接探测 `ld.lld --version`。
+    lld_item_from_version(probe_tool_version("ld.lld", &["--version"]), lang)
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn lld_item_from_version(version: Option<String>, lang: Lang) -> DoctorItem {
+    match version {
+        Some(ver) => DoctorItem {
+            id: "lld".to_string(),
+            category: "tool".to_string(),
+            level: DoctorLevel::Ok,
+            summary: format!("lld ({})", ver.trim()),
+            details: Vec::new(),
+            output: None,
+        },
+        None => DoctorItem {
+            id: "lld".to_string(),
+            category: "tool".to_string(),
+            level: DoctorLevel::Error,
+            summary: match lang {
+                Lang::Zh => {
+                    "未找到 ld.lld（lld）；Linux 上 .cargo/config.toml 启用了 -fuse-ld=lld，请安装：sudo apt install lld（Debian/Ubuntu）、sudo dnf install lld（Fedora/RHEL）或 sudo pacman -S lld（Arch）"
+                        .to_string()
+                }
+                Lang::En => {
+                    "ld.lld (lld) not found; .cargo/config.toml enables -fuse-ld=lld on Linux — install via: sudo apt install lld (Debian/Ubuntu), sudo dnf install lld (Fedora/RHEL), or sudo pacman -S lld (Arch)"
+                        .to_string()
+                }
             },
             details: Vec::new(),
             output: None,
@@ -1736,5 +1787,48 @@ mod tests {
         }
         assert_eq!(obj.get("ok").and_then(|v| v.as_bool()), Some(true));
         assert_eq!(obj.get("warnings").and_then(|v| v.as_u64()), Some(1));
+    }
+
+    #[test]
+    fn linux下lld检查项支持中英双语提示与use_lld开关() {
+        let ok_zh = lld_item_from_version(Some("Debian LLD 14.0.6".to_string()), Lang::Zh);
+        assert_eq!(ok_zh.id, "lld");
+        assert_eq!(ok_zh.level, DoctorLevel::Ok);
+        assert!(ok_zh.summary.contains("Debian LLD 14.0.6"));
+
+        let missing_zh = lld_item_from_version(None, Lang::Zh);
+        assert_eq!(missing_zh.level, DoctorLevel::Error);
+        assert!(contains_han(&missing_zh.summary));
+        assert!(missing_zh.summary.contains("sudo apt install lld"));
+
+        let missing_en = lld_item_from_version(None, Lang::En);
+        assert_eq!(missing_en.level, DoctorLevel::Error);
+        assert!(
+            !contains_han(&missing_en.summary),
+            "英文模式 lld 缺失提示不应含汉字: {}",
+            missing_en.summary
+        );
+        assert!(missing_en.summary.contains("sudo apt install lld"));
+
+        #[cfg(target_os = "linux")]
+        {
+            let dir = temp_dir("linux-lld-toggle");
+            write_manifest(&dir, &["common", "rust"], BTreeMap::new());
+            let report_default = run_doctor(&dir, &DoctorOptions::default()).expect("自检应成功");
+            assert!(
+                report_default.items.iter().any(|i| i.id == "lld"),
+                "Linux 上启用 rust 层且未关闭 use_lld 时应检查 lld"
+            );
+
+            let mut opts = BTreeMap::new();
+            opts.insert("use_lld".to_string(), serde_json::json!(false));
+            write_manifest(&dir, &["common", "rust"], opts);
+            let report_disabled = run_doctor(&dir, &DoctorOptions::default()).expect("自检应成功");
+            assert!(
+                !report_disabled.items.iter().any(|i| i.id == "lld"),
+                "use_lld=false 时应跳过 lld 检查"
+            );
+            let _ = std::fs::remove_dir_all(&dir);
+        }
     }
 }
