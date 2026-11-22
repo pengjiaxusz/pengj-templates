@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.84.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.83.0...v0.84.0) (2026-11-22)
+
+
+### Features
+
+* **core,templates:** 自动探测仓库变量、新增无交互 doctor 引导脚本并升级 CONTRIBUTING 模板 ([756ddbe](https://github.com/pengjiaxusz/pengj-templates/commit/756ddbe492aa7e3bd308ec25295a3b626d12bc2c))
+* **templates,core:** 新增双语托管块 CONTRIBUTING.md 模板与置顶合并支持 ([d1ccb4b](https://github.com/pengjiaxusz/pengj-templates/commit/d1ccb4b678c84511f13fe565ef736b5628f3f15c))
+
 ## [0.83.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.82.0...v0.83.0) (2026-11-22)
 
 
