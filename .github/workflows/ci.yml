@@ -79,3 +79,5 @@ jobs:
       # 它的语料来自真实 commitlint 的裁决，测试保证门禁不会比它替换掉的工具更松。
       - name: 测试
         run: cargo test --workspace --no-fail-fast
+
+# checkout@v7 / paths-filter@v4 已是 Node 24 运行时，无 Node 20 弃用警告。
