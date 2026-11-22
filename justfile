@@ -28,25 +28,36 @@ doctor *ARGS:
 # ---------------------------------------------------------------------------
 
 # justfile for pengj-templates
-# 设置默认 shell 为 pwsh 7（本机默认）
 
 # ---------- 共享编译目录（worktree 层） ----------
 
-# 多工作树复用同一份编译产物：路径由 CLI 按机器推导（平台数据目录 + git common-dir 项目标识），
+# 多工作树复用同一份编译产物：路径由 CLI 按机器推导（主工作树的 target/），
 # 配方与 `just wt-check` 读同一个值——推导逻辑只有 CLI 一份，本仓库不另写一套。
-# 项目专属区的配方（build/check/clippy/test/bench）都吃这个导出值，bque 子进程同样继承。
-export CARGO_TARGET_DIR := `pengj-templates-cli worktree target-dir --dir .`
+# 目标机器未安装 pengj-templates-cli 时，优雅回退到当前 CARGO_TARGET_DIR 或默认 target。
+export CARGO_TARGET_DIR := if os_family() == "windows" {
+    `$d = if (Get-Command pengj-templates-cli -ErrorAction SilentlyContinue) { pengj-templates-cli worktree target-dir --dir . 2>$null }; if ($LASTEXITCODE -eq 0 -and $d) { $d } elseif ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { 'target' }`
+} else {
+    `command -v pengj-templates-cli >/dev/null 2>&1 && pengj-templates-cli worktree target-dir --dir . 2>/dev/null || printf '%s' "${CARGO_TARGET_DIR:-target}"`
+}
 
 # ---------- 提交门禁（crates/gate） ----------
 
 # 运行提交门禁：gate <子命令>
 # 子命令：audit（代码语言守卫）/ commit-msg <文件> / fmt / hooks install / selftest
+[windows]
 gate *ARGS:
     @bque run -- cargo run -q -p pengj-templates-cli -- gate {{ARGS}}
+[unix]
+gate *ARGS:
+    cargo run -q -p pengj-templates-cli -- gate {{ARGS}}
 
 # 安装 git 钩子（core.hooksPath=.githooks）
+[windows]
 gate-hooks:
     @bque run -- cargo run -q -p pengj-templates-cli -- gate hooks install
+[unix]
+gate-hooks:
+    cargo run -q -p pengj-templates-cli -- gate hooks install
 
 # ---------- Rust 构建与检查 ----------
 
@@ -58,47 +69,87 @@ fmt:
 fmt-check:
     cargo fmt --check
 
-# 编译检查（全 workspace，受 bque 全局排队与优先级管控）
+# 编译检查（全 workspace；Windows 走 bque 全局排队，Unix 直跑）
+[windows]
 check:
     @bque run -- cargo check --workspace
+[unix]
+check:
+    cargo check --workspace
 
 # clippy 检查（全 workspace，warnings 视为错误）
+[windows]
 clippy:
     @bque run -- cargo clippy --workspace --all-targets -- -D warnings
+[unix]
+clippy:
+    cargo clippy --workspace --all-targets -- -D warnings
 
 # 运行测试
+[windows]
 test:
     @bque run -- cargo test --workspace
+[unix]
+test:
+    cargo test --workspace
 
-# 专项基准测试（bque bench 自动挂起后台编译以提供纯净 CPU 环境）
+# 专项基准测试（Windows 下 bque bench 自动挂起后台编译以提供纯净 CPU 环境）
+[windows]
 bench *ARGS:
     @bque bench -- cargo bench --workspace {{ARGS}}
+[unix]
+bench *ARGS:
+    cargo bench --workspace {{ARGS}}
 
 # 构建所有 Rust crate（支持透传参数，如 `just build -r`）
+[windows]
 build FLAGS="":
     @bque run -- cargo build {{FLAGS}}
+[unix]
+build FLAGS="":
+    cargo build {{FLAGS}}
 
 # ---------- CLI ----------
 
 # 列出可用层
+[windows]
 layers:
     @bque run -- cargo run -q -p pengj-templates-cli -- list-layers
+[unix]
+layers:
+    cargo run -q -p pengj-templates-cli -- list-layers
 
 # 生成新项目（例：just create my-app  或  just create my-app common,gate,agent  或  just create my-app rust-workspace "D:\out"）
+[windows]
 create NAME LAYERS="rust" OUTPUT=".":
     @bque run -- cargo run -q -p pengj-templates-cli -- create {{NAME}} --layers {{LAYERS}} --output {{OUTPUT}}
+[unix]
+create NAME LAYERS="rust" OUTPUT=".":
+    cargo run -q -p pengj-templates-cli -- create {{NAME}} --layers {{LAYERS}} --output {{OUTPUT}}
 
 # 同步模板更新到已生成的项目（例：just update ./my-app）
+[windows]
 update DIR=".":
     @bque run -- cargo run -q -p pengj-templates-cli -- update --dir {{DIR}}
+[unix]
+update DIR=".":
+    cargo run -q -p pengj-templates-cli -- update --dir {{DIR}}
 
 # 用当前代码升级本机的 CLI 与模板（日常开发替代 install.ps1：拿得到未发布的改动）
+[windows]
 upgrade:
     @bque run -- cargo run -q -p pengj-templates-cli -- self update --from-source
+[unix]
+upgrade:
+    cargo run -q -p pengj-templates-cli -- self update --from-source
 
 # MCP 安装与巡检（例：just mcp list   /   just mcp add renderdoc   /   just mcp doctor）
+[windows]
 mcp *ARGS:
     @bque run -- cargo run -q -p pengj-templates-cli -- mcp {{ARGS}}
+[unix]
+mcp *ARGS:
+    cargo run -q -p pengj-templates-cli -- mcp {{ARGS}}
 
 # ---------- 综合 ----------
 

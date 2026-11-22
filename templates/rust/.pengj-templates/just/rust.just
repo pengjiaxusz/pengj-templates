@@ -1,8 +1,8 @@
 # {% if options["skill_lang"] == "en" %}.pengj-templates/just/rust.just — common tasks for a single-crate Rust project (managed by the rust layer){% else %}.pengj-templates/just/rust.just — Rust 单 crate 常用任务（rust 层托管，模板更新整页覆盖）{% endif %}
 # {% if options["skill_lang"] == "en" %}Imported by the root justfile based on the selected layers. If the project has its own{% else %}由 justfile 主入口按层条件 import；项目若有自己的编排，请在 manifest 里设{% endif %}
 # {% if options["skill_lang"] == "en" %}orchestration, set options["just_recipes"] = "none" and keep these recipes in the project-owned area.{% else %}options["just_recipes"] = "none"，把这些配方留给项目专属区。{% endif %}
-{% macro shared_win() %}{% if "worktree" in layers %}$env:CARGO_TARGET_DIR = (pengj-templates-cli worktree target-dir --dir .); {% endif %}{% endmacro -%}
-{% macro shared_sh() %}{% if "worktree" in layers %}CARGO_TARGET_DIR="$(pengj-templates-cli worktree target-dir --dir .)" {% endif %}{% endmacro -%}
+{% macro shared_win() %}{% if "worktree" in layers %}$d = if (Get-Command pengj-templates-cli -ErrorAction SilentlyContinue) { pengj-templates-cli worktree target-dir --dir . 2>$null }; $env:CARGO_TARGET_DIR = if ($LASTEXITCODE -eq 0 -and $d) { $d } elseif ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { 'target' }; {% endif %}{% endmacro -%}
+{% macro shared_sh() %}{% if "worktree" in layers %}CARGO_TARGET_DIR="$(command -v pengj-templates-cli >/dev/null 2>&1 && pengj-templates-cli worktree target-dir --dir . 2>/dev/null || printf '%s' "${CARGO_TARGET_DIR:-target}")" {% endif %}{% endmacro -%}
 {% if "bque" in layers %}
 # {% if options["skill_lang"] == "en" %}Build (Windows: global queue + Idle priority){% else %}构建（Windows 走全局排队 + Idle 优先级）{% endif %}
 [windows]
