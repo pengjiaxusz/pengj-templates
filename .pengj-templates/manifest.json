@@ -171,7 +171,7 @@
     ".pengj-templates\\scripts\\doctor.ps1": "086cf8fb1ecc2e80e0066575f5bfc623c066b63e90da70196554acfafbff1e87",
     ".pengj-templates\\scripts\\doctor.sh": "6392f3eb8d7068e99ee1199bbfbe69dc2337e587bad013294789732378b07510",
     "AGENTS.md": "2eff1c778bd010eed8b5b500e3b485c2cdf3323c479513869e97a1631c61f864",
-    "CONTRIBUTING.md": "cffe5e6ffaded096df3d197fa4f1c568a521300e50ea4fcee2c479b797c51de3",
+    "CONTRIBUTING.md": "664e618177ad5356d89af7c52e1811c5b417b7a93d4d2d374d79525a86860574",
     "Cargo.toml": "53130b1a688cbae224b0ebe55f910c099580b36f7390b690783b298a27bf3cb2",
     "justfile": "92e45f29f1659cf54f5478bf0e013412fa65f882b6e4318923907ea8815acf0f",
     "rust-toolchain.toml": "7271c211635386654befb235ed54aef12efe46376c4fe41c497c8d23bc1572ec"

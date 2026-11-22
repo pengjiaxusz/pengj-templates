@@ -7071,13 +7071,9 @@ body
         assert!(zh.contains("<!-- PENGJ_TEMPLATE_END -->"));
         assert!(zh.contains("sh .pengj-templates/scripts/doctor.sh"));
         assert!(zh.contains("pwsh -File .pengj-templates/scripts/doctor.ps1"));
-        assert!(zh.contains("just doctor"));
-        assert!(zh.contains("just doctor --fix"));
         assert!(zh.contains("git clone --recursive"));
-        assert!(zh.contains("git submodule update --init --recursive"));
-        assert!(zh.contains("just gate-check"));
-        assert!(zh.contains("just subrepo-check"));
-        assert!(zh.contains("bque run --"));
+        assert!(!zh.contains("pengj-templates-cli"));
+        assert!(!zh.contains("## 3."));
         assert!(zh.contains("项目专属贡献说明写在下方"));
         assert!(
             crate::i18n_audit::contains_han(&zh),
@@ -7089,12 +7085,9 @@ body
         assert!(en.contains("<!-- PENGJ_TEMPLATE_END -->"));
         assert!(en.contains("sh .pengj-templates/scripts/doctor.sh"));
         assert!(en.contains("pwsh -File .pengj-templates/scripts/doctor.ps1"));
-        assert!(en.contains("just doctor"));
-        assert!(en.contains("just doctor --fix"));
         assert!(en.contains("git clone --recursive"));
-        assert!(en.contains("just gate-check"));
-        assert!(en.contains("just subrepo-check"));
-        assert!(en.contains("bque run --"));
+        assert!(!en.contains("pengj-templates-cli"));
+        assert!(!en.contains("## 3."));
         assert!(en.contains("Project-specific contribution notes go below"));
         assert!(
             !crate::i18n_audit::contains_han(&en),
@@ -7136,12 +7129,12 @@ body
         .unwrap();
         let bare = std::fs::read_to_string(tmp.join("contrib_bare/CONTRIBUTING.md")).unwrap();
         assert!(bare.contains("sh .pengj-templates/scripts/doctor.sh"));
-        assert!(bare.contains("pengj-templates-cli doctor --dir . --fix"));
+        assert!(bare.contains("pwsh -File .pengj-templates/scripts/doctor.ps1"));
         assert!(bare.contains("git clone <repo-url>"));
         assert!(!bare.contains("git clone --recursive"));
         assert!(!bare.contains("若仓库含子模块"));
-        assert!(!bare.contains("just doctor --fix"));
-        assert!(!bare.contains("just gate-check"));
+        assert!(!bare.contains("pengj-templates-cli"));
+        assert!(!bare.contains("## 3."));
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -7199,7 +7192,7 @@ body
         );
         let merged = std::fs::read_to_string(proj.join("CONTRIBUTING.md")).unwrap();
         assert!(
-            merged.contains("just doctor --fix"),
+            merged.contains("sh .pengj-templates/scripts/doctor.sh"),
             "块内应更新为最新模板内容"
         );
         assert!(!merged.contains("旧版贡献指南"), "旧块内容应被替换");
