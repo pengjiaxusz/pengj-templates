@@ -408,9 +408,9 @@ fn check_just_tool(lang: Lang) -> DoctorItem {
             level: DoctorLevel::Error,
             summary: match lang {
                 Lang::Zh => {
-                    "未找到 just；安装地址：https://github.com/casey/just#installation".to_string()
+                    "未找到 just（约 3–5 MB；常见安装位置：~/.local/bin、~/.cargo/bin 或系统包管理器目录）；安装地址：https://github.com/casey/just#installation".to_string()
                 }
-                Lang::En => "just not found; install: https://github.com/casey/just#installation"
+                Lang::En => "just not found (~3-5 MB; typical install path: ~/.local/bin, ~/.cargo/bin, or package manager bin); install: https://github.com/casey/just#installation"
                     .to_string(),
             },
             details: Vec::new(),
@@ -524,11 +524,11 @@ fn lld_item_from_version(version: Option<String>, lang: Lang) -> DoctorItem {
             level: DoctorLevel::Error,
             summary: match lang {
                 Lang::Zh => {
-                    "未找到 ld.lld（lld）；Linux 上 .cargo/config.toml 启用了 -fuse-ld=lld，请安装：sudo apt install lld（Debian/Ubuntu）、sudo dnf install lld（Fedora/RHEL）或 sudo pacman -S lld（Arch）"
+                    "未找到 ld.lld（lld，约 20–50 MB，默认由系统包管理器安装至 /usr/bin/ld.lld）；Linux 上 .cargo/config.toml 启用了 -fuse-ld=lld，请安装：sudo apt install lld（Debian/Ubuntu）、sudo dnf install lld（Fedora/RHEL）或 sudo pacman -S lld（Arch）"
                         .to_string()
                 }
                 Lang::En => {
-                    "ld.lld (lld) not found; .cargo/config.toml enables -fuse-ld=lld on Linux — install via: sudo apt install lld (Debian/Ubuntu), sudo dnf install lld (Fedora/RHEL), or sudo pacman -S lld (Arch)"
+                    "ld.lld (lld) not found (~20-50 MB, installed by system package manager to /usr/bin/ld.lld); .cargo/config.toml enables -fuse-ld=lld on Linux — install via: sudo apt install lld (Debian/Ubuntu), sudo dnf install lld (Fedora/RHEL), or sudo pacman -S lld (Arch)"
                         .to_string()
                 }
             },
@@ -556,11 +556,11 @@ fn check_bque_tool(lang: Lang) -> DoctorItem {
                 level: DoctorLevel::Warn,
                 summary: match lang {
                     Lang::Zh => {
-                        "未找到 bque；安装命令：irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
+                        "未找到 bque（约 3–5 MB；默认安装位置：%LOCALAPPDATA%\\bque\\bin）；安装命令：irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
                             .to_string()
                     }
                     Lang::En => {
-                        "bque not found; install: irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
+                        "bque not found (~3-5 MB; default install path: %LOCALAPPDATA%\\bque\\bin); install: irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
                             .to_string()
                     }
                 },
