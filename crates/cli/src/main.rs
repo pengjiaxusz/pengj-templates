@@ -214,6 +214,24 @@ enum Command {
         #[command(subcommand)]
         cmd: WorktreeCommand,
     },
+    /// 项目环境自检：按 manifest 启用的层检查工具链、提交钩子、工作区链接、子仓库与共享编译目录
+    ///
+    /// 不依赖模板目录；以 `.pengj-templates/manifest.json` 为唯一事实源。
+    /// 退出码：0 无错误（允许存在警告），1 存在错误。
+    Doctor {
+        /// 项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 本地修复模式：激活提交钩子、补齐工作区链接与共享编译目录（永不联网）
+        #[arg(long)]
+        fix: bool,
+        /// 覆盖输出语言：zh / en（默认取 manifest.options.skill_lang，缺省 zh）
+        #[arg(long)]
+        lang: Option<String>,
+        /// 以 JSON 格式输出结构化报告（键名恒为英文）
+        #[arg(long)]
+        json: bool,
+    },
     /// 立即检查 CLI 是否有新版本（同步联网，不写提示状态之外的任何东西）
     ///
     /// 日常运行时由后台异步检查代替，这条命令用于脚本或想立刻知道答案的场合。
@@ -492,6 +510,16 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     if let Command::Worktree { cmd } = &cli.command {
         return cmd_worktree(cmd.clone());
     }
+    // doctor 子命令读取项目 manifest，不依赖模板目录，提前分发
+    if let Command::Doctor {
+        dir,
+        fix,
+        lang,
+        json,
+    } = &cli.command
+    {
+        return cmd_doctor(dir, *fix, lang.as_deref(), *json);
+    }
     let templates = load_templates(&cli.templates)?;
     match cli.command {
         Command::ListLayers { json } => cmd_list_layers(&templates, json),
@@ -622,6 +650,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Gate { .. } => unreachable!("gate 子命令已在加载模板前分发"),
         Command::Subrepo { .. } => unreachable!("subrepo 子命令已在加载模板前分发"),
         Command::Worktree { .. } => unreachable!("worktree 子命令已在加载模板前分发"),
+        Command::Doctor { .. } => unreachable!("doctor 子命令已在加载模板前分发"),
         Command::CheckUpdate { .. } => unreachable!("check-update 子命令已在加载模板前分发"),
         Command::SelfCmd { .. } => unreachable!("self 子命令已在加载模板前分发"),
         Command::BackgroundUpdateCheck => unreachable!("后台更新检查已在入口处分发"),
@@ -1734,4 +1763,51 @@ fn print_repo_report(report: &pengj_core::RepoReport, json: bool) {
         println!("[repo] {label:<8} {}: {}", item.name, item.detail);
     }
     println!("[repo] {}", if report.ok { "就绪" } else { "存在问题" });
+}
+
+// ---------------------------------------------------------------------------
+// doctor：项目环境自检
+// ---------------------------------------------------------------------------
+
+fn cmd_doctor(dir: &Path, fix: bool, lang: Option<&str>, json: bool) -> anyhow::Result<()> {
+    let override_lang = match lang {
+        None => None,
+        Some("zh") => Some(pengj_core::Lang::Zh),
+        Some("en") => Some(pengj_core::Lang::En),
+        Some(other) => anyhow::bail!("无效语言：{other}（可选 zh/en）"),
+    };
+
+    let opts = pengj_core::DoctorOptions {
+        fix,
+        lang: override_lang,
+    };
+
+    let report = match pengj_core::run_doctor(dir, &opts) {
+        Ok(report) => report,
+        Err(pengj_core::CoreError::MissingManifest(_)) => {
+            anyhow::bail!(
+                "未找到 .pengj-templates/manifest.json（{} 尚未由 pengj-templates 纳管）；\
+                 请先运行 `pengj-templates-cli adopt --dir {} --layers <层清单>`",
+                dir.display(),
+                dir.display()
+            );
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        let effective_lang = pengj_core::Lang::from_skill_lang(Some(report.lang.as_str()));
+        print!(
+            "{}",
+            pengj_core::format_doctor_report(&report, effective_lang)
+        );
+    }
+
+    let code = report.exit_code();
+    if code != 0 {
+        update::exit(code);
+    }
+    Ok(())
 }
