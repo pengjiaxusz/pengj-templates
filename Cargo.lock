@@ -514,7 +514,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "pengj-core"
-version = "0.81.1"
+version = "0.82.0"
 dependencies = [
  "minijinja",
  "pengj-gate",
@@ -528,11 +528,11 @@ dependencies = [
 
 [[package]]
 name = "pengj-gate"
-version = "0.81.1"
+version = "0.82.0"
 
 [[package]]
 name = "pengj-mcp"
-version = "0.81.1"
+version = "0.82.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -542,7 +542,7 @@ dependencies = [
 
 [[package]]
 name = "pengj-templates-cli"
-version = "0.81.1"
+version = "0.82.0"
 dependencies = [
  "anyhow",
  "clap",
