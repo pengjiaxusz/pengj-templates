@@ -812,13 +812,14 @@ pub(crate) struct ManagedTextMerge {
 }
 
 /// 判断该文件在缺少托管块时是否应置顶插入（Prepend）：
-/// 规范类文件（AGENTS.md / GEMINI.md）置顶可确保 AI 编码助手最先看到总则与门禁
+/// 规范类与贡献指南文件（AGENTS.md / GEMINI.md / CONTRIBUTING.md）置顶可确保
+/// 读者与 AI 编码助手最先看到总则、环境初始化入口与门禁，同时完整保留下方项目自有内容
 fn is_prepend_file(rel: &Path) -> bool {
     let name = rel
         .file_name()
         .map(|n| n.to_string_lossy().to_ascii_uppercase())
         .unwrap_or_default();
-    name == "AGENTS.MD" || name == "GEMINI.MD"
+    name == "AGENTS.MD" || name == "GEMINI.MD" || name == "CONTRIBUTING.MD"
 }
 
 /// 受管块文本合并（纯文本版）：把 `incoming_text` 中的托管块并入 `target_text`。
@@ -6987,6 +6988,208 @@ body
             proj.join(".pengj-templates/scripts/doctor.d/README.md")
                 .is_file(),
             "doctor.d 扩展点说明应原样保留"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// `common` 层生成 `CONTRIBUTING.md`：
+    /// - 按 `layers` 动态渲染 `just` / `gate` / `subrepo` / `rust-workspace` / `bque` 条目；
+    /// - 含 `<!-- PENGJ_TEMPLATE_START -->` / `<!-- PENGJ_TEMPLATE_END -->` 托管块；
+    /// - 中英文双语分别通过 `i18n_audit`（英文零汉字，中文必含汉字）。
+    #[test]
+    fn contributing_md_generated_bilingual_and_layer_aware() {
+        let templates =
+            Templates::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../templates"));
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-contrib-gen-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let full_layers = vec![
+            "common".to_string(),
+            "just".to_string(),
+            "gate".to_string(),
+            "subrepo".to_string(),
+            "rust-workspace".to_string(),
+            "bque".to_string(),
+            "worktree".to_string(),
+        ];
+
+        for (name, lang) in [("contrib_zh", "zh"), ("contrib_en", "en")] {
+            let mut options = BTreeMap::new();
+            options.insert("skill_lang".to_string(), serde_json::json!(lang));
+            options.insert("commit_zh".to_string(), serde_json::json!(lang == "zh"));
+            generate(&templates, name, &full_layers, options, &tmp).unwrap();
+        }
+
+        let zh = std::fs::read_to_string(tmp.join("contrib_zh/CONTRIBUTING.md")).unwrap();
+        assert!(zh.contains("<!-- PENGJ_TEMPLATE_START -->"));
+        assert!(zh.contains("<!-- PENGJ_TEMPLATE_END -->"));
+        assert!(zh.contains("just doctor --fix"));
+        assert!(zh.contains("pengj-templates-cli doctor --dir . --fix"));
+        assert!(zh.contains("git clone --recursive"));
+        assert!(zh.contains("git submodule update --init --recursive"));
+        assert!(zh.contains("just gate-check"));
+        assert!(zh.contains("just subrepo-check"));
+        assert!(zh.contains("bque run --"));
+        assert!(zh.contains("项目专属贡献说明写在下方"));
+        assert!(
+            crate::i18n_audit::contains_han(&zh),
+            "中文 CONTRIBUTING.md 必须含汉字"
+        );
+
+        let en = std::fs::read_to_string(tmp.join("contrib_en/CONTRIBUTING.md")).unwrap();
+        assert!(en.contains("<!-- PENGJ_TEMPLATE_START -->"));
+        assert!(en.contains("<!-- PENGJ_TEMPLATE_END -->"));
+        assert!(en.contains("just doctor --fix"));
+        assert!(en.contains("pengj-templates-cli doctor --dir . --fix"));
+        assert!(en.contains("git clone --recursive"));
+        assert!(en.contains("just gate-check"));
+        assert!(en.contains("just subrepo-check"));
+        assert!(en.contains("bque run --"));
+        assert!(en.contains("Project-specific contribution notes go below"));
+        assert!(
+            !crate::i18n_audit::contains_han(&en),
+            "英文 CONTRIBUTING.md 不得出现汉字"
+        );
+
+        // 双向语言审计均通过
+        let en_audit = crate::i18n_audit::audit_project_lang(
+            &tmp.join("contrib_en"),
+            Some(crate::i18n_audit::Lang::En),
+        )
+        .unwrap();
+        assert!(
+            !en_audit.has_violations(),
+            "en 审计违规: {:?}",
+            en_audit.findings
+        );
+        let zh_audit = crate::i18n_audit::audit_project_lang(
+            &tmp.join("contrib_zh"),
+            Some(crate::i18n_audit::Lang::Zh),
+        )
+        .unwrap();
+        assert!(
+            !zh_audit.has_violations(),
+            "zh 审计违规: {:?}",
+            zh_audit.findings
+        );
+
+        // 最小 common 层（未启用 just / gate / subrepo）直接给出 CLI doctor 入口
+        let mut bare_opts = BTreeMap::new();
+        bare_opts.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        generate(
+            &templates,
+            "contrib_bare",
+            &["common".to_string()],
+            bare_opts,
+            &tmp,
+        )
+        .unwrap();
+        let bare = std::fs::read_to_string(tmp.join("contrib_bare/CONTRIBUTING.md")).unwrap();
+        assert!(bare.contains("pengj-templates-cli doctor --dir . --fix"));
+        assert!(!bare.contains("just doctor --fix"));
+        assert!(!bare.contains("just gate-check"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// `CONTRIBUTING.md` 更新与存量纳管：
+    /// 1. 已有锚点块且块外有项目自定义内容时，`update` 仅刷新块内内容，块外 100% 保留；
+    /// 2. 存量项目已有无锚点 `CONTRIBUTING.md` 时，`update` 将托管块置顶插入并 100% 保留原内容。
+    #[test]
+    fn contributing_md_preserves_custom_content_on_update_and_legacy_prepend() {
+        let templates =
+            Templates::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../templates"));
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-contrib-upd-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let layers = vec!["common".to_string(), "just".to_string()];
+        let mut options = BTreeMap::new();
+        options.insert("skill_lang".to_string(), serde_json::json!("zh"));
+        generate(&templates, "proj_managed", &layers, options.clone(), &tmp).unwrap();
+        let proj = tmp.join("proj_managed");
+
+        // 模拟用户在块外追加项目专属内容，同时块内是旧版文案
+        let custom_section = "
+## 本项目专属流程
+
+- 提 PR 前请补充设计说明。
+- 自定义数据目录：`data/`。
+";
+        let old_block = "<!-- PENGJ_TEMPLATE_START -->
+# 旧版贡献指南
+<!-- PENGJ_TEMPLATE_END -->
+";
+        write_test_file(
+            proj.join("CONTRIBUTING.md"),
+            format!("{old_block}{custom_section}"),
+        )
+        .unwrap();
+        // 让 manifest 里的哈希与当前磁盘一致（模拟历史版本），确保触发更新而非冲突跳过
+        let mut manifest = ProjectManifest::load(&proj).unwrap();
+        let disk_bytes = std::fs::read(proj.join("CONTRIBUTING.md")).unwrap();
+        manifest
+            .files
+            .insert("CONTRIBUTING.md".to_string(), sha256_hex(&disk_bytes));
+        manifest.save(&proj).unwrap();
+
+        let rep = update_project(&templates, &proj).unwrap();
+        assert!(
+            rep.updated.iter().any(|f| f == "CONTRIBUTING.md"),
+            "块内变更应更新 CONTRIBUTING.md，实际: {:?}",
+            rep
+        );
+        let merged = std::fs::read_to_string(proj.join("CONTRIBUTING.md")).unwrap();
+        assert!(
+            merged.contains("just doctor --fix"),
+            "块内应更新为最新模板内容"
+        );
+        assert!(!merged.contains("旧版贡献指南"), "旧块内容应被替换");
+        assert!(
+            merged.ends_with(custom_section),
+            "块外用户自定义内容必须 100% 逐字节保留，实际:
+{merged}"
+        );
+
+        // 场景 2：存量项目已有无锚点的自定义 CONTRIBUTING.md
+        generate(&templates, "proj_legacy", &layers, options, &tmp).unwrap();
+        let legacy_proj = tmp.join("proj_legacy");
+        let legacy_custom = "# Legacy Contributing Guide
+
+- Keep every single line here.
+";
+        write_test_file(legacy_proj.join("CONTRIBUTING.md"), legacy_custom).unwrap();
+        let mut legacy_manifest = ProjectManifest::load(&legacy_proj).unwrap();
+        legacy_manifest.files.remove("CONTRIBUTING.md");
+        legacy_manifest.save(&legacy_proj).unwrap();
+
+        let legacy_rep = update_project(&templates, &legacy_proj).unwrap();
+        let legacy_merged = std::fs::read_to_string(legacy_proj.join("CONTRIBUTING.md")).unwrap();
+        assert!(
+            legacy_merged.starts_with("<!-- PENGJ_TEMPLATE_START -->"),
+            "无锚点存量 CONTRIBUTING.md 应置顶插入托管块"
+        );
+        assert!(
+            legacy_merged.ends_with(legacy_custom),
+            "无锚点存量 CONTRIBUTING.md 原有内容应 100% 保留在块下方"
+        );
+        assert!(
+            legacy_rep
+                .needs_review
+                .iter()
+                .any(|f| f.starts_with("CONTRIBUTING.md")),
+            "首次向无锚点文件置顶注入应计入 needs_review，实际: {:?}",
+            legacy_rep.needs_review
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
