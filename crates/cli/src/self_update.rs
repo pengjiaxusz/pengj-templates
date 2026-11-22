@@ -29,7 +29,9 @@
 use std::env;
 use std::fs;
 use std::io;
-use std::path::{Component, Path, PathBuf};
+#[cfg(any(windows, test))]
+use std::path::Component;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -255,6 +257,8 @@ fn extract(archive: &Path, dest: &Path) -> anyhow::Result<()> {
 }
 
 /// 只接受纯相对路径；`..`、盘符、根路径一律判为不可信。
+// 调用方是 zip 解包（仅 Windows）；非 Windows 只在测试里用到。
+#[cfg(any(windows, test))]
 fn safe_relative(path: &Path) -> Option<PathBuf> {
     let mut out = PathBuf::new();
     for component in path.components() {
