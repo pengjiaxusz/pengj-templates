@@ -8,7 +8,7 @@
 //! 2. **子模块就绪状态**——子模块没初始化、或者实际指针与登记的上游分支已经漂移。
 //! 3. **依赖模式自洽**——登记表里出现未知模式时报错，而不是静默跳过。
 //!
-//! 检查逻辑放在**单一实现**里（命令行工具），自检脚本只负责把活交给它——
+//! 检查逻辑放在**单一实现**里（命令行工具），自检直接复用它——
 //! 与提交门禁「只有一套实现」的既有原则一致。
 //!
 //! 退出码分级：`0` 全部通过（可含警告）、`1` 有失败项、`2` 只有警告项。
@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use crate::error::{CoreError, Result};
+use crate::i18n_audit::Lang;
 use crate::subrepo::{DependencyMode, SubrepoEntry, SubrepoRegistry};
 
 /// 单条检查的结论级别
@@ -121,17 +122,31 @@ impl CheckReport {
     }
 }
 
-/// 对给定项目做子仓库体检。
+/// 对给定项目做子仓库体检（默认中文输出）。
 ///
 /// 登记表缺失时报错退出而不是「通过」：项目可能压根没勾子仓库层，
 /// 但更可能是登记表被误删了——报「一切正常」比报错危险得多。
 pub fn check_project(project_dir: &Path) -> Result<CheckReport> {
-    let root = absolute(project_dir)?;
+    check_project_with_lang(project_dir, Lang::Zh)
+}
+
+/// 按指定语言对给定项目做子仓库体检。
+///
+/// `Lang::En` 时所有条目名称、详情与修复建议均为英文且不含汉字，供 `doctor` 全链路双语复用。
+pub fn check_project_with_lang(project_dir: &Path, lang: Lang) -> Result<CheckReport> {
+    let root = absolute(project_dir, lang)?;
     let registry = SubrepoRegistry::load(&root)?.ok_or_else(|| {
-        CoreError::SubrepoRegistry(format!(
-            "未找到子仓库登记表: {}（该项目可能未勾选「子仓库」层）",
-            crate::subrepo::SUBREPO_REGISTRY_REL
-        ))
+        let message = match lang {
+            Lang::Zh => format!(
+                "未找到子仓库登记表: {}（该项目可能未勾选「子仓库」层）",
+                crate::subrepo::SUBREPO_REGISTRY_REL
+            ),
+            Lang::En => format!(
+                "sub-repository registry not found: {} (the project may not have the subrepo layer enabled)",
+                crate::subrepo::SUBREPO_REGISTRY_REL
+            ),
+        };
+        CoreError::SubrepoRegistry(message)
     })?;
 
     let mut items = Vec::new();
@@ -139,14 +154,25 @@ pub fn check_project(project_dir: &Path) -> Result<CheckReport> {
     // 登记表为空：没有可检查的对象，但也不算失败——空清单是「还没登记」，
     // 不是「登记坏了」。给一条警告，让人知道体检没覆盖到东西。
     if registry.entries.is_empty() {
-        items.push(CheckItem::warn(
-            "登记表",
-            "登记表里没有任何子仓库条目，本次体检没有可检查的对象",
-            Some(format!(
-                "在 {} 里登记 [[subrepo]] 条目后再跑一次",
-                crate::subrepo::SUBREPO_REGISTRY_REL
-            )),
-        ));
+        let (name, detail, remedy) = match lang {
+            Lang::Zh => (
+                "登记表",
+                "登记表里没有任何子仓库条目，本次体检没有可检查的对象",
+                format!(
+                    "在 {} 里登记 [[subrepo]] 条目后再跑一次",
+                    crate::subrepo::SUBREPO_REGISTRY_REL
+                ),
+            ),
+            Lang::En => (
+                "registry",
+                "no sub-repository entries registered; nothing to check",
+                format!(
+                    "add [[subrepo]] entries to {} and run the check again",
+                    crate::subrepo::SUBREPO_REGISTRY_REL
+                ),
+            ),
+        };
+        items.push(CheckItem::warn(name, detail, Some(remedy)));
         return Ok(CheckReport {
             root: display_path(&root),
             items,
@@ -157,7 +183,7 @@ pub fn check_project(project_dir: &Path) -> Result<CheckReport> {
     let host_excludes = HostWorkspace::detect(&root);
 
     for entry in &registry.entries {
-        check_entry(&root, entry, &host_excludes, &mut items);
+        check_entry(&root, entry, &host_excludes, lang, &mut items);
     }
 
     Ok(CheckReport {
@@ -241,35 +267,56 @@ fn check_entry(
     root: &Path,
     entry: &SubrepoEntry,
     host: &HostWorkspace,
+    lang: Lang,
     items: &mut Vec<CheckItem>,
 ) {
     // --- 嵌套工作区红线 ---
     if entry.has_workspace {
         match &host.definition {
             None => {
-                items.push(CheckItem::pass(
-                    &entry.name,
-                    "该子仓库自带工作区定义，但宿主项目没有工作区定义，无需排除",
-                ));
+                let detail = match lang {
+                    Lang::Zh => "该子仓库自带工作区定义，但宿主项目没有工作区定义，无需排除",
+                    Lang::En => {
+                        "this sub-repository defines its own workspace, but the host project has no workspace; no exclusion needed"
+                    }
+                };
+                items.push(CheckItem::pass(&entry.name, detail));
             }
             Some(definition) => {
                 if host.excludes(&entry.path) {
-                    items.push(CheckItem::pass(
-                        &entry.name,
-                        format!("该子仓库自带工作区定义，已被 {definition} 的工作区排除清单覆盖"),
-                    ));
-                } else {
-                    items.push(CheckItem::fail(
-                        &entry.name,
-                        format!(
-                            "该子仓库自带工作区定义，但未出现在 {definition} 的工作区排除清单里——\
-                             宿主工作区会把它的成员当作自己的 path 成员，继承错误的包元数据并解析失败"
+                    let detail = match lang {
+                        Lang::Zh => {
+                            format!("该子仓库自带工作区定义，已被 {definition} 的工作区排除清单覆盖")
+                        }
+                        Lang::En => format!(
+                            "this sub-repository defines its own workspace and is excluded in {definition}"
                         ),
-                        Some(format!(
-                            "把 \"{}\" 加到 {definition} 的 [workspace] exclude 列表里",
-                            entry.path
-                        )),
-                    ));
+                    };
+                    items.push(CheckItem::pass(&entry.name, detail));
+                } else {
+                    let (detail, remedy) = match lang {
+                        Lang::Zh => (
+                            format!(
+                                "该子仓库自带工作区定义，但未出现在 {definition} 的工作区排除清单里——\
+                                 宿主工作区会把它的成员当作自己的 path 成员，继承错误的包元数据并解析失败"
+                            ),
+                            format!(
+                                "把 \"{}\" 加到 {definition} 的 [workspace] exclude 列表里",
+                                entry.path
+                            ),
+                        ),
+                        Lang::En => (
+                            format!(
+                                "this sub-repository defines its own workspace, but is missing from [workspace] exclude in {definition} — \
+                                 the host workspace will treat its members as its own path members and fail to resolve"
+                            ),
+                            format!(
+                                "add \"{}\" to [workspace] exclude in {definition}",
+                                entry.path
+                            ),
+                        ),
+                    };
+                    items.push(CheckItem::fail(&entry.name, detail, Some(remedy)));
                 }
             }
         }
@@ -277,38 +324,65 @@ fn check_entry(
 
     // --- 依赖模式相关的检查 ---
     match entry.mode {
-        DependencyMode::Submodule => check_submodule(root, entry, items),
-        DependencyMode::Fetch => items.push(CheckItem::pass(
-            &entry.name,
-            "由宿主构建系统按版本拉取，版本锁定在构建系统里，无需指针检查",
-        )),
-        DependencyMode::Local => check_local(root, entry, items),
+        DependencyMode::Submodule => check_submodule(root, entry, lang, items),
+        DependencyMode::Fetch => {
+            let detail = match lang {
+                Lang::Zh => "由宿主构建系统按版本拉取，版本锁定在构建系统里，无需指针检查",
+                Lang::En => {
+                    "fetched by version via the host build system; no git pointer check needed"
+                }
+            };
+            items.push(CheckItem::pass(&entry.name, detail));
+        }
+        DependencyMode::Local => check_local(root, entry, lang, items),
     }
 }
 
 /// 检查子模块的就绪状态与指针漂移
-fn check_submodule(root: &Path, entry: &SubrepoEntry, items: &mut Vec<CheckItem>) {
+fn check_submodule(root: &Path, entry: &SubrepoEntry, lang: Lang, items: &mut Vec<CheckItem>) {
     let target = root.join(&entry.path);
 
     // 未初始化：目录不存在，或目录存在但不是 git 工作树
     if !target.exists() {
-        items.push(CheckItem::fail(
-            &entry.name,
-            format!("子模块未初始化：{} 不存在", entry.path),
-            Some(format!(
-                "运行 git submodule update --init --recursive -- {}",
-                entry.path
-            )),
-        ));
+        let (detail, remedy) = match lang {
+            Lang::Zh => (
+                format!("子模块未初始化：{} 不存在", entry.path),
+                format!(
+                    "运行 git submodule update --init --recursive -- {}",
+                    entry.path
+                ),
+            ),
+            Lang::En => (
+                format!(
+                    "submodule is not initialized: {} does not exist",
+                    entry.path
+                ),
+                format!(
+                    "run: git submodule update --init --recursive -- {}",
+                    entry.path
+                ),
+            ),
+        };
+        items.push(CheckItem::fail(&entry.name, detail, Some(remedy)));
         return;
     }
 
     let status = git_output(root, &["submodule", "status", "--", &entry.path]);
     let Some(status) = status else {
+        let (detail, remedy) = match lang {
+            Lang::Zh => (
+                "无法读取子模块状态（当前目录不是 git 工作树，或 git 不可用）",
+                "在 git 工作树里重跑一次体检",
+            ),
+            Lang::En => (
+                "cannot read submodule status (not a git work tree, or git is unavailable)",
+                "re-run the check inside a git work tree",
+            ),
+        };
         items.push(CheckItem::warn(
             &entry.name,
-            "无法读取子模块状态（当前目录不是 git 工作树，或 git 不可用）",
-            Some("在 git 工作树里重跑一次体检".to_string()),
+            detail,
+            Some(remedy.to_string()),
         ));
         return;
     };
@@ -316,50 +390,86 @@ fn check_submodule(root: &Path, entry: &SubrepoEntry, items: &mut Vec<CheckItem>
     // git submodule status 的首字符标记状态：
     // `-` 未初始化、`+` 指针与索引不一致、`U` 冲突、空格表示正常。
     let Some(line) = status.lines().find(|l| !l.trim().is_empty()) else {
-        items.push(CheckItem::warn(
-            &entry.name,
-            format!("子模块 {} 没有出现在 git submodule status 里", entry.path),
-            Some(format!(
-                "确认它已登记进 .gitmodules：git submodule update --init --recursive -- {}",
-                entry.path
-            )),
-        ));
+        let (detail, remedy) = match lang {
+            Lang::Zh => (
+                format!("子模块 {} 没有出现在 git submodule status 里", entry.path),
+                format!(
+                    "确认它已登记进 .gitmodules：git submodule update --init --recursive -- {}",
+                    entry.path
+                ),
+            ),
+            Lang::En => (
+                format!("submodule {} is not listed in git submodule status", entry.path),
+                format!(
+                    "ensure it is registered in .gitmodules: git submodule update --init --recursive -- {}",
+                    entry.path
+                ),
+            ),
+        };
+        items.push(CheckItem::warn(&entry.name, detail, Some(remedy)));
         return;
     };
 
     let (marker, rest) = line.split_at(1);
     match marker {
         "-" => {
-            items.push(CheckItem::fail(
-                &entry.name,
-                format!("子模块未初始化：{}", rest.trim()),
-                Some(format!(
-                    "运行 git submodule update --init --recursive -- {}",
-                    entry.path
-                )),
-            ));
+            let (detail, remedy) = match lang {
+                Lang::Zh => (
+                    format!("子模块未初始化：{}", rest.trim()),
+                    format!(
+                        "运行 git submodule update --init --recursive -- {}",
+                        entry.path
+                    ),
+                ),
+                Lang::En => (
+                    format!("submodule is not initialized: {}", rest.trim()),
+                    format!(
+                        "run: git submodule update --init --recursive -- {}",
+                        entry.path
+                    ),
+                ),
+            };
+            items.push(CheckItem::fail(&entry.name, detail, Some(remedy)));
             return;
         }
         "U" => {
-            items.push(CheckItem::fail(
-                &entry.name,
-                format!("子模块存在合并冲突：{}", rest.trim()),
-                Some(format!("在 {} 里解决冲突后重新提交", entry.path)),
-            ));
+            let (detail, remedy) = match lang {
+                Lang::Zh => (
+                    format!("子模块存在合并冲突：{}", rest.trim()),
+                    format!("在 {} 里解决冲突后重新提交", entry.path),
+                ),
+                Lang::En => (
+                    format!("submodule has merge conflicts: {}", rest.trim()),
+                    format!("resolve conflicts inside {} and commit again", entry.path),
+                ),
+            };
+            items.push(CheckItem::fail(&entry.name, detail, Some(remedy)));
             return;
         }
         "+" => {
-            items.push(CheckItem::warn(
-                &entry.name,
-                format!(
-                    "子模块指针与索引不一致：{}（本地检出与仓库记录不是同一个提交）",
-                    rest.trim()
+            let (detail, remedy) = match lang {
+                Lang::Zh => (
+                    format!(
+                        "子模块指针与索引不一致：{}（本地检出与仓库记录不是同一个提交）",
+                        rest.trim()
+                    ),
+                    format!(
+                        "确认要保留哪个指针：git -C {} checkout <目标提交>，或 git add {} 记录当前指针",
+                        entry.path, entry.path
+                    ),
                 ),
-                Some(format!(
-                    "确认要保留哪个指针：git -C {} checkout <目标提交>，或 git add {} 记录当前指针",
-                    entry.path, entry.path
-                )),
-            ));
+                Lang::En => (
+                    format!(
+                        "submodule pointer differs from index: {} (checked-out commit differs from recorded commit)",
+                        rest.trim()
+                    ),
+                    format!(
+                        "decide which commit to keep: git -C {} checkout <commit>, or git add {} to record the current commit",
+                        entry.path, entry.path
+                    ),
+                ),
+            };
+            items.push(CheckItem::warn(&entry.name, detail, Some(remedy)));
             return;
         }
         _ => {}
@@ -368,10 +478,20 @@ fn check_submodule(root: &Path, entry: &SubrepoEntry, items: &mut Vec<CheckItem>
     // 指针漂移：实际检出的提交与登记的上游跟踪分支对不上
     let upstream = entry.upstream.as_deref().unwrap_or("");
     if upstream.is_empty() {
+        let (detail, remedy) = match lang {
+            Lang::Zh => (
+                "登记表里没有登记 upstream，无法核对指针漂移",
+                "在登记表里补上 upstream（上游跟踪分支）",
+            ),
+            Lang::En => (
+                "upstream is not set in the registry; cannot check pointer drift",
+                "add upstream (tracking branch) to the registry entry",
+            ),
+        };
         items.push(CheckItem::warn(
             &entry.name,
-            "登记表里没有登记 upstream，无法核对指针漂移",
-            Some("在登记表里补上 upstream（上游跟踪分支）".to_string()),
+            detail,
+            Some(remedy.to_string()),
         ));
         return;
     }
@@ -385,72 +505,113 @@ fn check_submodule(root: &Path, entry: &SubrepoEntry, items: &mut Vec<CheckItem>
             let head = head.trim();
             let upstream_sha = upstream_sha.trim();
             if head == upstream_sha {
-                items.push(CheckItem::pass(
-                    &entry.name,
-                    format!("子模块已就绪，指针与上游 {} 一致", upstream),
-                ));
+                let detail = match lang {
+                    Lang::Zh => format!("子模块已就绪，指针与上游 {} 一致", upstream),
+                    Lang::En => format!("submodule is ready and matches upstream {}", upstream),
+                };
+                items.push(CheckItem::pass(&entry.name, detail));
             } else {
-                items.push(CheckItem::warn(
-                    &entry.name,
-                    format!(
-                        "子模块指针与登记的上游 {} 已经漂移：本地 {}，上游 {}",
-                        upstream,
-                        short_sha(head),
-                        short_sha(upstream_sha)
+                let (detail, remedy) = match lang {
+                    Lang::Zh => (
+                        format!(
+                            "子模块指针与登记的上游 {} 已经漂移：本地 {}，上游 {}",
+                            upstream,
+                            short_sha(head),
+                            short_sha(upstream_sha)
+                        ),
+                        format!(
+                            "确认是否需要同步：git -C {} fetch && git -C {} log --oneline {}..{}",
+                            entry.path, entry.path, upstream, upstream
+                        ),
                     ),
-                    Some(format!(
-                        "确认是否需要同步：git -C {} fetch && git -C {} log --oneline {}..{}",
-                        entry.path, entry.path, upstream, upstream
-                    )),
-                ));
+                    Lang::En => (
+                        format!(
+                            "submodule pointer drifted from upstream {}: local {}, upstream {}",
+                            upstream,
+                            short_sha(head),
+                            short_sha(upstream_sha)
+                        ),
+                        format!(
+                            "check if sync is needed: git -C {} fetch && git -C {} log --oneline {}..{}",
+                            entry.path, entry.path, upstream, upstream
+                        ),
+                    ),
+                };
+                items.push(CheckItem::warn(&entry.name, detail, Some(remedy)));
             }
         }
         (Some(_), None) => {
-            items.push(CheckItem::warn(
-                &entry.name,
-                format!(
-                    "本地没有上游引用 {}，无法核对指针漂移（可能还没 fetch 过）",
-                    upstream
+            let (detail, remedy) = match lang {
+                Lang::Zh => (
+                    format!(
+                        "本地没有上游引用 {}，无法核对指针漂移（可能还没 fetch 过）",
+                        upstream
+                    ),
+                    format!("先 fetch 再体检：git -C {} fetch", entry.path),
                 ),
-                Some(format!("先 fetch 再体检：git -C {} fetch", entry.path)),
-            ));
+                Lang::En => (
+                    format!(
+                        "local upstream ref {} not found; cannot check pointer drift (try fetching first)",
+                        upstream
+                    ),
+                    format!("fetch first and re-run: git -C {} fetch", entry.path),
+                ),
+            };
+            items.push(CheckItem::warn(&entry.name, detail, Some(remedy)));
         }
         _ => {
-            items.push(CheckItem::warn(
-                &entry.name,
-                "无法读取子模块的提交号，无法核对指针漂移",
-                None,
-            ));
+            let detail = match lang {
+                Lang::Zh => "无法读取子模块的提交号，无法核对指针漂移",
+                Lang::En => "cannot read submodule commit hash; unable to check pointer drift",
+            };
+            items.push(CheckItem::warn(&entry.name, detail, None));
         }
     }
 }
 
 /// 检查本地同级目录模式的存在性
-fn check_local(root: &Path, entry: &SubrepoEntry, items: &mut Vec<CheckItem>) {
+fn check_local(root: &Path, entry: &SubrepoEntry, lang: Lang, items: &mut Vec<CheckItem>) {
     let local_dir = entry.local_dir.as_deref().unwrap_or("");
     if local_dir.is_empty() {
+        let (detail, remedy) = match lang {
+            Lang::Zh => (
+                "登记表里没有登记 local_dir，无法检查本地目录",
+                "在登记表里补上 local_dir（本地同级目录）",
+            ),
+            Lang::En => (
+                "local_dir is not set in the registry; cannot check local directory",
+                "add local_dir (sibling directory path) to the registry entry",
+            ),
+        };
         items.push(CheckItem::fail(
             &entry.name,
-            "登记表里没有登记 local_dir，无法检查本地目录",
-            Some("在登记表里补上 local_dir（本地同级目录）".to_string()),
+            detail,
+            Some(remedy.to_string()),
         ));
         return;
     }
     let target = root.join(local_dir);
     if target.is_dir() {
-        items.push(CheckItem::pass(
-            &entry.name,
-            format!("本地同级目录存在：{}", local_dir),
-        ));
+        let detail = match lang {
+            Lang::Zh => format!("本地同级目录存在：{}", local_dir),
+            Lang::En => format!("local sibling directory exists: {}", local_dir),
+        };
+        items.push(CheckItem::pass(&entry.name, detail));
     } else {
-        items.push(CheckItem::fail(
-            &entry.name,
-            format!("本地同级目录不存在：{}", local_dir),
-            Some(format!(
-                "准备该目录，或把它检出到 {}",
-                display_path(&target)
-            )),
-        ));
+        let (detail, remedy) = match lang {
+            Lang::Zh => (
+                format!("本地同级目录不存在：{}", local_dir),
+                format!("准备该目录，或把它检出到 {}", display_path(&target)),
+            ),
+            Lang::En => (
+                format!("local sibling directory is missing: {}", local_dir),
+                format!(
+                    "prepare this directory or check it out at {}",
+                    display_path(&target)
+                ),
+            ),
+        };
+        items.push(CheckItem::fail(&entry.name, detail, Some(remedy)));
     }
 }
 
@@ -487,9 +648,14 @@ fn normalize_rel_path(path: &str) -> String {
     text.trim_end_matches('/').to_string()
 }
 
-fn absolute(root: &Path) -> Result<PathBuf> {
-    root.canonicalize()
-        .map_err(|error| CoreError::Git(format!("无法访问目录 {}: {error}", root.display())))
+fn absolute(root: &Path, lang: Lang) -> Result<PathBuf> {
+    root.canonicalize().map_err(|error| {
+        let message = match lang {
+            Lang::Zh => format!("无法访问目录 {}: {error}", root.display()),
+            Lang::En => format!("cannot access directory {}: {error}", root.display()),
+        };
+        CoreError::Git(message)
+    })
 }
 
 fn display_path(path: &Path) -> String {
@@ -735,5 +901,36 @@ mod tests {
         assert_eq!(normalize_rel_path("./submodules/ui/"), "submodules/ui");
         assert_eq!(normalize_rel_path("submodules\\ui"), "submodules/ui");
         assert_eq!(normalize_rel_path("  submodules/ui  "), "submodules/ui");
+    }
+
+    #[test]
+    fn 英文模式下体检明细与修复建议零汉字() {
+        let dir = temp_dir("en-lang");
+        write(
+            &dir.join(crate::subrepo::SUBREPO_REGISTRY_REL),
+            "[[subrepo]]\nname = \"ui\"\npath = \"submodules/ui\"\nmode = \"submodule\"\nupstream = \"origin/main\"\nhas_workspace = true\n",
+        );
+        write(
+            &dir.join("Cargo.toml"),
+            "[workspace]\nmembers = []\nexclude = []\n",
+        );
+        let report = check_project_with_lang(&dir, Lang::En).expect("英文模式应能体检");
+        assert!(report.has_failures());
+        for item in &report.items {
+            assert!(
+                !crate::contains_han(&item.name),
+                "name 不应含汉字: {}",
+                item.name
+            );
+            assert!(
+                !crate::contains_han(&item.detail),
+                "detail 不应含汉字: {}",
+                item.detail
+            );
+            if let Some(remedy) = &item.remedy {
+                assert!(!crate::contains_han(remedy), "remedy 不应含汉字: {remedy}");
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

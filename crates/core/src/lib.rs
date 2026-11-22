@@ -5,6 +5,7 @@
 
 pub mod block;
 pub mod context;
+pub mod doctor;
 pub mod engine;
 pub mod error;
 pub mod i18n_audit;
@@ -19,6 +20,10 @@ pub(crate) mod toml_merge;
 pub mod worktree;
 pub mod worktree_create;
 
+pub use doctor::{
+    format_doctor_report, run_doctor, DoctorDetail, DoctorItem, DoctorLevel, DoctorOptions,
+    DoctorReport,
+};
 pub use engine::{
     add_layers_to_project, adopt_project, audit_project, default_templates_dir, generate,
     list_workspace_files, platform_data_dir, sync_workspace_file, update_project,
@@ -38,7 +43,9 @@ pub use manifest::{ProjectManifest, MANIFEST_FILE};
 pub use migrations::{notes_between, MigrationNote, MIGRATIONS};
 pub use repo::{default_links, repo_init, repo_status, LinkSpec, RepoItem, RepoReport, RepoStatus};
 pub use subrepo::{DependencyMode, SubrepoEntry, SubrepoRegistry, SUBREPO_REGISTRY_REL};
-pub use subrepo_check::{check_project, CheckItem, CheckLevel, CheckReport};
+pub use subrepo_check::{
+    check_project, check_project_with_lang, CheckItem, CheckLevel, CheckReport,
+};
 pub use worktree::{
     check_shared_target, conflicting_override, ensure_shared_target, main_worktree,
     shared_target_dir, SharedTarget, SharedTargetState, TARGET_DIR_NAME,

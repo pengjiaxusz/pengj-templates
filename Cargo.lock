@@ -517,6 +517,7 @@ name = "pengj-core"
 version = "0.81.1"
 dependencies = [
  "minijinja",
+ "pengj-gate",
  "serde",
  "serde_json",
  "sha2",

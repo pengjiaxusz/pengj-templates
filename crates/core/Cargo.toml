@@ -7,6 +7,7 @@ authors.workspace = true
 description = "pengj-templates 引擎：分层模板合并、渲染、生成与更新"
 
 [dependencies]
+pengj-gate = { path = "../gate" }
 minijinja.workspace = true
 serde.workspace = true
 serde_json.workspace = true
