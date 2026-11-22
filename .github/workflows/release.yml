@@ -53,16 +53,19 @@ jobs:
             os: windows
             arch: arm64
             rust_target: aarch64-pc-windows-msvc
+          # Linux 产物统一走 musl 静态链接，消除宿主机 glibc 版本绑定（如 ubuntu-24.04
+          # 产出的 GLIBC_2.39 在 Debian 12 等较低 glibc 发行版上无法运行的问题）；
+          # 归档名仍保持 `linux-x86_64` / `linux-arm64`，不破坏 install.sh 与 self update。
           - id: linux-x64
             runner: ubuntu-latest
             os: linux
             arch: x86_64
-            rust_target: x86_64-unknown-linux-gnu
+            rust_target: x86_64-unknown-linux-musl
           - id: linux-arm64
             runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
-            rust_target: aarch64-unknown-linux-gnu
+            rust_target: aarch64-unknown-linux-musl
           - id: macos-arm64
             runner: macos-latest
             os: macos
@@ -78,6 +81,8 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RUST_TARGET: ${{ matrix.rust_target }}
+      CC_x86_64_unknown_linux_musl: musl-gcc
+      CC_aarch64_unknown_linux_musl: musl-gcc
     steps:
       - uses: actions/checkout@v7
         with:
@@ -85,15 +90,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: 添加 Rust 目标
         run: rustup target add ${{ matrix.rust_target }}
-      # 仓库根的 .cargo/config.toml 把 linux-gnu 目标的链接器写死为 lld，
-      # 而 GitHub 的 ubuntu runner 镜像不带 lld，缺了会直接报
-      # `linker 'lld' not found`（连 build script 都编不过）。
-      # 不装的话 linux-x86_64 这一格会静默缺产物，一键安装脚本就拿不到包。
-      - name: 安装 lld（Linux 链接器）
+      # 仓库根的 .cargo/config.toml 把宿主机 linux-gnu 目标的链接器写死为 lld
+      # （build script / proc-macro 仍以宿主机目标编译），而 musl 目标的 ring 需要 musl-gcc。
+      - name: 安装 Linux 构建工具（lld 与 musl-tools）
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y lld
+          sudo apt-get install -y lld musl-tools
       # Rust 编译缓存（含失败缓存：打包中途失败时，修复后的重跑也能吃到缓存）
       - uses: Swatinem/rust-cache@v2
         with:
