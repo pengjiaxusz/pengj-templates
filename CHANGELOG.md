@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.83.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.82.0...v0.83.0) (2026-11-22)
+
+
+### Features
+
+* **core:** Linux 下 doctor 自检补充 ld.lld 检查与安装提示 ([25ce076](https://github.com/pengjiaxusz/pengj-templates/commit/25ce07690d23277ab3d071e68789171eb1a36561))
+
+
+### Bug Fixes
+
+* **ci:** Linux CLI 发布产物改用 musl 静态链接以兼容低版本 glibc ([5507c4d](https://github.com/pengjiaxusz/pengj-templates/commit/5507c4df2d4c73b3d9907abda614e458b98050c3))
+* **templates:** 优化 just 配方在 Linux 下的回退与平台分支兼容性 ([8812b50](https://github.com/pengjiaxusz/pengj-templates/commit/8812b50b4720071c85a54d35599e166d1bd862c2))
+
 ## [0.82.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.81.1...v0.82.0) (2026-11-22)
 
 
