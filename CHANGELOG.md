@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.81.0...v0.81.1) (2026-11-22)
+
+
+### Bug Fixes
+
+* **core:** 符号链接子模块不再让 repo init 失败 ([bc3b5fc](https://github.com/pengjiaxusz/pengj-templates/commit/bc3b5fc96e548b670952673e1c421953231bc82c))
+
 ## [0.81.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.80.1...v0.81.0) (2026-11-22)
 
 
