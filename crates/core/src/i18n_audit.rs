@@ -257,6 +257,7 @@ mod tests {
         for path in [
             ".pengj-templates/scripts/doctor.d/README.md",
             ".pengj-templates/scripts/doctor.sh",
+            ".pengj-templates/scripts/doctor.cmd",
             ".pengj-templates/gate.toml",
             "AGENTS.md",
             "CONTRIBUTING.md",

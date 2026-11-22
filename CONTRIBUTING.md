@@ -14,8 +14,8 @@ git clone https://github.com/pengjiaxusz/pengj-templates.git
 ```sh
 # Linux / macOS
 sh .pengj-templates/scripts/doctor.sh
-# Windows (PowerShell)
-pwsh -File .pengj-templates/scripts/doctor.ps1
+# Windows
+.pengj-templates\scripts\doctor.cmd
 ```
 <!-- PENGJ_TEMPLATE_END -->
 

@@ -419,6 +419,18 @@ fn check_just_tool(lang: Lang) -> DoctorItem {
     }
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
+fn pwsh_missing_summary(lang: Lang) -> &'static str {
+    match lang {
+        Lang::Zh => {
+            "未找到 pwsh（PowerShell 7，约 100 MB；Windows 上的 just 配方需要）；安装命令：winget install Microsoft.PowerShell"
+        }
+        Lang::En => {
+            "pwsh not found (PowerShell 7, ~100 MB; required by just recipes on Windows); install: winget install Microsoft.PowerShell"
+        }
+    }
+}
+
 #[cfg(windows)]
 fn check_pwsh_tool(lang: Lang) -> DoctorItem {
     match probe_tool_version("pwsh", &["--version"]) {
@@ -434,12 +446,7 @@ fn check_pwsh_tool(lang: Lang) -> DoctorItem {
             id: "pwsh".to_string(),
             category: "tool".to_string(),
             level: DoctorLevel::Error,
-            summary: match lang {
-                Lang::Zh => "未找到 pwsh；Windows 上的 just 配方需要 PowerShell 7".to_string(),
-                Lang::En => {
-                    "pwsh not found; the just recipes use PowerShell 7 on Windows".to_string()
-                }
-            },
+            summary: pwsh_missing_summary(lang).to_string(),
             details: Vec::new(),
             output: None,
         },
@@ -1830,5 +1837,18 @@ mod tests {
             );
             let _ = std::fs::remove_dir_all(&dir);
         }
+    }
+
+    #[test]
+    fn pwsh_missing_summary_includes_install_command_and_size_bilingually() {
+        let zh = pwsh_missing_summary(Lang::Zh);
+        assert!(zh.contains("winget install Microsoft.PowerShell"));
+        assert!(zh.contains("100 MB"));
+        assert!(crate::i18n_audit::contains_han(zh));
+
+        let en = pwsh_missing_summary(Lang::En);
+        assert!(en.contains("winget install Microsoft.PowerShell"));
+        assert!(en.contains("100 MB"));
+        assert!(!crate::i18n_audit::contains_han(en));
     }
 }
