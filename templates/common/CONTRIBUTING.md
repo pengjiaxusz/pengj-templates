@@ -20,8 +20,8 @@ Run the bootstrap script to inspect your local environment (read-only by default
 ```sh
 # Linux / macOS
 sh .pengj-templates/scripts/doctor.sh
-# Windows (PowerShell)
-pwsh -File .pengj-templates/scripts/doctor.ps1
+# Windows
+.pengj-templates\scripts\doctor.cmd
 ```
 {% else %}
 # {{ project_name }} 贡献指南
@@ -43,8 +43,8 @@ git clone {{ clone_url }}
 ```sh
 # Linux / macOS
 sh .pengj-templates/scripts/doctor.sh
-# Windows (PowerShell)
-pwsh -File .pengj-templates/scripts/doctor.ps1
+# Windows
+.pengj-templates\scripts\doctor.cmd
 ```
 {% endif -%}
 <!-- PENGJ_TEMPLATE_END -->

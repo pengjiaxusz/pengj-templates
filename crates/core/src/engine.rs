@@ -5417,9 +5417,9 @@ description = \"x\"
         assert!(
             zh_root.join(".pengj-templates/scripts/doctor.sh").is_file()
                 && zh_root
-                    .join(".pengj-templates/scripts/doctor.ps1")
+                    .join(".pengj-templates/scripts/doctor.cmd")
                     .is_file(),
-            "common 层应产出双语无交互引导脚本 doctor.sh / doctor.ps1"
+            "common 层应产出双语无交互引导脚本 doctor.sh / doctor.cmd"
         );
 
         // -- 只有一套实现：模板不再产出兜底脚本 --
@@ -6361,10 +6361,10 @@ body
             "勾选工作树层应自动带上工作树技能，实际: {skills:?}"
         );
 
-        // common 层产出薄引导脚本 doctor.sh / doctor.ps1，justfile 仍直调 CLI doctor
+        // common 层产出薄引导脚本 doctor.sh / doctor.cmd，justfile 仍直调 CLI doctor
         for script in [
             ".pengj-templates/scripts/doctor.sh",
-            ".pengj-templates/scripts/doctor.ps1",
+            ".pengj-templates/scripts/doctor.cmd",
         ] {
             assert!(
                 proj.join(script).is_file(),
@@ -6402,9 +6402,9 @@ body
                 .join(".pengj-templates/scripts/doctor.sh")
                 .is_file()
                 && plain_dir
-                    .join(".pengj-templates/scripts/doctor.ps1")
+                    .join(".pengj-templates/scripts/doctor.cmd")
                     .is_file(),
-            "common 层应产出引导脚本 doctor.sh / doctor.ps1"
+            "common 层应产出引导脚本 doctor.sh / doctor.cmd"
         );
 
         let _ = std::fs::remove_dir_all(&tmp);
@@ -6438,9 +6438,9 @@ body
         assert!(
             sub_dir.join(".pengj-templates/scripts/doctor.sh").is_file()
                 && sub_dir
-                    .join(".pengj-templates/scripts/doctor.ps1")
+                    .join(".pengj-templates/scripts/doctor.cmd")
                     .is_file(),
-            "common 层应产出引导脚本 doctor.sh / doctor.ps1"
+            "common 层应产出引导脚本 doctor.sh / doctor.cmd"
         );
         let sub_justfile = std::fs::read_to_string(sub_dir.join("justfile")).unwrap();
         assert!(sub_justfile.contains("pengj-templates-cli doctor --dir ."));
@@ -6460,8 +6460,8 @@ body
         assert!(!wt_dir.join(crate::subrepo::SUBREPO_REGISTRY_REL).exists());
         assert!(
             wt_dir.join(".pengj-templates/scripts/doctor.sh").is_file()
-                && wt_dir.join(".pengj-templates/scripts/doctor.ps1").is_file(),
-            "common 层应产出引导脚本 doctor.sh / doctor.ps1"
+                && wt_dir.join(".pengj-templates/scripts/doctor.cmd").is_file(),
+            "common 层应产出引导脚本 doctor.sh / doctor.cmd"
         );
         let wt_justfile = std::fs::read_to_string(wt_dir.join("justfile")).unwrap();
         assert!(wt_justfile.contains("pengj-templates-cli doctor --dir ."));
@@ -6697,7 +6697,7 @@ body
                 .unwrap();
         assert!(contains_cjk(&zh_just), "zh 项目应保留中文注释");
 
-        // 钩子激活已收编进 CLI（无 .githooks/install.sh），common 层产出双语引导脚本 doctor.{sh,ps1}，justfile 直调 CLI doctor，gate.just 无旧配方。
+        // 钩子激活已收编进 CLI（无 .githooks/install.sh），common 层产出双语引导脚本 doctor.{sh,cmd}，justfile 直调 CLI doctor，gate.just 无旧配方。
         for dir_name in ["lang_zh", "lang_en"] {
             let dir = tmp.join(dir_name);
             assert!(
@@ -6706,7 +6706,7 @@ body
             );
             for script in [
                 ".pengj-templates/scripts/doctor.sh",
-                ".pengj-templates/scripts/doctor.ps1",
+                ".pengj-templates/scripts/doctor.cmd",
             ] {
                 assert!(
                     dir.join(script).is_file(),
@@ -6984,46 +6984,56 @@ body
 
         let rep = update_project(&templates, &proj).unwrap();
 
-        // .githooks/install.sh 仍被清理；旧版 doctor.sh / doctor.ps1 则由新引导脚本覆盖升级
-        assert!(
-            !proj.join(".githooks/install.sh").exists(),
-            "未改动的旧脚本 .githooks/install.sh 应在 update 后被物理删除"
-        );
-        assert!(
-            rep.removed
-                .iter()
-                .any(|r| r.replace('\\', "/") == ".githooks/install.sh"),
-            "旧脚本 .githooks/install.sh 应记入 removed，实际: {:?}",
-            rep.removed
-        );
-        for rel in [
-            ".pengj-templates/scripts/doctor.sh",
+        // .githooks/install.sh 与旧版 doctor.ps1 均应被清理；旧版 doctor.sh 由新引导脚本覆盖升级，并产出 doctor.cmd
+        for obsolete in [
+            ".githooks/install.sh",
             ".pengj-templates/scripts/doctor.ps1",
         ] {
             assert!(
-                proj.join(rel).is_file(),
-                "引导脚本 {rel} 应在 update 后更新保留"
+                !proj.join(obsolete).exists(),
+                "未改动的旧脚本 {obsolete} 应在 update 后被物理删除"
             );
             assert!(
-                rep.updated.iter().any(|u| u.replace('\\', "/") == rel),
-                "旧版 {rel} 应被升级并记入 updated，实际: {:?}",
-                rep.updated
-            );
-            let content = std::fs::read_to_string(proj.join(rel)).unwrap();
-            assert!(
-                !content.contains("legacy doctor"),
-                "{rel} 应已替换为最新引导脚本"
+                rep.removed.iter().any(|r| r.replace('\\', "/") == obsolete),
+                "旧脚本 {obsolete} 应记入 removed，实际: {:?}",
+                rep.removed
             );
         }
+        assert!(
+            proj.join(".pengj-templates/scripts/doctor.sh").is_file(),
+            "引导脚本 doctor.sh 应在 update 后更新保留"
+        );
+        assert!(
+            rep.updated
+                .iter()
+                .any(|u| u.replace('\\', "/") == ".pengj-templates/scripts/doctor.sh"),
+            "旧版 doctor.sh 应被升级并记入 updated，实际: {:?}",
+            rep.updated
+        );
+        let sh_content =
+            std::fs::read_to_string(proj.join(".pengj-templates/scripts/doctor.sh")).unwrap();
+        assert!(
+            !sh_content.contains("legacy doctor"),
+            "doctor.sh 应已替换为最新引导脚本"
+        );
+        assert!(
+            proj.join(".pengj-templates/scripts/doctor.cmd").is_file(),
+            "update 后应存在新的 Windows 引导脚本 doctor.cmd"
+        );
 
         let updated = ProjectManifest::load(&proj).unwrap();
-        assert!(
-            !updated
-                .files
-                .keys()
-                .any(|k| k.replace('\\', "/") == ".githooks/install.sh"),
-            "manifest 不应再残留已清理的旧脚本 .githooks/install.sh"
-        );
+        for obsolete in [
+            ".githooks/install.sh",
+            ".pengj-templates/scripts/doctor.ps1",
+        ] {
+            assert!(
+                !updated
+                    .files
+                    .keys()
+                    .any(|k| k.replace('\\', "/") == obsolete),
+                "manifest 不应再残留已清理的旧脚本 {obsolete}"
+            );
+        }
         assert!(
             proj.join(".pengj-templates/scripts/doctor.d/README.md")
                 .is_file(),
@@ -7070,7 +7080,8 @@ body
         assert!(zh.contains("<!-- PENGJ_TEMPLATE_START -->"));
         assert!(zh.contains("<!-- PENGJ_TEMPLATE_END -->"));
         assert!(zh.contains("sh .pengj-templates/scripts/doctor.sh"));
-        assert!(zh.contains("pwsh -File .pengj-templates/scripts/doctor.ps1"));
+        assert!(zh.contains(r".pengj-templates\scripts\doctor.cmd"));
+        assert!(!zh.contains("doctor.ps1"));
         assert!(zh.contains("git clone --recursive"));
         assert!(!zh.contains("pengj-templates-cli"));
         assert!(!zh.contains("## 3."));
@@ -7084,7 +7095,8 @@ body
         assert!(en.contains("<!-- PENGJ_TEMPLATE_START -->"));
         assert!(en.contains("<!-- PENGJ_TEMPLATE_END -->"));
         assert!(en.contains("sh .pengj-templates/scripts/doctor.sh"));
-        assert!(en.contains("pwsh -File .pengj-templates/scripts/doctor.ps1"));
+        assert!(en.contains(r".pengj-templates\scripts\doctor.cmd"));
+        assert!(!en.contains("doctor.ps1"));
         assert!(en.contains("git clone --recursive"));
         assert!(!en.contains("pengj-templates-cli"));
         assert!(!en.contains("## 3."));
@@ -7129,7 +7141,35 @@ body
         .unwrap();
         let bare = std::fs::read_to_string(tmp.join("contrib_bare/CONTRIBUTING.md")).unwrap();
         assert!(bare.contains("sh .pengj-templates/scripts/doctor.sh"));
-        assert!(bare.contains("pwsh -File .pengj-templates/scripts/doctor.ps1"));
+        assert!(bare.contains(r".pengj-templates\scripts\doctor.cmd"));
+        assert!(!bare.contains("doctor.ps1"));
+
+        // 校验 doctor.cmd 双语内容、chcp 65001 与 pwsh 检测
+        let cmd_zh =
+            std::fs::read_to_string(tmp.join("contrib_zh/.pengj-templates/scripts/doctor.cmd"))
+                .unwrap();
+        assert!(cmd_zh.starts_with("@echo off"));
+        assert!(cmd_zh.contains("chcp 65001 >nul"));
+        assert!(cmd_zh.contains("where pwsh >nul 2>&1"));
+        assert!(cmd_zh.contains("winget install Microsoft.PowerShell"));
+        assert!(cmd_zh.contains(r".pengj-templates\scripts\doctor.cmd"));
+        assert!(
+            crate::i18n_audit::contains_han(&cmd_zh),
+            "中文 doctor.cmd 必须含汉字"
+        );
+
+        let cmd_en =
+            std::fs::read_to_string(tmp.join("contrib_en/.pengj-templates/scripts/doctor.cmd"))
+                .unwrap();
+        assert!(cmd_en.starts_with("@echo off"));
+        assert!(cmd_en.contains("chcp 65001 >nul"));
+        assert!(cmd_en.contains("where pwsh >nul 2>&1"));
+        assert!(cmd_en.contains("winget install Microsoft.PowerShell"));
+        assert!(cmd_en.contains(r".pengj-templates\scripts\doctor.cmd"));
+        assert!(
+            !crate::i18n_audit::contains_han(&cmd_en),
+            "英文 doctor.cmd 不得出现汉字"
+        );
         assert!(bare.contains("git clone <repo-url>"));
         assert!(!bare.contains("git clone --recursive"));
         assert!(!bare.contains("若仓库含子模块"));
