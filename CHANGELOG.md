@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.81.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.80.1...v0.81.0) (2026-11-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **templates:** 把 issue-sync 并入 patch-handoff，随基线技能一起下发
+* **templates:** 撤掉 bque 层 just 配方，重型命令改直调原生 bque
+
+### Features
+
+* **cli:** update 支持 --commit/--push 一条命令收口模板同步 ([1a7e4c3](https://github.com/pengjiaxusz/pengj-templates/commit/1a7e4c32f4bb84630821c42adec76357de90660f))
+* **cli:** 新增 self update，用命令替代 install 脚本升级自己 ([8f26304](https://github.com/pengjiaxusz/pengj-templates/commit/8f26304cefe67d2e0d38a1294b6fd88f4054e927))
+* **core:** 将 patch-handoff 设为默认基线技能 ([0755f46](https://github.com/pengjiaxusz/pengj-templates/commit/0755f464c480f5babf2798795d5ec14aa8a1ddb6))
+* **templates:** patch-handoff 作者归一改为自动解析仓库拥有者 ([5e8e5de](https://github.com/pengjiaxusz/pengj-templates/commit/5e8e5de9895abbdb2d44c08205ac4c84e5a38f38))
+* **templates:** 把 issue-sync 并入 patch-handoff，随基线技能一起下发 ([3cda7cb](https://github.com/pengjiaxusz/pengj-templates/commit/3cda7cb761cceda51afb0f97a9bc26db862c8ac3))
+* **templates:** 撤掉 bque 层 just 配方，重型命令改直调原生 bque ([3f410b0](https://github.com/pengjiaxusz/pengj-templates/commit/3f410b0438a44daaf1f6a9a4e39c44c58d9bfb85))
+* **templates:** 新增 write-just 技能随 just 层自动下发 ([c625689](https://github.com/pengjiaxusz/pengj-templates/commit/c625689fd82eb9f7d742c53adee39f4e51c69676))
+
+
+### Bug Fixes
+
+* **cli:** safe_relative 限定为 windows/test 作用域，修复 Linux CI dead-code 拦截 ([afd6489](https://github.com/pengjiaxusz/pengj-templates/commit/afd64893f07c0d9fafe7e8850f7b726b538bf13c))
+* **templates:** write-just 校验脚本识别 just q-run/q-bench 包装 ([1b3d70c](https://github.com/pengjiaxusz/pengj-templates/commit/1b3d70c9b748a9ec57550115360d34b98a472adc))
+
+
+### Reverts
+
+* 撤回 update 的 --commit/--push，收尾职责交回 ps1 ([fb2043c](https://github.com/pengjiaxusz/pengj-templates/commit/fb2043c51d9e091b1499a234e6346411d7d7a709))
+
 ## [0.80.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.80.0...v0.80.1) (2026-11-21)
 
 
