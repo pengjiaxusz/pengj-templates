@@ -3,7 +3,7 @@
 //! The gate never reimplements git: hooks, index and pathspec semantics change
 //! between versions, and every developer already has git.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub fn run(args: &[&str]) -> Result<String, String> {
@@ -70,6 +70,11 @@ pub fn in_work_tree() -> bool {
     probe(&["rev-parse", "--git-dir"]).is_some()
 }
 
+/// Check whether `dir` is inside a git work tree.
+pub fn in_work_tree_in(dir: &Path) -> bool {
+    probe_in(dir, &["rev-parse", "--git-dir"]).is_some()
+}
+
 pub fn toplevel() -> Option<String> {
     probe(&["rev-parse", "--show-toplevel"])
 }
@@ -104,6 +109,18 @@ pub fn hook_mode(path: &str) -> Option<String> {
     Some(mode)
 }
 
-pub fn repo_root() -> Option<std::path::PathBuf> {
+/// Return the git index mode (e.g. `100644` / `100755`) of `path` inside `dir`.
+pub fn hook_mode_in(dir: &Path, path: &str) -> Option<String> {
+    let output = run_in(dir, &["ls-files", "-s", "--", path]).ok()?;
+    let mode = output.split_whitespace().next()?.to_string();
+    Some(mode)
+}
+
+pub fn repo_root() -> Option<PathBuf> {
     toplevel().map(|root| Path::new(&root).to_path_buf())
+}
+
+/// Resolve the git repository root containing `dir`.
+pub fn repo_root_in(dir: &Path) -> Option<PathBuf> {
+    probe_in(dir, &["rev-parse", "--show-toplevel"]).map(|root| Path::new(&root).to_path_buf())
 }

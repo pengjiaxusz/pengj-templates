@@ -7,9 +7,8 @@
 //!
 //! The scope is deliberately per-repository: `core.hooksPath = .githooks`
 //! inside the repository's own `.git/config`. Git has no versioned way to
-//! activate hooks, so the project's environment check (`.pengj-templates/scripts/doctor.*`)
-//! is the single activation entry point — it calls this command when the CLI
-//! is available and falls back to plain `git config` when it is not.
+//! activate hooks, so `pengj-templates-cli doctor --fix` (or `gate hooks install`)
+//! is the single activation entry point.
 
 use std::path::Path;
 
@@ -26,6 +25,28 @@ const OPTIONAL_HOOKS: [&str; 1] = ["pre-push"];
 /// The marker every gate hook carries. A hook without it was written by
 /// another tool and must not be overwritten.
 const MARKER: &str = "gate hook";
+
+/// 与提交门禁竞争 `core.hooksPath` 的工具残留告警。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookRivalWarning {
+    /// 竞品工具名称（如 `lefthook`、`husky`）
+    pub tool: String,
+    /// 检测到的残留旧钩子列表（如 `commit-msg`、`pre-commit`）
+    pub leftovers: Vec<String>,
+}
+
+/// `install_in` 的结构化执行结果。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookInstallOutcome {
+    /// 本次激活的钩子名称列表
+    pub hooks: Vec<String>,
+    /// 本次在 git 索引中补齐可执行位的钩子相对路径
+    pub chmod_recorded: Vec<String>,
+    /// 检测到的竞品残留告警
+    pub rival_warnings: Vec<HookRivalWarning>,
+    /// 非 git 工作树时置为 true 并跳过安装
+    pub skipped_not_git: bool,
+}
 
 #[cfg(unix)]
 fn make_executable(path: &Path) -> Result<(), String> {
@@ -71,12 +92,17 @@ fn foreign_hook_message(path: &Path) -> String {
     )
 }
 
-pub fn install() -> Result<(), String> {
-    if !crate::git::in_work_tree() {
-        println!("[gate] not a git work tree, skipping hook installation");
-        return Ok(());
+/// 在指定目录内激活提交门禁钩子，返回结构化结果且不向标准输出打印日志。
+pub fn install_in(dir: &Path) -> Result<HookInstallOutcome, String> {
+    if !crate::git::in_work_tree_in(dir) {
+        return Ok(HookInstallOutcome {
+            hooks: Vec::new(),
+            chmod_recorded: Vec::new(),
+            rival_warnings: Vec::new(),
+            skipped_not_git: true,
+        });
     }
-    let root = crate::git::repo_root()
+    let root = crate::git::repo_root_in(dir)
         .ok_or_else(|| "cannot determine the repository root".to_string())?;
 
     // 先判定哪些钩子要装：必需的缺一不可，可选的（`pre-push`）只在这份 `.githooks`
@@ -116,9 +142,10 @@ pub fn install() -> Result<(), String> {
         make_executable(&root.join(".githooks").join(hook))?;
     }
 
-    crate::git::run(&["config", "core.hooksPath", ".githooks"])?;
+    crate::git::run_in(&root, &["config", "core.hooksPath", ".githooks"])?;
 
-    let configured = crate::git::probe(&["config", "--get", "core.hooksPath"]).unwrap_or_default();
+    let configured =
+        crate::git::probe_in(&root, &["config", "--get", "core.hooksPath"]).unwrap_or_default();
     if configured != ".githooks" {
         return Err(format!(
             "core.hooksPath is `{configured}` after installation, expected `.githooks`"
@@ -128,28 +155,83 @@ pub fn install() -> Result<(), String> {
     // Record the executable bit in the index. A fresh clone on Linux runs the
     // hooks straight from the working tree, and without the bit git skips
     // them silently, which turns the gate off without any error.
+    let mut chmod_recorded = Vec::new();
     for hook in &hooks {
         let relative = format!(".githooks/{hook}");
-        if let Some(mode) = crate::git::hook_mode(&relative) {
+        if let Some(mode) = crate::git::hook_mode_in(&root, &relative) {
             if !mode.starts_with("1007") {
-                crate::git::run(&["update-index", "--chmod=+x", &relative])?;
-                let updated = crate::git::hook_mode(&relative).unwrap_or_default();
+                crate::git::run_in(&root, &["update-index", "--chmod=+x", &relative])?;
+                let updated = crate::git::hook_mode_in(&root, &relative).unwrap_or_default();
                 if !updated.starts_with("1007") {
                     return Err(format!(
                         "{relative} is recorded as {updated}; a Linux clone would skip it.\n  fix with: git update-index --chmod=+x {relative}"
                     ));
                 }
-                println!("[gate] recorded the executable bit for {relative}");
+                chmod_recorded.push(relative);
             }
         }
     }
 
+    let rival_warnings = detect_rivals(&root);
+    Ok(HookInstallOutcome {
+        hooks: hooks.into_iter().map(str::to_string).collect(),
+        chmod_recorded,
+        rival_warnings,
+        skipped_not_git: false,
+    })
+}
+
+pub fn install() -> Result<(), String> {
+    let outcome = install_in(Path::new("."))?;
+    if outcome.skipped_not_git {
+        println!("[gate] not a git work tree, skipping hook installation");
+        return Ok(());
+    }
+    for relative in &outcome.chmod_recorded {
+        println!("[gate] recorded the executable bit for {relative}");
+    }
     println!(
         "[gate] commit gate installed: core.hooksPath=.githooks ({})",
-        hooks.join(", ")
+        outcome.hooks.join(", ")
     );
-    report_rivals(&root);
+    print_rival_warnings(&outcome.rival_warnings);
     Ok(())
+}
+
+/// 检测 `.githooks/` 下由其他钩子工具留下的 `.old` 残留文件。
+pub fn detect_rivals(root: &Path) -> Vec<HookRivalWarning> {
+    let hooks_dir = root.join(".githooks");
+    let mut warnings = Vec::new();
+    for (name, _) in RIVALS {
+        let leftovers = ["commit-msg", "pre-commit"]
+            .iter()
+            .filter(|hook| hooks_dir.join(format!("{hook}.old")).exists())
+            .map(|hook| (*hook).to_string())
+            .collect::<Vec<_>>();
+        if !leftovers.is_empty() {
+            warnings.push(HookRivalWarning {
+                tool: name.to_string(),
+                leftovers,
+            });
+        }
+    }
+    warnings
+}
+
+fn print_rival_warnings(warnings: &[HookRivalWarning]) {
+    for warning in warnings {
+        let reason = RIVALS
+            .iter()
+            .find(|(name, _)| *name == warning.tool)
+            .map(|(_, reason)| *reason)
+            .unwrap_or("writes its own hooks into core.hooksPath and will replace the gate hooks");
+        println!(
+            "[gate] warning: {} left hooks behind ({}); {reason}.\n  \
+             remove the leftovers and re-run `just doctor --fix`",
+            warning.tool,
+            warning.leftovers.join(", ")
+        );
+    }
 }
 
 /// Report the tools that would fight with the gate for `core.hooksPath`.
@@ -158,23 +240,6 @@ pub fn install() -> Result<(), String> {
 /// running both means two sets of hooks in the same directory and only one
 /// of them wins.
 pub fn report_rivals(root: &Path) {
-    let hooks_dir = root.join(".githooks");
-    for (name, reason) in RIVALS {
-        let leftovers = ["commit-msg", "pre-commit"]
-            .iter()
-            .filter_map(|hook| {
-                hooks_dir
-                    .join(format!("{hook}.old"))
-                    .exists()
-                    .then_some(*hook)
-            })
-            .collect::<Vec<_>>();
-        if !leftovers.is_empty() {
-            println!(
-                "[gate] warning: {name} left hooks behind ({}); {reason}.\n  \
-                 remove the leftovers and re-run `just doctor --fix`",
-                leftovers.join(", ")
-            );
-        }
-    }
+    let warnings = detect_rivals(root);
+    print_rival_warnings(&warnings);
 }
