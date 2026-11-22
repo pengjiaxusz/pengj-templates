@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.85.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.84.0...v0.85.0) (2026-11-22)
+
+
+### Features
+
+* **templates:** 用零前置 doctor.cmd 替换 doctor.ps1 并补齐 pwsh 检测 ([1d8153a](https://github.com/pengjiaxusz/pengj-templates/commit/1d8153ae31388807439b4234ab70718e5a72a5c6))
+
 ## [0.84.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.83.0...v0.84.0) (2026-11-22)
 
 
