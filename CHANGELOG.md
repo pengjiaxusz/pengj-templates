@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.85.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.85.0...v0.85.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **core:** 统一归一化 manifest.json 相对路径分隔符以兼容跨平台更新 ([a971c40](https://github.com/pengjiaxusz/pengj-templates/commit/a971c4051b475b272359064b8d0c0662277dea89))
+
 ## [0.85.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.84.0...v0.85.0) (2026-11-22)
 
 
