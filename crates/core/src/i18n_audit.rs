@@ -258,6 +258,8 @@ mod tests {
             ".pengj-templates/scripts/doctor.d/README.md",
             ".pengj-templates/scripts/doctor.sh",
             ".pengj-templates/scripts/doctor.cmd",
+            ".pengj-templates/scripts/setup.sh",
+            ".pengj-templates/scripts/setup.cmd",
             ".pengj-templates/gate.toml",
             "AGENTS.md",
             "CONTRIBUTING.md",

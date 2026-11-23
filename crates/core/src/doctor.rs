@@ -114,9 +114,7 @@ impl DoctorReport {
 pub fn run_doctor(project_dir: &Path, opts: &DoctorOptions) -> Result<DoctorReport> {
     let root = absolute(project_dir)?;
     let manifest = ProjectManifest::load(&root)?;
-    let lang = opts.lang.unwrap_or_else(|| {
-        Lang::from_skill_lang(manifest.options.get("skill_lang").and_then(|v| v.as_str()))
-    });
+    let lang = resolve_lang(&manifest, opts.lang);
 
     let mut items = Vec::new();
 
@@ -325,11 +323,17 @@ fn custom_script_glob() -> &'static str {
 // 层/技能与基础工具探测
 // ---------------------------------------------------------------------------
 
-fn has_layer(manifest: &ProjectManifest, name: &str) -> bool {
+pub(crate) fn resolve_lang(manifest: &ProjectManifest, override_lang: Option<Lang>) -> Lang {
+    override_lang.unwrap_or_else(|| {
+        Lang::from_skill_lang(manifest.options.get("skill_lang").and_then(|v| v.as_str()))
+    })
+}
+
+pub(crate) fn has_layer(manifest: &ProjectManifest, name: &str) -> bool {
     manifest.layers.iter().any(|l| l == name)
 }
 
-fn has_skill(manifest: &ProjectManifest, name: &str) -> bool {
+pub(crate) fn has_skill(manifest: &ProjectManifest, name: &str) -> bool {
     manifest
         .options
         .get("skills")
@@ -338,8 +342,7 @@ fn has_skill(manifest: &ProjectManifest, name: &str) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(any(target_os = "linux", test))]
-fn uses_lld(manifest: &ProjectManifest) -> bool {
+pub(crate) fn uses_lld(manifest: &ProjectManifest) -> bool {
     manifest
         .options
         .get("use_lld")
@@ -1408,14 +1411,14 @@ fn max_detail_level(details: &[DoctorDetail]) -> DoctorLevel {
     }
 }
 
-fn absolute(root: &Path) -> Result<PathBuf> {
+pub(crate) fn absolute(root: &Path) -> Result<PathBuf> {
     let canonical = root
         .canonicalize()
         .map_err(|error| CoreError::Git(format!("无法访问目录 {}: {error}", root.display())))?;
     Ok(crate::worktree::strip_verbatim(&canonical))
 }
 
-fn display_path(path: &Path) -> String {
+pub(crate) fn display_path(path: &Path) -> String {
     let text = path.display().to_string();
     #[cfg(windows)]
     {
