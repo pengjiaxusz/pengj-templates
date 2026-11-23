@@ -15,6 +15,7 @@ pub mod migrations;
 pub mod render;
 pub mod repo;
 pub mod setup;
+pub(crate) mod setup_ephemeral;
 pub mod subrepo;
 pub mod subrepo_check;
 pub(crate) mod toml_merge;
