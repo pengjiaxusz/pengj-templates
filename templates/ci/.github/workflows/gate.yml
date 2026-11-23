@@ -24,7 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      # {% if options["skill_lang"] | default("zh") == "en" %}Pin latest major Action versions (Node 24 runtime, no Node 20 deprecation warnings); when adding project CI workflows, prefer `actions/checkout@v7`, `actions/cache@v6`, `Swatinem/rust-cache@v2` and `taiki-e/install-action@v2` with `concurrency` enabled.{% else %}使用最新主版本 Action（Node 24 运行时，无 Node 20 弃用警告）；项目扩展自有 CI 工作流时，建议统一采用 `actions/checkout@v7`、`actions/cache@v6`、`Swatinem/rust-cache@v2`、`taiki-e/install-action@v2` 并开启 `concurrency`。{% endif %}
+      - uses: actions/checkout@v7
         with:
           # {% if options["skill_lang"] | default("zh") == "en" %}The full history is needed to walk the commit range, and the head ref keeps GitHub's auto-generated merge commit out of the range.{% else %}校验提交范围需要完整历史；检出 head ref 可避免把 GitHub 自动生成的合并提交算进来。{% endif %}
           fetch-depth: 0

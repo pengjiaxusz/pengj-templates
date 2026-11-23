@@ -5306,6 +5306,10 @@ description = \"x\"
             zh_config.contains("commit.scopes = [\"*\"]"),
             "新项目默认放行任意 scope，实际:\n{zh_config}"
         );
+        assert!(
+            zh_config.contains("prepush.commands = []"),
+            "新项目 pre-push 默认留空（仅秒级内置门禁），实际:\n{zh_config}"
+        );
 
         let en_config =
             std::fs::read_to_string(en_root.join(".pengj-templates/gate.toml")).unwrap();
@@ -5478,6 +5482,10 @@ description = \"x\"
         );
         assert!(workflow.contains("merge_group"), "CI 必须覆盖合并队列");
         assert!(workflow.contains("concurrency:"), "CI 必须取消过期的运行");
+        assert!(
+            workflow.contains("actions/checkout@v7") && !workflow.contains("actions/checkout@v4"),
+            "CI 模板必须升级至最新主版本 actions/checkout@v7"
+        );
 
         // -- 服务端第二道：ruleset 的 context 必须与 workflow 的 job 名一致 --
         let ruleset =
