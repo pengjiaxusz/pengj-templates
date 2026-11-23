@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.86.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.86.0...v0.86.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **templates:** 完善 setup 引导脚本旧版升级与 CONTRIBUTING 入口说明 ([a69436f](https://github.com/pengjiaxusz/pengj-templates/commit/a69436f351f8951def9f1aaabae7ac398a7a48dc))
+
 ## [0.86.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.85.1...v0.86.0) (2026-11-23)
 
 
