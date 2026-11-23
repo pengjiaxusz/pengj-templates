@@ -267,11 +267,21 @@ impl SetupEnv for SystemSetupEnv {
     fn has_passwordless_sudo(&self) -> bool {
         #[cfg(unix)]
         {
-            Command::new("sudo")
-                .args(["-n", "true"])
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false)
+            // 部分沙盒/容器仅对包管理器开放免密 sudo（拒绝 `sudo -n true`），
+            // 因此依次探测 `true` 与主流包管理器的无害 `--version` 调用。
+            const PROBES: &[&[&str]] = &[
+                &["-n", "true"],
+                &["-n", "apt-get", "--version"],
+                &["-n", "dnf", "--version"],
+                &["-n", "pacman", "--version"],
+            ];
+            PROBES.iter().any(|args| {
+                Command::new("sudo")
+                    .args(*args)
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false)
+            })
         }
         #[cfg(not(unix))]
         {

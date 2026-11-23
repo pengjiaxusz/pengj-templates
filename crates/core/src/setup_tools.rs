@@ -206,11 +206,31 @@ pub(crate) fn execute_just(env: &dyn SetupEnv, lang: Lang) -> SetupStep {
     }
 }
 
+/// 返回用户目录下可执行的临时目录路径，避免受限沙盒 `/tmp` 挂载 `noexec` 导致安装脚本失败。
+fn unix_exec_tmpdir_prefix(env: &dyn SetupEnv) -> String {
+    let dir = if let Some(xdg) = env
+        .env_var("XDG_CACHE_HOME")
+        .filter(|v| !v.trim().is_empty())
+    {
+        format!("{}/pengj-templates/tmp", xdg.trim_end_matches('/'))
+    } else if let Some(home) = env.home_dir() {
+        format!(
+            "{}/.cache/pengj-templates/tmp",
+            home.to_string_lossy().trim_end_matches('/')
+        )
+    } else {
+        return String::new();
+    };
+    let quoted = shell_single_quote(&dir);
+    format!("mkdir -p {quoted} && export TMPDIR={quoted} && ")
+}
+
 fn execute_just_unix(env: &dyn SetupEnv, lang: Lang) -> SetupStep {
     let bin_dir = unix_local_bin_dir(env);
     let quoted_dir = shell_single_quote(&bin_dir);
+    let tmp_prefix = unix_exec_tmpdir_prefix(env);
     let script = format!(
-        "mkdir -p {quoted_dir} && curl --proto '=https' --tlsv1.2 -sSf {JUST_INSTALL_SH_URL} | sh -s -- --to {quoted_dir}"
+        "{tmp_prefix}mkdir -p {quoted_dir} && curl --proto '=https' --tlsv1.2 -sSf {JUST_INSTALL_SH_URL} | sh -s -- --to {quoted_dir}"
     );
     let spec = CommandSpec::new("sh", &["-c", &script]);
     let manual = match lang {
@@ -475,7 +495,8 @@ pub(crate) fn execute_bque(env: &dyn SetupEnv, lang: Lang) -> SetupStep {
 
     match env.target_os() {
         SetupOs::Linux | SetupOs::MacOs => {
-            let script = format!("curl -fsSL {BQUE_INSTALL_SH_URL} | sh");
+            let tmp_prefix = unix_exec_tmpdir_prefix(env);
+            let script = format!("{tmp_prefix}curl -fsSL {BQUE_INSTALL_SH_URL} | sh");
             let spec = CommandSpec::new("sh", &["-c", &script]);
             let manual = match lang {
                 Lang::Zh => format!("手动安装命令：{script}"),
@@ -629,8 +650,9 @@ pub(crate) fn execute_rust(root: &Path, env: &dyn SetupEnv, lang: Lang) -> Setup
     if !has_rustup || !has_cargo {
         let install_spec = match env.target_os() {
             SetupOs::Linux | SetupOs::MacOs => {
+                let tmp_prefix = unix_exec_tmpdir_prefix(env);
                 let script = format!(
-                    "curl --proto '=https' --tlsv1.2 -sSf {RUSTUP_INSTALL_SH_URL} | sh -s -- -y"
+                    "{tmp_prefix}curl --proto '=https' --tlsv1.2 -sSf {RUSTUP_INSTALL_SH_URL} | sh -s -- -y"
                 );
                 CommandSpec::new("sh", &["-c", &script])
             }
