@@ -33,6 +33,44 @@ jobs:
           # {% if options["skill_lang"] | default("zh") == "en" %}Checkout leaves submodules empty, so a project whose path dependencies live in a submodule cannot even load its workspace — and the failure surfaces as a missing dependency rather than a missing submodule. Harmless for projects without submodules.{% else %}checkout 默认不检出子模块，路径依赖放在子模块里的项目连 workspace 都加载不了，而报错表现为「找不到依赖」而不是缺子模块。没有子模块的项目不受影响。{% endif %}
           submodules: true
 
+      # {% if options["skill_lang"] | default("zh") == "en" %}Keep `gate` running on every push/PR so the required status check never stalls, but skip Rust/code checks when the diff only touches docs.{% else %}保持 `gate` 在每次推送与 PR 上运行以确保必需状态检查永不挂起，但若本次改动仅涉及文档，则跳过 Rust 与代码检查步骤。{% endif %}
+      - name: {% if options["skill_lang"] | default("zh") == "en" %}Detect code changes{% else %}探测代码变更{% endif %}
+        id: changes
+        env:
+          GATE_BASE: {% raw %}${{ github.event.pull_request.base.sha || github.event.before }}{% endraw %}
+        run: |
+          base="${GATE_BASE:-}"
+          if printf '%s' "$base" | grep -qE '^0+$' || [ -z "$base" ] || ! git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1; then
+            echo "code_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$base"..HEAD 2>/dev/null || true)
+          if [ -z "$changed" ]; then
+            echo "code_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          code_changed=false
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              docs/*|.agents/*|.github/pull_request_template.md|LICENSE*)
+                ;;
+              */*)
+                code_changed=true
+                break
+                ;;
+              *.md)
+                ;;
+              *)
+                code_changed=true
+                break
+                ;;
+            esac
+          done <<EOF
+          $changed
+          EOF
+          echo "code_changed=$code_changed" >> "$GITHUB_OUTPUT"
+
       - name: {% if options["skill_lang"] | default("zh") == "en" %}Install pengj-templates-cli{% else %}安装 pengj-templates-cli{% endif %}
         run: |
           curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh
@@ -71,6 +109,7 @@ jobs:
           exit "$status"
 
       - name: {% if options["skill_lang"] | default("zh") == "en" %}Run the code language guard{% else %}运行代码语言守卫{% endif %}
+        if: {% raw %}steps.changes.outputs.code_changed == 'true'{% endraw %}
         run: |
           set +e
           output=$(pengj-templates-cli gate check 2>&1)
@@ -111,5 +150,6 @@ jobs:
 
       # {% if options["skill_lang"] | default("zh") == "en" %}The local pre-commit hook formats the staged Rust files; without the CLI that never happens, so the server checks it.{% else %}本地 pre-commit 钩子会格式化暂存的 Rust 文件；没装 CLI 时这一步不会发生，所以由服务端补上。{% endif %}
       - name: {% if options["skill_lang"] | default("zh") == "en" %}Check the formatting{% else %}检查代码格式{% endif %}
+        if: {% raw %}steps.changes.outputs.code_changed == 'true'{% endraw %}
         run: cargo fmt --check
       {%- endif %}

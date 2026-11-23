@@ -96,6 +96,79 @@ pub fn report_refs(refs: &[PushRef]) {
     }
 }
 
+/// 判断路径是否属于纯文档类文件（与模板 `gate.yml` / `detect-changes.yml` 保持同一口径）。
+///
+/// 仅匹配根目录 `*.md`、`docs/`、`.agents/`、`.github/pull_request_template.md` 以及根目录 `LICENSE*`；
+/// 子目录下的 `.md`（如嵌入二进制的 `templates/**/*.md`）不视为纯文档，避免误跳过构建检查。
+pub fn is_doc_only_path(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    let p = normalized.trim().trim_start_matches("./");
+    if p.is_empty() {
+        return true;
+    }
+    if p.starts_with("docs/")
+        || p.starts_with(".agents/")
+        || p == ".github/pull_request_template.md"
+    {
+        return true;
+    }
+    if !p.contains('/') && (p.ends_with(".md") || p.starts_with("LICENSE")) {
+        return true;
+    }
+    false
+}
+
+/// 判断给定变更文件清单中是否包含非文档代码/构建文件。
+pub fn has_code_changes(files: &[String]) -> bool {
+    files.iter().any(|f| !is_doc_only_path(f))
+}
+
+/// 收集本次 `git push` 引用范围内的全部变更文件路径。
+///
+/// 任何无法安全确定范围的情况（无引用传入、强推后远端 sha 在本地不存在、git 命令失败）
+/// 一律返回 `None`，调用方据此保守执行全量检查，绝不误放行。
+pub fn changed_files_for_refs(dir: &Path, refs: &[PushRef]) -> Option<Vec<String>> {
+    if refs.is_empty() {
+        return None;
+    }
+    let mut files = Vec::new();
+    for item in refs {
+        let is_new_branch = item.remote_sha.chars().all(|c| c == '0');
+        let output = if is_new_branch {
+            // 新分支：统计本地分支相对所有已知远端引用的新增提交所触及的文件。
+            Command::new("git")
+                .current_dir(dir)
+                .args([
+                    "log",
+                    "--format=",
+                    "--name-only",
+                    &item.local_sha,
+                    "--not",
+                    "--remotes",
+                ])
+                .output()
+                .ok()?
+        } else {
+            let range = format!("{}..{}", item.remote_sha, item.local_sha);
+            Command::new("git")
+                .current_dir(dir)
+                .args(["diff", "--name-only", &range])
+                .output()
+                .ok()?
+        };
+        if !output.status.success() {
+            return None;
+        }
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                files.push(trimmed.to_string());
+            }
+        }
+    }
+    Some(files)
+}
+
 /// 用 rustfmt 做一次只读检查，与 CI 的 `cargo fmt --check` 完全同一条命令。
 ///
 /// 只读是刻意的：pre-push 阶段改文件已经进不了提交了（`git am` 会把索引重置回它自己
@@ -227,5 +300,117 @@ refs/heads/b\t2222\trefs/heads/b\t3333
         assert!(!parse_skip_flag(""));
         assert!(!parse_skip_flag("0"));
         assert!(!parse_skip_flag("false"));
+    }
+
+    #[test]
+    fn classifies_doc_only_and_code_paths() {
+        assert!(is_doc_only_path("README.md"));
+        assert!(is_doc_only_path("GLOSSARY.md"));
+        assert!(is_doc_only_path("docs/adr/0032-linux.md"));
+        assert!(is_doc_only_path(".agents/skills/foo/SKILL.md"));
+        assert!(is_doc_only_path(".github/pull_request_template.md"));
+        assert!(is_doc_only_path("LICENSE-MIT"));
+        assert!(!is_doc_only_path("crates/gate/src/prepush.rs"));
+        assert!(!is_doc_only_path("Cargo.toml"));
+        assert!(!is_doc_only_path("templates/agent/AGENTS.md"));
+        assert!(!is_doc_only_path(".github/workflows/ci.yml"));
+
+        assert!(!has_code_changes(&[
+            "README.md".to_string(),
+            "docs/adr/0001.md".to_string(),
+        ]));
+        assert!(has_code_changes(&[
+            "README.md".to_string(),
+            "src/lib.rs".to_string(),
+        ]));
+    }
+
+    #[test]
+    fn detects_docs_only_and_mixed_pushes_in_git_repo() {
+        let dir =
+            std::env::temp_dir().join(format!("pengj-gate-prepush-diff-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+
+        let run_git = |args: &[&str]| {
+            let out = Command::new("git")
+                .current_dir(&dir)
+                .args(args)
+                .output()
+                .expect("run git");
+            assert!(
+                out.status.success(),
+                "git {:?} failed: {}",
+                args,
+                String::from_utf8_lossy(&out.stderr)
+            );
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+
+        run_git(&["init"]);
+        run_git(&["config", "user.name", "tester"]);
+        run_git(&["config", "user.email", "tester@example.com"]);
+        std::fs::write(
+            dir.join("README.md"),
+            "init
+",
+        )
+        .expect("write");
+        run_git(&["add", "README.md"]);
+        run_git(&["commit", "-m", "docs(init): 初始提交"]);
+        let base_sha = run_git(&["rev-parse", "HEAD"]);
+
+        // 纯文档提交
+        std::fs::create_dir_all(dir.join("docs/adr")).expect("mkdir");
+        std::fs::write(
+            dir.join("docs/adr/0001.md"),
+            "# ADR
+",
+        )
+        .expect("write");
+        run_git(&["add", "docs/adr/0001.md"]);
+        run_git(&["commit", "-m", "docs(adr): 新增文档"]);
+        let docs_sha = run_git(&["rev-parse", "HEAD"]);
+
+        let docs_ref = vec![PushRef {
+            local_ref: "refs/heads/main".to_string(),
+            local_sha: docs_sha.clone(),
+            remote_ref: "refs/heads/main".to_string(),
+            remote_sha: base_sha.clone(),
+        }];
+        let files = changed_files_for_refs(&dir, &docs_ref).expect("should detect range");
+        assert!(
+            !has_code_changes(&files),
+            "pure docs push should not have code changes"
+        );
+
+        // 混合代码提交
+        std::fs::create_dir_all(dir.join("src")).expect("mkdir");
+        std::fs::write(
+            dir.join("src/lib.rs"),
+            "pub fn f() {}
+",
+        )
+        .expect("write");
+        run_git(&["add", "src/lib.rs"]);
+        run_git(&["commit", "-m", "feat(core): 新增函数"]);
+        let code_sha = run_git(&["rev-parse", "HEAD"]);
+
+        let code_ref = vec![PushRef {
+            local_ref: "refs/heads/main".to_string(),
+            local_sha: code_sha,
+            remote_ref: "refs/heads/main".to_string(),
+            remote_sha: docs_sha,
+        }];
+        let files = changed_files_for_refs(&dir, &code_ref).expect("should detect range");
+        assert!(
+            has_code_changes(&files),
+            "code push should report code changes"
+        );
+
+        // 空引用列表保守返回 None
+        assert!(changed_files_for_refs(&dir, &[]).is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

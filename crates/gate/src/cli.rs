@@ -211,9 +211,24 @@ fn hook_pre_commit() -> Result<u8, String> {
 fn hook_pre_push() -> Result<u8, String> {
     // git 把待推的引用写在 stdin 上，先原样报出来——一次推多个分支时，失败信息得能
     // 对上是哪一个。
-    prepush::report_refs(&prepush::read_refs());
+    let refs = prepush::read_refs();
+    prepush::report_refs(&refs);
 
     let cwd = std::env::current_dir().unwrap_or_default();
+
+    // 若本次推送范围内全部为纯文档文件（零代码/构建文件变更），直接放行，避免纯文档推送
+    // 触发无关的 `cargo fmt --check`、代码语言守卫或重型自定义命令。
+    if !refs.is_empty() {
+        if let Some(files) = prepush::changed_files_for_refs(&cwd, &refs) {
+            if !prepush::has_code_changes(&files) {
+                println!(
+                    "[gate] pre-push: docs-only changes ({} file(s)), skipping fmt, lang-guard and custom commands",
+                    files.len()
+                );
+                return Ok(0);
+            }
+        }
+    }
     let (config, _) = config::load(&cwd)?;
 
     // 内置两项与 `gate.toml` 的开关一一对应，关掉的方式和 pre-commit 一致。

@@ -1,0 +1,57 @@
+name: detect-changes
+
+# 可复用工作流：集中维护全家族仓库的「纯文档 vs 代码变更」判定规则。
+# 下游定制业务工作流（如 core.yml、launcher-ci.yml）只需在首个 job 中调用本工作流：
+#
+#   changes:
+#     uses: pengjiaxusz/pengj-templates/.github/workflows/detect-changes.yml@main
+#
+# 重型编译/测试 job 再挂 `needs: changes` 与 `if: needs.changes.outputs.code == 'true'`，
+# 即可在纯文档改动时自动跳过，同时不影响必需状态检查与后续统一维护忽略列表。
+
+on:
+  workflow_call:
+    outputs:
+      code:
+        description: "是否触及非文档代码或构建配置（'true' / 'false'）"
+        value: ${{ jobs.detect.outputs.code }}
+      rust:
+        description: "是否触及 Rust 源码、Cargo 清单、工具链或工作流文件（'true' / 'false'）"
+        value: ${{ jobs.detect.outputs.rust }}
+      docs_only:
+        description: "本次改动是否全部为纯文档文件（'true' / 'false'）"
+        value: ${{ jobs.detect.outputs.docs_only }}
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: detect-changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      rust: ${{ steps.filter.outputs.rust }}
+      docs_only: ${{ steps.filter.outputs.code != 'true' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!*.md'
+              - '!docs/**'
+              - '!.agents/**'
+              - '!.github/pull_request_template.md'
+              - '!LICENSE*'
+            rust:
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - '**/Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.cargo/**'
+              - '.github/workflows/*.yml'
+              - '.github/workflows/*.yaml'

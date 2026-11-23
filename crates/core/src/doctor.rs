@@ -178,6 +178,13 @@ pub fn run_doctor(project_dir: &Path, opts: &DoctorOptions) -> Result<DoctorRepo
         items.push(check_worktree(&root, opts.fix, lang));
     }
 
+    // 10.5 ci 层：检查项目自建业务工作流是否配置了路径过滤与并发取消（仅告警，不阻断）
+    if has_layer(&manifest, "ci") {
+        if let Some(item) = check_ci_workflows(&root, lang) {
+            items.push(item);
+        }
+    }
+
     // 11. 自定义扩展 .pengj-templates/scripts/doctor.d/
     let custom_items = run_custom_scripts(&root, opts.fix, lang);
     let custom_count = custom_items.len();
@@ -1526,6 +1533,132 @@ pub(crate) fn display_path(path: &Path) -> String {
     }
 }
 
+/// 检查 `.github/workflows/` 下项目自建业务工作流是否配置了路径过滤与 `concurrency`。
+///
+/// 仅在存在非模板托管的 `push`/`pull_request` 工作流时返回检查项（跳过 `gate.yml`、
+/// `release.yml`、`detect-changes.yml` 及纯手动/标签/可复用工作流）；缺失配置只记为
+/// `Warn`（不阻断初始化）。
+fn check_ci_workflows(root: &Path, lang: Lang) -> Option<DoctorItem> {
+    let wf_dir = root.join(".github").join("workflows");
+    let entries = std::fs::read_dir(&wf_dir).ok()?;
+
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.is_file() && matches!(p.extension().and_then(|s| s.to_str()), Some("yml" | "yaml"))
+        })
+        .collect();
+    files.sort();
+
+    let mut checked = 0usize;
+    let mut details = Vec::new();
+
+    for path in files {
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if matches!(
+            name,
+            "gate.yml"
+                | "gate.yaml"
+                | "release.yml"
+                | "release.yaml"
+                | "detect-changes.yml"
+                | "detect-changes.yaml"
+        ) {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        // 只检查会在 push / pull_request 上自动触发的业务工作流
+        let triggers_on_code_events = content.contains("pull_request")
+            || (content.contains("push:") && !content.contains("tags:"));
+        if !triggers_on_code_events {
+            continue;
+        }
+        checked += 1;
+
+        let has_path_filter = content.contains("paths-ignore:")
+            || content.contains("paths:")
+            || content.contains("paths-filter")
+            || content.contains("detect-changes.yml");
+        let has_concurrency = content.contains("concurrency:");
+
+        if !has_path_filter {
+            let (msg, remedy) = match lang {
+                Lang::Zh => (
+                    "缺少路径过滤，纯文档改动也会触发全量构建测试".to_string(),
+                    "在 on.push / on.pull_request 添加 paths-ignore（*.md、docs/**、.agents/**），或调用 pengjiaxusz/pengj-templates/.github/workflows/detect-changes.yml@main".to_string(),
+                ),
+                Lang::En => (
+                    "missing path filter; docs-only changes trigger full build and test jobs".to_string(),
+                    "add paths-ignore (*.md, docs/**, .agents/**) under on.push/on.pull_request, or call pengjiaxusz/pengj-templates/.github/workflows/detect-changes.yml@main".to_string(),
+                ),
+            };
+            details.push(DoctorDetail {
+                level: DoctorLevel::Warn,
+                name: name.to_string(),
+                message: msg,
+                remedy: Some(remedy),
+            });
+        }
+        if !has_concurrency {
+            let (msg, remedy) = match lang {
+                Lang::Zh => (
+                    "缺少 concurrency 并发取消配置，连续推送会浪费 Runner 额度".to_string(),
+                    "添加 concurrency: { group: ${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true }".to_string(),
+                ),
+                Lang::En => (
+                    "missing concurrency group; rapid pushes waste runner minutes".to_string(),
+                    "add concurrency with cancel-in-progress: true".to_string(),
+                ),
+            };
+            details.push(DoctorDetail {
+                level: DoctorLevel::Warn,
+                name: name.to_string(),
+                message: msg,
+                remedy: Some(remedy),
+            });
+        }
+    }
+
+    if checked == 0 {
+        return None;
+    }
+
+    if details.is_empty() {
+        let summary = match lang {
+            Lang::Zh => format!("CI 工作流：已检查 {checked} 个业务工作流，均配置了路径过滤与并发取消"),
+            Lang::En => format!("CI workflows: {checked} workflow(s) checked, all have path filters and concurrency"),
+        };
+        Some(DoctorItem {
+            id: "ci-workflows".to_string(),
+            category: "ci".to_string(),
+            level: DoctorLevel::Ok,
+            summary,
+            details: Vec::new(),
+            output: None,
+        })
+    } else {
+        let warn_count = details.len();
+        let summary = match lang {
+            Lang::Zh => format!("CI 工作流：{warn_count} 项建议优化（路径过滤 / 并发取消）"),
+            Lang::En => {
+                format!("CI workflows: {warn_count} suggestion(s) (path filter / concurrency)")
+            }
+        };
+        Some(DoctorItem {
+            id: "ci-workflows".to_string(),
+            category: "ci".to_string(),
+            level: DoctorLevel::Warn,
+            summary,
+            details,
+            output: None,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2007,5 +2140,75 @@ mod tests {
             bque_item_from_probe(Some("bque 0.2.0".to_string()), None, false, Lang::En);
         assert_eq!(fallback_en.level, DoctorLevel::Ok);
         assert_eq!(fallback_en.summary, "bque 0.2.0");
+    }
+
+    #[test]
+    fn ci_workflows_检查识别缺失路径过滤与并发取消且支持双语() {
+        let dir = temp_dir("ci-workflows-check");
+        let wf_dir = dir.join(".github").join("workflows");
+        std::fs::create_dir_all(&wf_dir).expect("mkdir workflows");
+
+        // 仅含 gate.yml 时不产生额外检查项
+        std::fs::write(
+            wf_dir.join("gate.yml"),
+            "name: gate
+on:
+  pull_request:
+",
+        )
+        .expect("write");
+        assert!(check_ci_workflows(&dir, Lang::Zh).is_none());
+
+        // 裸业务工作流应报 2 条 Warn（缺路径过滤 + 缺 concurrency）
+        std::fs::write(
+            wf_dir.join("ci.yml"),
+            "name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+",
+        )
+        .expect("write");
+        let warn_zh = check_ci_workflows(&dir, Lang::Zh).expect("should report");
+        assert_eq!(warn_zh.level, DoctorLevel::Warn);
+        assert_eq!(warn_zh.details.len(), 2);
+        assert!(contains_han(&warn_zh.summary));
+
+        let warn_en = check_ci_workflows(&dir, Lang::En).expect("should report");
+        assert_eq!(warn_en.level, DoctorLevel::Warn);
+        assert!(!contains_han(&warn_en.summary));
+        for d in &warn_en.details {
+            assert!(!contains_han(&d.message));
+            if let Some(r) = &d.remedy {
+                assert!(!contains_han(r));
+            }
+        }
+
+        // 补齐 detect-changes.yml 引用与 concurrency 后应为 Ok
+        std::fs::write(
+            wf_dir.join("ci.yml"),
+            "name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  changes:
+    uses: pengjiaxusz/pengj-templates/.github/workflows/detect-changes.yml@main
+",
+        )
+        .expect("write");
+        let ok_item = check_ci_workflows(&dir, Lang::Zh).expect("should report ok");
+        assert_eq!(ok_item.level, DoctorLevel::Ok);
+        assert!(ok_item.details.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
