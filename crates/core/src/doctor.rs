@@ -548,40 +548,130 @@ fn lld_item_from_version(version: Option<String>, lang: Lang) -> DoctorItem {
     }
 }
 
-fn check_bque_tool(lang: Lang) -> DoctorItem {
-    #[cfg(windows)]
-    {
-        match probe_tool_version("bque", &["--version"]) {
-            Some(ver) => DoctorItem {
+/// `bque probe --json` 输出的机器资源档位摘要。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BqueProbeInfo {
+    tier: String,
+    logical_cores: Option<u64>,
+    total_ram_mb: Option<u64>,
+    recommended_build_jobs: Option<u64>,
+}
+
+/// 解析 `bque probe --json` 输出；旧版 `bque` 或非预期输出返回 `None` 以便优雅降级。
+fn parse_bque_probe_json(raw: &str) -> Option<BqueProbeInfo> {
+    let val: serde_json::Value = serde_json::from_str(raw.trim()).ok()?;
+    let tier = val
+        .get("tier")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let logical_cores = val.get("logical_cores").and_then(|v| v.as_u64());
+    let total_ram_mb = val.get("total_ram_mb").and_then(|v| v.as_u64());
+    let recommended_build_jobs = val.get("recommended_build_jobs").and_then(|v| v.as_u64());
+    Some(BqueProbeInfo {
+        tier,
+        logical_cores,
+        total_ram_mb,
+        recommended_build_jobs,
+    })
+}
+
+/// 尝试调用 `bque probe --json` 采集机器资源档位；旧版不支持该子命令时静默降级为 `None`。
+fn probe_bque_resources() -> Option<BqueProbeInfo> {
+    let out = Command::new("bque")
+        .args(["probe", "--json"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    parse_bque_probe_json(&stdout)
+}
+
+/// 根据 `bque --version` 与可选的 `bque probe --json` 结果构造体检条目。
+fn bque_item_from_probe(
+    version: Option<String>,
+    probe: Option<&BqueProbeInfo>,
+    is_windows: bool,
+    lang: Lang,
+) -> DoctorItem {
+    match version {
+        Some(ver) => {
+            let trimmed = ver.trim();
+            let base = if trimmed.starts_with("bque ") {
+                trimmed.to_string()
+            } else {
+                format!("bque {trimmed}")
+            };
+            let summary = match probe {
+                Some(info) => {
+                    let mut extras = Vec::new();
+                    match (info.logical_cores, info.total_ram_mb) {
+                        (Some(cores), Some(ram)) => match lang {
+                            Lang::Zh => extras.push(format!("{cores} 核 / {ram} MB")),
+                            Lang::En => extras.push(format!("{cores} cores / {ram} MB")),
+                        },
+                        (Some(cores), None) => match lang {
+                            Lang::Zh => extras.push(format!("{cores} 核")),
+                            Lang::En => extras.push(format!("{cores} cores")),
+                        },
+                        (None, Some(ram)) => extras.push(format!("{ram} MB")),
+                        (None, None) => {}
+                    }
+                    if let Some(jobs) = info.recommended_build_jobs {
+                        match lang {
+                            Lang::Zh => extras.push(format!("建议并发：{jobs}")),
+                            Lang::En => extras.push(format!("recommended jobs: {jobs}")),
+                        }
+                    }
+                    match lang {
+                        Lang::Zh => {
+                            if extras.is_empty() {
+                                format!("{base}（资源档位：{}）", info.tier)
+                            } else {
+                                format!("{base}（资源档位：{}，{}）", info.tier, extras.join("，"))
+                            }
+                        }
+                        Lang::En => {
+                            if extras.is_empty() {
+                                format!("{base} (tier: {})", info.tier)
+                            } else {
+                                format!("{base} (tier: {}, {})", info.tier, extras.join(", "))
+                            }
+                        }
+                    }
+                }
+                None => base,
+            };
+            DoctorItem {
                 id: "bque".to_string(),
                 category: "tool".to_string(),
                 level: DoctorLevel::Ok,
-                summary: format!("bque {}", ver.trim()),
+                summary,
                 details: Vec::new(),
                 output: None,
-            },
-            None => DoctorItem {
-                id: "bque".to_string(),
-                category: "tool".to_string(),
-                level: DoctorLevel::Warn,
-                summary: match lang {
-                    Lang::Zh => {
-                        "未找到 bque（约 3–5 MB；默认安装位置：%LOCALAPPDATA%\\bque\\bin）；安装命令：irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
-                            .to_string()
-                    }
-                    Lang::En => {
-                        "bque not found (~3-5 MB; default install path: %LOCALAPPDATA%\\bque\\bin); install: irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
-                            .to_string()
-                    }
-                },
-                details: Vec::new(),
-                output: None,
-            },
+            }
         }
-    }
-    #[cfg(not(windows))]
-    {
-        DoctorItem {
+        None if is_windows => DoctorItem {
+            id: "bque".to_string(),
+            category: "tool".to_string(),
+            level: DoctorLevel::Warn,
+            summary: match lang {
+                Lang::Zh => {
+                    "未找到 bque（约 3–5 MB；默认安装位置：%LOCALAPPDATA%\\bque\\bin）；安装命令：irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
+                        .to_string()
+                }
+                Lang::En => {
+                    "bque not found (~3-5 MB; default install path: %LOCALAPPDATA%\\bque\\bin); install: irm https://github.com/pengjiaxusz/bque/releases/latest/download/install.ps1 | iex"
+                        .to_string()
+                }
+            },
+            details: Vec::new(),
+            output: None,
+        },
+        None => DoctorItem {
             id: "bque".to_string(),
             category: "tool".to_string(),
             level: DoctorLevel::Ok,
@@ -591,8 +681,14 @@ fn check_bque_tool(lang: Lang) -> DoctorItem {
             },
             details: Vec::new(),
             output: None,
-        }
+        },
     }
+}
+
+fn check_bque_tool(lang: Lang) -> DoctorItem {
+    let version = probe_tool_version("bque", &["--version"]);
+    let probe = version.as_ref().and_then(|_| probe_bque_resources());
+    bque_item_from_probe(version, probe.as_ref(), cfg!(windows), lang)
 }
 
 fn check_node_tool(lang: Lang) -> DoctorItem {
@@ -1853,5 +1949,63 @@ mod tests {
         assert!(en.contains("winget install Microsoft.PowerShell"));
         assert!(en.contains("100 MB"));
         assert!(!crate::i18n_audit::contains_han(en));
+    }
+
+    #[test]
+    fn bque_probe_json_解析与旧版优雅降级() {
+        let valid =
+            r#"{"tier":"light","logical_cores":4,"total_ram_mb":8192,"recommended_build_jobs":2}"#;
+        let parsed = parse_bque_probe_json(valid).expect("合法 probe JSON 应解析成功");
+        assert_eq!(parsed.tier, "light");
+        assert_eq!(parsed.logical_cores, Some(4));
+        assert_eq!(parsed.total_ram_mb, Some(8192));
+        assert_eq!(parsed.recommended_build_jobs, Some(2));
+
+        // 仅含 tier 的最小 JSON 也应兼容
+        let minimal = parse_bque_probe_json(r#"{"tier":"standard"}"#).expect("最小 JSON 应兼容");
+        assert_eq!(minimal.tier, "standard");
+        assert_eq!(minimal.logical_cores, None);
+
+        // 旧版 bque 报 unrecognized subcommand 或空输出时返回 None，优雅降级
+        assert!(parse_bque_probe_json("error: unrecognized subcommand 'probe'").is_none());
+        assert!(parse_bque_probe_json("").is_none());
+        assert!(parse_bque_probe_json("{}").is_none());
+
+        // 中英双语展示与英文零汉字
+        let item_zh = bque_item_from_probe(
+            Some("bque 0.3.0".to_string()),
+            Some(&parsed),
+            true,
+            Lang::Zh,
+        );
+        assert_eq!(item_zh.level, DoctorLevel::Ok);
+        assert!(item_zh.summary.contains("bque 0.3.0"));
+        assert!(item_zh.summary.contains("light"));
+        assert!(item_zh.summary.contains("4 核 / 8192 MB"));
+        assert!(item_zh.summary.contains("建议并发：2"));
+
+        let item_en =
+            bque_item_from_probe(Some("0.3.0".to_string()), Some(&parsed), false, Lang::En);
+        assert_eq!(item_en.level, DoctorLevel::Ok);
+        assert!(item_en.summary.contains("bque 0.3.0"));
+        assert!(item_en.summary.contains("tier: light"));
+        assert!(item_en.summary.contains("4 cores / 8192 MB"));
+        assert!(item_en.summary.contains("recommended jobs: 2"));
+        assert!(
+            !contains_han(&item_en.summary),
+            "英文模式不应含汉字: {}",
+            item_en.summary
+        );
+
+        // 旧版 bque 无 probe 输出时优雅降级为仅版本号，仍为 Ok
+        let fallback_zh =
+            bque_item_from_probe(Some("bque 0.2.0".to_string()), None, true, Lang::Zh);
+        assert_eq!(fallback_zh.level, DoctorLevel::Ok);
+        assert_eq!(fallback_zh.summary, "bque 0.2.0");
+
+        let fallback_en =
+            bque_item_from_probe(Some("bque 0.2.0".to_string()), None, false, Lang::En);
+        assert_eq!(fallback_en.level, DoctorLevel::Ok);
+        assert_eq!(fallback_en.summary, "bque 0.2.0");
     }
 }
