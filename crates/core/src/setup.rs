@@ -1364,9 +1364,9 @@ fn plan_setup_d(root: &Path, os: SetupOs, env: &dyn SetupEnv, lang: Lang) -> Set
 // ---------------------------------------------------------------------------
 
 fn execute_planned_step(
-    _root: &Path,
+    root: &Path,
     _manifest: &ProjectManifest,
-    _env: &dyn SetupEnv,
+    env: &dyn SetupEnv,
     _opts: &SetupOptions,
     lang: Lang,
     step: SetupStep,
@@ -1375,23 +1375,33 @@ fn execute_planned_step(
         return step;
     }
 
-    let skeleton_note = match lang {
-        Lang::Zh => "装机骨架占位：实际执行逻辑待后续工单接入（当前未做修改）".to_string(),
-        Lang::En => {
-            "setup skeleton placeholder: execution logic will be wired in follow-up tasks (no changes made)"
-                .to_string()
+    match step.id.as_str() {
+        "submodules" => crate::setup_tools::execute_submodules(root, env, lang),
+        "just" => crate::setup_tools::execute_just(env, lang),
+        "pwsh" => crate::setup_tools::execute_pwsh(env, lang),
+        "bque" => crate::setup_tools::execute_bque(env, lang),
+        "rust" => crate::setup_tools::execute_rust(root, env, lang),
+        "lld" => crate::setup_tools::execute_lld(env, lang),
+        _ => {
+            let skeleton_note = match lang {
+                Lang::Zh => "装机骨架占位：实际执行逻辑待后续工单接入（当前未做修改）".to_string(),
+                Lang::En => {
+                    "setup skeleton placeholder: execution logic will be wired in follow-up tasks (no changes made)"
+                        .to_string()
+                }
+            };
+
+            let detail = match step.detail {
+                Some(existing) => Some(format!("{existing}; {skeleton_note}")),
+                None => Some(skeleton_note),
+            };
+
+            SetupStep {
+                status: SetupStatus::Warn,
+                detail,
+                ..step
+            }
         }
-    };
-
-    let detail = match step.detail {
-        Some(existing) => Some(format!("{existing}; {skeleton_note}")),
-        None => Some(skeleton_note),
-    };
-
-    SetupStep {
-        status: SetupStatus::Warn,
-        detail,
-        ..step
     }
 }
 
