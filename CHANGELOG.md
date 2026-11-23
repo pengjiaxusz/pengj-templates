@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.87.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.86.2...v0.87.0) (2026-11-23)
+
+
+### Features
+
+* **core:** doctor 探针兼容 bque probe 资源档位并在旧版优雅降级 ([01557ae](https://github.com/pengjiaxusz/pengj-templates/commit/01557ae042d1514c9ec9478277bbfa6e47dd21bb))
+* **gate,templates:** pre-push 默认减负为秒级门禁并支持受限环境跳过自定义命令 ([de28af7](https://github.com/pengjiaxusz/pengj-templates/commit/de28af74b6b0fe9ec857bcb379c738fcfe7cc2ce))
+
 ## [0.86.2](https://github.com/pengjiaxusz/pengj-templates/compare/v0.86.1...v0.86.2) (2026-11-23)
 
 
