@@ -11,9 +11,12 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 
-use crate::doctor::{absolute, display_path, has_layer, resolve_lang, uses_lld};
+use crate::doctor::{
+    absolute, display_path, has_layer, resolve_lang, run_doctor, uses_lld, DoctorLevel,
+    DoctorOptions, DoctorReport,
+};
 use crate::error::Result;
-use crate::i18n_audit::Lang;
+use crate::i18n_audit::{contains_han, Lang};
 use crate::manifest::ProjectManifest;
 use crate::setup_ephemeral::{detect_ephemeral, execute_ephemeral_step, plan_ephemeral_step};
 
@@ -60,8 +63,23 @@ impl SetupOs {
     /// 平台对应的自定义扩展脚本通配符
     pub fn script_glob(self) -> &'static str {
         match self {
-            Self::Windows => "*.ps1",
+            Self::Windows => "*.ps1 / *.cmd / *.bat",
             Self::Linux | Self::MacOs => "*.sh",
+        }
+    }
+
+    /// 判断文件名是否匹配当前平台支持的 `setup.d/` 扩展脚本后缀
+    pub fn matches_setup_script(self, filename: &str) -> bool {
+        let Some(ext) = Path::new(filename).extension().and_then(|e| e.to_str()) else {
+            return false;
+        };
+        match self {
+            Self::Windows => {
+                ext.eq_ignore_ascii_case("ps1")
+                    || ext.eq_ignore_ascii_case("cmd")
+                    || ext.eq_ignore_ascii_case("bat")
+            }
+            Self::Linux | Self::MacOs => ext.eq_ignore_ascii_case("sh"),
         }
     }
 }
@@ -190,6 +208,17 @@ pub trait SetupEnv {
 
     /// 执行外部命令
     fn run_command(&self, spec: &CommandSpec) -> std::io::Result<CommandOutput>;
+
+    /// 进程内执行离线 `doctor --fix`（默认直调 [`crate::doctor::run_doctor`]，测试可按需注入结果）
+    fn run_doctor_fix(&self, root: &Path, lang: Lang) -> Result<DoctorReport> {
+        run_doctor(
+            root,
+            &DoctorOptions {
+                fix: true,
+                lang: Some(lang),
+            },
+        )
+    }
 }
 
 /// 基于真实操作系统的 [`SetupEnv`] 默认实现
@@ -353,6 +382,7 @@ pub struct FakeSetupEnv {
     dirs: Mutex<BTreeSet<PathBuf>>,
     command_outputs: Mutex<VecDeque<CommandOutput>>,
     executed: Mutex<Vec<CommandSpec>>,
+    doctor_report: Mutex<Option<DoctorReport>>,
 }
 
 impl FakeSetupEnv {
@@ -376,6 +406,7 @@ impl FakeSetupEnv {
             dirs: Mutex::new(BTreeSet::new()),
             command_outputs: Mutex::new(VecDeque::new()),
             executed: Mutex::new(Vec::new()),
+            doctor_report: Mutex::new(None),
         }
     }
 
@@ -446,6 +477,14 @@ impl FakeSetupEnv {
             .lock()
             .map(|m| m.keys().cloned().collect())
             .unwrap_or_default()
+    }
+
+    /// 注入预置的离线 `doctor --fix` 报告（未注入时默认真实执行 `crate::doctor::run_doctor`）
+    pub fn with_doctor_report(self, report: DoctorReport) -> Self {
+        if let Ok(mut slot) = self.doctor_report.lock() {
+            *slot = Some(report);
+        }
+        self
     }
 }
 
@@ -555,6 +594,21 @@ impl SetupEnv for FakeSetupEnv {
             }
         }
         Ok(CommandOutput::ok(""))
+    }
+
+    fn run_doctor_fix(&self, root: &Path, lang: Lang) -> Result<DoctorReport> {
+        if let Ok(slot) = self.doctor_report.lock() {
+            if let Some(report) = slot.as_ref() {
+                return Ok(report.clone());
+            }
+        }
+        run_doctor(
+            root,
+            &DoctorOptions {
+                fix: true,
+                lang: Some(lang),
+            },
+        )
     }
 }
 
@@ -676,7 +730,16 @@ pub fn run_setup_with_env(
         planned_steps
             .into_iter()
             .map(|step| {
-                execute_planned_step(&root, &manifest, &ephemeral_reason, env, opts, lang, step)
+                execute_planned_step(
+                    &root,
+                    &manifest,
+                    ephemeral,
+                    &ephemeral_reason,
+                    env,
+                    opts,
+                    lang,
+                    step,
+                )
             })
             .collect()
     };
@@ -773,10 +836,10 @@ fn build_setup_plan(
         lang,
     ));
 
-    // 6. 本地离线初始化：doctor --fix（占位步骤，实际调用由下游工单 #170 填充）
+    // 6. 本地离线初始化：进程内调用 doctor --fix
     steps.push(plan_doctor_fix(lang));
 
-    // 7. 项目自定义扩展：.pengj-templates/scripts/setup.d/（占位步骤，实际执行由下游工单 #171 填充）
+    // 7. 项目自定义扩展：.pengj-templates/scripts/setup.d/
     steps.push(plan_setup_d(root, os, env, lang));
 
     steps
@@ -1111,23 +1174,21 @@ fn plan_doctor_fix(lang: Lang) -> SetupStep {
     }
 }
 
-fn plan_setup_d(root: &Path, os: SetupOs, env: &dyn SetupEnv, lang: Lang) -> SetupStep {
+fn discover_setup_d_scripts(root: &Path, os: SetupOs, env: &dyn SetupEnv) -> Vec<String> {
     let dir = root.join(".pengj-templates/scripts/setup.d");
-    let ext = os.script_ext();
-    let glob = os.script_glob();
-
-    let scripts: Vec<String> = env
+    let mut scripts: Vec<String> = env
         .list_dir_files(&dir)
         .unwrap_or_default()
         .into_iter()
-        .filter(|name| {
-            Path::new(name)
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(|e| e.eq_ignore_ascii_case(ext))
-                .unwrap_or(false)
-        })
+        .filter(|name| os.matches_setup_script(name))
         .collect();
+    scripts.sort();
+    scripts
+}
+
+fn plan_setup_d(root: &Path, os: SetupOs, env: &dyn SetupEnv, lang: Lang) -> SetupStep {
+    let glob = os.script_glob();
+    let scripts = discover_setup_d_scripts(root, os, env);
 
     if scripts.is_empty() {
         return SetupStep {
@@ -1172,15 +1233,17 @@ fn plan_setup_d(root: &Path, os: SetupOs, env: &dyn SetupEnv, lang: Lang) -> Set
 }
 
 // ---------------------------------------------------------------------------
-// 真实执行骨架（下游工单 #169 / #170 / #171 按步骤 ID 逐项填充）
+// 装机步骤执行调度
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 fn execute_planned_step(
     root: &Path,
     manifest: &ProjectManifest,
+    ephemeral: bool,
     ephemeral_reason: &str,
     env: &dyn SetupEnv,
-    _opts: &SetupOptions,
+    opts: &SetupOptions,
     lang: Lang,
     step: SetupStep,
 ) -> SetupStep {
@@ -1196,26 +1259,358 @@ fn execute_planned_step(
         "rust" => crate::setup_tools::execute_rust(root, env, lang),
         "lld" => crate::setup_tools::execute_lld(env, lang),
         "ephemeral" => execute_ephemeral_step(manifest, ephemeral_reason, env, lang, step),
-        _ => {
-            let skeleton_note = match lang {
-                Lang::Zh => "装机骨架占位：实际执行逻辑待后续工单接入（当前未做修改）".to_string(),
-                Lang::En => {
-                    "setup skeleton placeholder: execution logic will be wired in follow-up tasks (no changes made)"
-                        .to_string()
+        "doctor-fix" => execute_doctor_fix(root, env, lang),
+        "setup-d" => execute_setup_d(root, env, opts, ephemeral, lang),
+        _ => step,
+    }
+}
+
+fn execute_doctor_fix(root: &Path, env: &dyn SetupEnv, lang: Lang) -> SetupStep {
+    let report = match env.run_doctor_fix(root, lang) {
+        Ok(report) => report,
+        Err(err) => {
+            let err_text = err.to_string();
+            let detail = match lang {
+                Lang::Zh => err_text,
+                Lang::En => sanitize_en_message(&err_text, "doctor --fix returned an error"),
+            };
+            return SetupStep {
+                id: "doctor-fix".to_string(),
+                category: "doctor".to_string(),
+                status: SetupStatus::Failed,
+                summary: match lang {
+                    Lang::Zh => "离线体检修复（doctor --fix）执行失败".to_string(),
+                    Lang::En => "offline doctor --fix failed to run".to_string(),
+                },
+                detail: Some(detail),
+                remedy: Some(match lang {
+                    Lang::Zh => {
+                        "运行 pengj-templates-cli doctor --fix --dir . 查看完整诊断".to_string()
+                    }
+                    Lang::En => {
+                        "run `pengj-templates-cli doctor --fix --dir .` for full diagnostics"
+                            .to_string()
+                    }
+                }),
+            };
+        }
+    };
+
+    let mut issue_lines = Vec::new();
+    let mut remedies = Vec::new();
+    let mut seen_remedies = BTreeSet::new();
+
+    for item in &report.items {
+        if item.level == DoctorLevel::Ok {
+            continue;
+        }
+        let tag = match item.level {
+            DoctorLevel::Error => "[error]",
+            DoctorLevel::Warn => "[warn]",
+            DoctorLevel::Ok => continue,
+        };
+        issue_lines.push(format!("{tag} [{}] {}", item.id, item.summary));
+        for d in &item.details {
+            if d.level != DoctorLevel::Ok {
+                issue_lines.push(format!("  - {}: {}", d.name, d.message));
+                if let Some(remedy) = &d.remedy {
+                    let trimmed = remedy.trim();
+                    if !trimmed.is_empty() && seen_remedies.insert(trimmed.to_string()) {
+                        remedies.push(trimmed.to_string());
+                    }
                 }
-            };
-
-            let detail = match step.detail {
-                Some(existing) => Some(format!("{existing}; {skeleton_note}")),
-                None => Some(skeleton_note),
-            };
-
-            SetupStep {
-                status: SetupStatus::Warn,
-                detail,
-                ..step
             }
         }
+        if let Some(output) = &item.output {
+            if let Some(snippet) = summarize_text_snippet(output) {
+                issue_lines.push(format!("  - output: {snippet}"));
+            }
+        }
+    }
+
+    if report.errors > 0 {
+        let fallback_remedy = match lang {
+            Lang::Zh => {
+                "运行 pengj-templates-cli doctor --fix --dir . 查看完整诊断并按提示修复".to_string()
+            }
+            Lang::En => {
+                "run `pengj-templates-cli doctor --fix --dir .` for full diagnostics and fixes"
+                    .to_string()
+            }
+        };
+        let remedy = if remedies.is_empty() {
+            Some(fallback_remedy)
+        } else {
+            Some(remedies.join(
+                "
+",
+            ))
+        };
+        return SetupStep {
+            id: "doctor-fix".to_string(),
+            category: "doctor".to_string(),
+            status: SetupStatus::Failed,
+            summary: match lang {
+                Lang::Zh => format!(
+                    "离线体检修复发现 {} 项错误、{} 项警告（共 {} 项检查）",
+                    report.errors, report.warnings, report.checks
+                ),
+                Lang::En => format!(
+                    "offline doctor --fix found {} error(s) and {} warning(s) ({} checks)",
+                    report.errors, report.warnings, report.checks
+                ),
+            },
+            detail: (!issue_lines.is_empty()).then(|| {
+                issue_lines.join(
+                    "
+",
+                )
+            }),
+            remedy,
+        };
+    }
+
+    if report.warnings > 0 {
+        return SetupStep {
+            id: "doctor-fix".to_string(),
+            category: "doctor".to_string(),
+            status: SetupStatus::Warn,
+            summary: match lang {
+                Lang::Zh => format!(
+                    "离线体检修复已完成，存在 {} 项非阻断警告（共 {} 项检查）",
+                    report.warnings, report.checks
+                ),
+                Lang::En => format!(
+                    "offline doctor --fix completed with {} non-blocking warning(s) ({} checks)",
+                    report.warnings, report.checks
+                ),
+            },
+            detail: (!issue_lines.is_empty()).then(|| {
+                issue_lines.join(
+                    "
+",
+                )
+            }),
+            remedy: (!remedies.is_empty()).then(|| {
+                remedies.join(
+                    "
+",
+                )
+            }),
+        };
+    }
+
+    let activation_lines: Vec<String> = report
+        .items
+        .iter()
+        .filter(|i| matches!(i.id.as_str(), "gate" | "repo" | "worktree"))
+        .map(|i| format!("[{}] {}", i.id, i.summary))
+        .collect();
+    let detail = if !activation_lines.is_empty() {
+        Some(activation_lines.join(
+            "
+",
+        ))
+    } else if !report.items.is_empty() {
+        let ids: Vec<&str> = report.items.iter().map(|i| i.id.as_str()).collect();
+        Some(match lang {
+            Lang::Zh => format!("已通过检查：{}", ids.join(", ")),
+            Lang::En => format!("passed checks: {}", ids.join(", ")),
+        })
+    } else {
+        None
+    };
+
+    SetupStep {
+        id: "doctor-fix".to_string(),
+        category: "doctor".to_string(),
+        status: SetupStatus::Installed,
+        summary: match lang {
+            Lang::Zh => format!("离线体检修复通过（{} 项检查全部就绪）", report.checks),
+            Lang::En => format!(
+                "offline doctor --fix passed ({} checks ready)",
+                report.checks
+            ),
+        },
+        detail,
+        remedy: None,
+    }
+}
+
+fn execute_setup_d(
+    root: &Path,
+    env: &dyn SetupEnv,
+    opts: &SetupOptions,
+    ephemeral: bool,
+    lang: Lang,
+) -> SetupStep {
+    let os = env.target_os();
+    let scripts = discover_setup_d_scripts(root, os, env);
+    if scripts.is_empty() {
+        return plan_setup_d(root, os, env, lang);
+    }
+
+    let dir = root.join(".pengj-templates/scripts/setup.d");
+    let mut failed_names = Vec::new();
+    let mut failure_details = Vec::new();
+
+    for name in &scripts {
+        let script_path = dir.join(name);
+        let spec = build_setup_d_command(root, &script_path, os, opts.dry_run, ephemeral);
+        match env.run_command(&spec) {
+            Ok(out) if out.success => {}
+            Ok(out) => {
+                failed_names.push(name.clone());
+                let snippet = summarize_command_output(&out.stdout, &out.stderr);
+                let line = match (lang, snippet) {
+                    (Lang::Zh, Some(msg)) => {
+                        format!("{name}（退出码 {}）：{msg}", out.status_code)
+                    }
+                    (Lang::Zh, None) => format!("{name}（退出码 {}）", out.status_code),
+                    (Lang::En, Some(msg)) => format!("{name} (exit {}): {msg}", out.status_code),
+                    (Lang::En, None) => format!("{name} (exit {})", out.status_code),
+                };
+                failure_details.push(line);
+            }
+            Err(err) => {
+                failed_names.push(name.clone());
+                let err_text = err.to_string();
+                let line = match lang {
+                    Lang::Zh => format!("{name}（启动失败：{err_text}）"),
+                    Lang::En => format!(
+                        "{name} (launch failed: {})",
+                        sanitize_en_message(&err_text, "failed to start script")
+                    ),
+                };
+                failure_details.push(line);
+            }
+        }
+    }
+
+    if failed_names.is_empty() {
+        return SetupStep {
+            id: "setup-d".to_string(),
+            category: "custom".to_string(),
+            status: SetupStatus::Installed,
+            summary: match lang {
+                Lang::Zh => format!(
+                    "已按字典序执行 {} 个自定义装机脚本（全部成功）",
+                    scripts.len()
+                ),
+                Lang::En => format!(
+                    "executed {} custom setup script(s) in lexicographical order (all succeeded)",
+                    scripts.len()
+                ),
+            },
+            detail: Some(match lang {
+                Lang::Zh => format!("已执行脚本：{}", scripts.join(", ")),
+                Lang::En => format!("executed scripts: {}", scripts.join(", ")),
+            }),
+            remedy: None,
+        };
+    }
+
+    SetupStep {
+        id: "setup-d".to_string(),
+        category: "custom".to_string(),
+        status: SetupStatus::Failed,
+        summary: match lang {
+            Lang::Zh => format!(
+                "自定义装机脚本执行失败（{}/{} 失败：{}）",
+                failed_names.len(),
+                scripts.len(),
+                failed_names.join(", ")
+            ),
+            Lang::En => format!(
+                "custom setup script(s) failed ({}/{} failed: {})",
+                failed_names.len(),
+                scripts.len(),
+                failed_names.join(", ")
+            ),
+        },
+        detail: Some(failure_details.join("
+")),
+        remedy: Some(match lang {
+            Lang::Zh => {
+                "检查失败脚本输出并修复 .pengj-templates/scripts/setup.d/ 后重跑 setup".to_string()
+            }
+            Lang::En => {
+                "inspect the failing script output under .pengj-templates/scripts/setup.d/ and re-run setup"
+                    .to_string()
+            }
+        }),
+    }
+}
+
+fn build_setup_d_command(
+    root: &Path,
+    script_path: &Path,
+    os: SetupOs,
+    dry_run: bool,
+    ephemeral: bool,
+) -> CommandSpec {
+    let script_str = display_path(script_path);
+    let ext = script_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    let mut spec = match os {
+        SetupOs::Windows if ext.eq_ignore_ascii_case("ps1") => {
+            CommandSpec::new("pwsh", &["-NoProfile", "-File", &script_str])
+        }
+        SetupOs::Windows => CommandSpec::new("cmd", &["/C", &script_str]),
+        SetupOs::Linux | SetupOs::MacOs => CommandSpec::new("sh", &[&script_str]),
+    }
+    .cwd(root);
+
+    spec.env
+        .push(("SETUP_ROOT".to_string(), display_path(root)));
+    spec.env.push((
+        "SETUP_DRY_RUN".to_string(),
+        if dry_run { "1" } else { "0" }.to_string(),
+    ));
+    spec.env.push((
+        "SETUP_EPHEMERAL".to_string(),
+        if ephemeral { "1" } else { "0" }.to_string(),
+    ));
+    spec
+}
+
+fn summarize_command_output(stdout: &str, stderr: &str) -> Option<String> {
+    let stderr_snippet = summarize_text_snippet(stderr);
+    let stdout_snippet = summarize_text_snippet(stdout);
+    match (stderr_snippet, stdout_snippet) {
+        (Some(err), Some(out)) => Some(format!("{err} | {out}")),
+        (Some(err), None) => Some(err),
+        (None, Some(out)) => Some(out),
+        (None, None) => None,
+    }
+}
+
+fn summarize_text_snippet(raw: &str) -> Option<String> {
+    let collapsed = raw
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" | ");
+    if collapsed.is_empty() {
+        return None;
+    }
+    const MAX_CHARS: usize = 240;
+    if collapsed.chars().count() <= MAX_CHARS {
+        Some(collapsed)
+    } else {
+        let truncated: String = collapsed.chars().take(MAX_CHARS).collect();
+        Some(format!("{truncated}..."))
+    }
+}
+
+fn sanitize_en_message(msg: &str, fallback: &str) -> String {
+    if contains_han(msg) {
+        fallback.to_string()
+    } else {
+        msg.to_string()
     }
 }
 
@@ -1272,10 +1667,18 @@ pub fn format_setup_report(report: &SetupReport, lang: Lang) -> String {
         };
         let _ = writeln!(out, "[setup] {tag} [{}] {}", step.id, step.summary);
         if let Some(detail) = &step.detail {
-            let _ = writeln!(out, "        {detail}");
+            for line in detail.lines() {
+                let _ = writeln!(out, "        {line}");
+            }
         }
         if let Some(remedy) = &step.remedy {
-            let _ = writeln!(out, "        -> {remedy}");
+            for (idx, line) in remedy.lines().enumerate() {
+                if idx == 0 {
+                    let _ = writeln!(out, "        -> {line}");
+                } else {
+                    let _ = writeln!(out, "           {line}");
+                }
+            }
         }
     }
 
@@ -1705,48 +2108,490 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[test]
-    fn 真实执行骨架模式可运行且遵循统一退出码() {
-        let dir = temp_dir("execute-skeleton");
-        write_manifest(&dir, &["common", "just"], BTreeMap::new());
+    fn sample_doctor_report(
+        lang: Lang,
+        items: Vec<crate::doctor::DoctorItem>,
+    ) -> crate::doctor::DoctorReport {
+        let checks = items.len();
+        let errors = items
+            .iter()
+            .filter(|i| i.level == DoctorLevel::Error)
+            .count();
+        let warnings = items
+            .iter()
+            .filter(|i| i.level == DoctorLevel::Warn)
+            .count();
+        crate::doctor::DoctorReport {
+            root: "/tmp/demo".to_string(),
+            lang: lang.as_str().to_string(),
+            layers: vec!["common".to_string()],
+            ok: errors == 0,
+            checks,
+            errors,
+            warnings,
+            custom_count: 0,
+            items,
+        }
+    }
 
-        let env = FakeSetupEnv::new(SetupOs::Linux).with_command("just", "just 1.40.0");
+    #[test]
+    fn doctor_fix串联真实临时仓库激活钩子与agent工作区链接() {
+        let dir = temp_dir("doctor-fix-real");
+        // 初始化真实 git 仓库，准备 gate 钩子与 .agents 工作区
+        let init_status = Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&dir)
+            .status()
+            .expect("执行 git init 失败");
+        assert!(init_status.success(), "git init 应成功");
+
+        std::fs::write(
+            dir.join(".gitignore"),
+            ".trae\n.claude/skills\n.workbuddy/skills\n",
+        )
+        .expect("写入 .gitignore 失败");
+        std::fs::create_dir_all(dir.join(".agents/skills")).expect("创建 .agents/skills 失败");
+        std::fs::create_dir_all(dir.join(".githooks")).expect("创建 .githooks 失败");
+        for hook in ["commit-msg", "pre-commit", "pre-push"] {
+            std::fs::write(
+                dir.join(".githooks").join(hook),
+                "#!/bin/sh
+# gate hook
+exit 0
+",
+            )
+            .expect("写入钩子文件失败");
+        }
+        write_manifest(&dir, &["common", "gate", "agent"], BTreeMap::new());
+
+        let env = FakeSetupEnv::new(SetupOs::Linux);
         let report = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: false,
+                ephemeral: Some(false),
+                lang: Some(Lang::Zh),
+            },
+            &env,
+        )
+        .expect("执行 setup 应成功");
+
+        let doctor_step = report
+            .steps
+            .iter()
+            .find(|s| s.id == "doctor-fix")
+            .expect("应包含 doctor-fix 步骤");
+        assert_eq!(
+            doctor_step.status,
+            SetupStatus::Installed,
+            "真实仓库 doctor-fix 应全部就绪，实际报告: {doctor_step:?}"
+        );
+        assert_eq!(report.exit_code(), 0);
+
+        // 验证 git config core.hooksPath 已被激活为 .githooks
+        let hooks_path_out = Command::new("git")
+            .args(["config", "--local", "--get", "core.hooksPath"])
+            .current_dir(&dir)
+            .output()
+            .expect("读取 core.hooksPath 失败");
+        assert!(hooks_path_out.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&hooks_path_out.stdout).trim(),
+            ".githooks"
+        );
+
+        // 验证 agent 工作区链接已就绪
+        assert!(dir.join(".trae").exists(), ".trae 链接应已创建");
+        assert!(
+            dir.join(".claude/skills").exists(),
+            ".claude/skills 链接应已创建"
+        );
+        assert!(
+            dir.join(".workbuddy/skills").exists(),
+            ".workbuddy/skills 链接应已创建"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn doctor_fix结果映射为installed_warn与failed并遵循退出码() {
+        let dir = temp_dir("doctor-fix-mapping");
+        write_manifest(&dir, &["common"], BTreeMap::new());
+
+        // 1. 全通过 -> Installed，退出码 0
+        let ok_report = sample_doctor_report(
+            Lang::En,
+            vec![crate::doctor::DoctorItem {
+                id: "gate".to_string(),
+                category: "gate".to_string(),
+                level: DoctorLevel::Ok,
+                summary: "commit hooks activated (core.hooksPath=.githooks)".to_string(),
+                details: Vec::new(),
+                output: None,
+            }],
+        );
+        let env_ok = FakeSetupEnv::new(SetupOs::Linux).with_doctor_report(ok_report);
+        let r_ok = run_setup_with_env(
             &dir,
             &SetupOptions {
                 dry_run: false,
                 ephemeral: Some(false),
                 lang: Some(Lang::En),
             },
-            &env,
+            &env_ok,
         )
-        .expect("骨架执行应成功");
-
-        assert!(!report.dry_run);
-        assert_eq!(report.exit_code(), 0);
-        let just_step = report
-            .steps
-            .iter()
-            .find(|s| s.id == "just")
-            .expect("应包含 just");
-        assert_eq!(just_step.status, SetupStatus::Skipped);
-        let doctor_step = report
+        .expect("doctor ok 执行应成功");
+        let step_ok = r_ok
             .steps
             .iter()
             .find(|s| s.id == "doctor-fix")
-            .expect("应包含 doctor-fix");
-        assert_eq!(doctor_step.status, SetupStatus::Warn);
+            .expect("应有 doctor-fix");
+        assert_eq!(step_ok.status, SetupStatus::Installed);
+        assert_eq!(r_ok.exit_code(), 0);
+        assert!(!contains_han(&format_setup_report(&r_ok, Lang::En)));
 
-        let rendered = format_setup_report(&report, Lang::En);
+        // 2. 存在非阻断警告 -> Warn，退出码仍为 0，展开明细与建议
+        let warn_report = sample_doctor_report(
+            Lang::En,
+            vec![crate::doctor::DoctorItem {
+                id: "gate".to_string(),
+                category: "gate".to_string(),
+                level: DoctorLevel::Warn,
+                summary: "rival hook leftovers detected".to_string(),
+                details: vec![crate::doctor::DoctorDetail {
+                    level: DoctorLevel::Warn,
+                    name: "husky".to_string(),
+                    message: "detected leftover hooks".to_string(),
+                    remedy: Some("remove leftover hook files".to_string()),
+                }],
+                output: None,
+            }],
+        );
+        let env_warn = FakeSetupEnv::new(SetupOs::Linux).with_doctor_report(warn_report);
+        let r_warn = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: false,
+                ephemeral: Some(false),
+                lang: Some(Lang::En),
+            },
+            &env_warn,
+        )
+        .expect("doctor warn 执行应成功");
+        let step_warn = r_warn
+            .steps
+            .iter()
+            .find(|s| s.id == "doctor-fix")
+            .expect("应有 doctor-fix");
+        assert_eq!(step_warn.status, SetupStatus::Warn);
+        assert_eq!(r_warn.exit_code(), 0);
+        assert!(step_warn
+            .detail
+            .as_deref()
+            .unwrap_or("")
+            .contains("detected leftover hooks"));
+        assert!(step_warn
+            .remedy
+            .as_deref()
+            .unwrap_or("")
+            .contains("remove leftover hook files"));
+        assert!(!contains_han(&format_setup_report(&r_warn, Lang::En)));
+
+        // 3. 存在错误 -> Failed，退出码为 1，展开明细与建议
+        let err_report = sample_doctor_report(
+            Lang::En,
+            vec![crate::doctor::DoctorItem {
+                id: "repo".to_string(),
+                category: "agent".to_string(),
+                level: DoctorLevel::Error,
+                summary: "could not fix workspace links".to_string(),
+                details: vec![crate::doctor::DoctorDetail {
+                    level: DoctorLevel::Error,
+                    name: ".trae".to_string(),
+                    message: "conflict: path already exists".to_string(),
+                    remedy: Some("resolve the conflicting path manually".to_string()),
+                }],
+                output: None,
+            }],
+        );
+        let env_err = FakeSetupEnv::new(SetupOs::Linux).with_doctor_report(err_report);
+        let r_err = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: false,
+                ephemeral: Some(false),
+                lang: Some(Lang::En),
+            },
+            &env_err,
+        )
+        .expect("doctor err 执行应成功");
+        let step_err = r_err
+            .steps
+            .iter()
+            .find(|s| s.id == "doctor-fix")
+            .expect("应有 doctor-fix");
+        assert_eq!(step_err.status, SetupStatus::Failed);
+        assert!(!r_err.ok);
+        assert_eq!(r_err.exit_code(), 1);
+        assert!(step_err
+            .detail
+            .as_deref()
+            .unwrap_or("")
+            .contains("conflict: path already exists"));
+        assert!(step_err
+            .remedy
+            .as_deref()
+            .unwrap_or("")
+            .contains("resolve the conflicting path manually"));
+        assert!(!contains_han(&format_setup_report(&r_err, Lang::En)));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn setup_d按字典序执行并注入环境变量与跨平台后缀过滤() {
+        let dir = temp_dir("setup-d-order-env");
+        write_manifest(&dir, &["common"], BTreeMap::new());
+        let abs = absolute(&dir).expect("路径归一化失败");
+        let setup_d_dir = abs.join(".pengj-templates/scripts/setup.d");
+
+        // Unix 平台：只执行 *.sh 且按字典序排序，忽略 *.ps1 / *.cmd / README.md
+        let env_unix = FakeSetupEnv::new(SetupOs::Linux)
+            .with_doctor_report(sample_doctor_report(Lang::Zh, Vec::new()))
+            .with_file(
+                setup_d_dir.join("20-second.sh"),
+                "#!/bin/sh
+",
+            )
+            .with_file(
+                setup_d_dir.join("10-first.sh"),
+                "#!/bin/sh
+",
+            )
+            .with_file(
+                setup_d_dir.join("05-win.ps1"),
+                "Write-Host hi
+",
+            )
+            .with_file(
+                setup_d_dir.join("06-win.cmd"),
+                "@echo hi
+",
+            )
+            .with_file(
+                setup_d_dir.join("README.md"),
+                "# docs
+",
+            );
+
+        let report_unix = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: false,
+                ephemeral: Some(true),
+                lang: Some(Lang::Zh),
+            },
+            &env_unix,
+        )
+        .expect("Unix setup.d 执行应成功");
+
+        assert_eq!(report_unix.exit_code(), 0);
+        let setup_d_step = report_unix
+            .steps
+            .iter()
+            .find(|s| s.id == "setup-d")
+            .expect("应有 setup-d");
+        assert_eq!(setup_d_step.status, SetupStatus::Installed);
+
+        let cmds = env_unix.executed_commands();
+        assert_eq!(cmds.len(), 2, "Unix 应仅执行 2 个 .sh 脚本");
+        assert_eq!(cmds[0].program, "sh");
+        assert!(cmds[0].args[0].ends_with("10-first.sh"));
+        assert_eq!(cmds[1].program, "sh");
+        assert!(cmds[1].args[0].ends_with("20-second.sh"));
+
+        let expected_root = display_path(&abs);
+        for cmd in &cmds {
+            assert_eq!(cmd.cwd.as_deref(), Some(abs.as_path()));
+            assert!(cmd
+                .env
+                .contains(&("SETUP_ROOT".to_string(), expected_root.clone())));
+            assert!(cmd
+                .env
+                .contains(&("SETUP_DRY_RUN".to_string(), "0".to_string())));
+            assert!(cmd
+                .env
+                .contains(&("SETUP_EPHEMERAL".to_string(), "1".to_string())));
+        }
+
+        // Windows 平台：执行 *.ps1 / *.cmd / *.bat 且按字典序排序，忽略 *.sh
+        let env_win = FakeSetupEnv::new(SetupOs::Windows)
+            .with_doctor_report(sample_doctor_report(Lang::En, Vec::new()))
+            .with_file(
+                setup_d_dir.join("30-third.bat"),
+                "@echo 3
+",
+            )
+            .with_file(
+                setup_d_dir.join("10-first.ps1"),
+                "Write-Host 1
+",
+            )
+            .with_file(
+                setup_d_dir.join("20-second.cmd"),
+                "@echo 2
+",
+            )
+            .with_file(
+                setup_d_dir.join("01-unix.sh"),
+                "#!/bin/sh
+",
+            );
+
+        let report_win = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: false,
+                ephemeral: Some(false),
+                lang: Some(Lang::En),
+            },
+            &env_win,
+        )
+        .expect("Windows setup.d 执行应成功");
+
+        assert_eq!(report_win.exit_code(), 0);
+        let cmds_win = env_win.executed_commands();
+        assert_eq!(cmds_win.len(), 3, "Windows 应执行 ps1/cmd/bat 共 3 个脚本");
+        assert_eq!(cmds_win[0].program, "pwsh");
+        assert_eq!(cmds_win[0].args[0], "-NoProfile");
+        assert_eq!(cmds_win[0].args[1], "-File");
+        assert!(cmds_win[0].args[2].ends_with("10-first.ps1"));
+        assert_eq!(cmds_win[1].program, "cmd");
+        assert_eq!(cmds_win[1].args[0], "/C");
+        assert!(cmds_win[1].args[1].ends_with("20-second.cmd"));
+        assert_eq!(cmds_win[2].program, "cmd");
+        assert_eq!(cmds_win[2].args[0], "/C");
+        assert!(cmds_win[2].args[1].ends_with("30-third.bat"));
+        for cmd in &cmds_win {
+            assert!(cmd
+                .env
+                .contains(&("SETUP_EPHEMERAL".to_string(), "0".to_string())));
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn setup_d无脚本跳过且失败脚本返回退出码1并附带输出摘要() {
+        let dir = temp_dir("setup-d-fail");
+        write_manifest(&dir, &["common"], BTreeMap::new());
+        let abs = absolute(&dir).expect("路径归一化失败");
+
+        // 1. 无脚本时标记 Skipped，退出码 0
+        let env_empty = FakeSetupEnv::new(SetupOs::Linux)
+            .with_doctor_report(sample_doctor_report(Lang::En, Vec::new()));
+        let r_empty = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: false,
+                ephemeral: Some(false),
+                lang: Some(Lang::En),
+            },
+            &env_empty,
+        )
+        .expect("无脚本执行应成功");
+        let empty_step = r_empty
+            .steps
+            .iter()
+            .find(|s| s.id == "setup-d")
+            .expect("应有 setup-d");
+        assert_eq!(empty_step.status, SetupStatus::Skipped);
+        assert_eq!(r_empty.exit_code(), 0);
+        assert!(env_empty.executed_commands().is_empty());
+
+        // 2. 第二个脚本返回非零退出码 -> Failed，附带输出摘要，退出码 1，且英文零汉字
+        let setup_d_dir = abs.join(".pengj-templates/scripts/setup.d");
+        let env_fail = FakeSetupEnv::new(SetupOs::Linux)
+            .with_doctor_report(sample_doctor_report(Lang::En, Vec::new()))
+            .with_file(
+                setup_d_dir.join("01-ok.sh"),
+                "#!/bin/sh
+exit 0
+",
+            )
+            .with_file(
+                setup_d_dir.join("02-bad.sh"),
+                "#!/bin/sh
+exit 42
+",
+            );
+        env_fail.push_command_output(CommandOutput::ok("step 1 ok"));
+        env_fail.push_command_output(CommandOutput::fail(42, "missing libssl-dev"));
+
+        let r_fail = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: false,
+                ephemeral: Some(false),
+                lang: Some(Lang::En),
+            },
+            &env_fail,
+        )
+        .expect("失败脚本执行应返回结构化报告");
+
+        assert!(!r_fail.ok);
+        assert_eq!(r_fail.exit_code(), 1);
+        let fail_step = r_fail
+            .steps
+            .iter()
+            .find(|s| s.id == "setup-d")
+            .expect("应有 setup-d");
+        assert_eq!(fail_step.status, SetupStatus::Failed);
+        let detail = fail_step.detail.as_deref().unwrap_or("");
         assert!(
-            !contains_han(&rendered),
-            "英文执行模式输出不应含汉字:\n{rendered}"
+            detail.contains("02-bad.sh"),
+            "detail 应含失败脚本名: {detail}"
+        );
+        assert!(detail.contains("42"), "detail 应含退出码: {detail}");
+        assert!(
+            detail.contains("missing libssl-dev"),
+            "detail 应含 stderr 摘要: {detail}"
         );
 
-        let mut failed_report = report.clone();
-        failed_report.failed = 1;
-        failed_report.ok = false;
-        assert_eq!(failed_report.exit_code(), 1);
+        let rendered_en = format_setup_report(&r_fail, Lang::En);
+        assert!(
+            !contains_han(&rendered_en),
+            "英文失败渲染不应含汉字:\n{rendered_en}"
+        );
+        let json_en = serde_json::to_value(&r_fail).expect("JSON 序列化应成功");
+        assert_json_keys_ascii(&json_en);
+
+        // 中文模式也应包含清晰的中文摘要与输出
+        let env_fail_zh = FakeSetupEnv::new(SetupOs::Linux)
+            .with_doctor_report(sample_doctor_report(Lang::Zh, Vec::new()))
+            .with_file(
+                setup_d_dir.join("02-bad.sh"),
+                "#!/bin/sh
+exit 7
+",
+            );
+        env_fail_zh.push_command_output(CommandOutput::fail(7, "boom"));
+        let r_fail_zh = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: false,
+                ephemeral: Some(false),
+                lang: Some(Lang::Zh),
+            },
+            &env_fail_zh,
+        )
+        .expect("中文失败报告应成功");
+        assert_eq!(r_fail_zh.exit_code(), 1);
+        let rendered_zh = format_setup_report(&r_fail_zh, Lang::Zh);
+        assert!(contains_han(&rendered_zh));
+        assert!(rendered_zh.contains("02-bad.sh"));
+        assert!(rendered_zh.contains("boom"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
