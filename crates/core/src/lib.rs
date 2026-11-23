@@ -14,6 +14,7 @@ pub mod manifest;
 pub mod migrations;
 pub mod render;
 pub mod repo;
+pub mod setup;
 pub mod subrepo;
 pub mod subrepo_check;
 pub(crate) mod toml_merge;
@@ -42,6 +43,11 @@ pub use layer::{LayerInfo, SkillInfo};
 pub use manifest::{ProjectManifest, MANIFEST_FILE};
 pub use migrations::{notes_between, MigrationNote, MIGRATIONS};
 pub use repo::{default_links, repo_init, repo_status, LinkSpec, RepoItem, RepoReport, RepoStatus};
+pub use setup::{
+    format_setup_report, run_setup, run_setup_with_env, CommandOutput, CommandSpec, DiskSpace,
+    FakeSetupEnv, SetupEnv, SetupOptions, SetupOs, SetupReport, SetupStatus, SetupStep,
+    SystemSetupEnv, EPHEMERAL_AVAIL_THRESHOLD_BYTES, EPHEMERAL_TOTAL_THRESHOLD_BYTES,
+};
 pub use subrepo::{DependencyMode, SubrepoEntry, SubrepoRegistry, SUBREPO_REGISTRY_REL};
 pub use subrepo_check::{
     check_project, check_project_with_lang, CheckItem, CheckLevel, CheckReport,

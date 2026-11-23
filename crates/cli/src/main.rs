@@ -232,6 +232,30 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// 一键装机：按 manifest 启用的层安装缺失工具链、拉齐子模块并完成本地初始化
+    ///
+    /// 不依赖模板目录；以 `.pengj-templates/manifest.json` 为唯一事实源。
+    /// 退出码：0 全部就绪或仅含告警，1 存在失败步骤。
+    Setup {
+        /// 项目目录（默认当前目录）
+        #[arg(short, long, default_value = ".")]
+        dir: PathBuf,
+        /// 仅计算并打印装机计划，不执行任何下载、安装或写入
+        #[arg(long = "dry-run")]
+        dry_run: bool,
+        /// 强制按临时受限环境执行（自动关闭 Rust 增量编译）
+        #[arg(long, alias = "ci", conflicts_with = "no_ephemeral")]
+        ephemeral: bool,
+        /// 禁止临时受限环境优化（覆盖 CI 与磁盘空间自动探测）
+        #[arg(long = "no-ephemeral", conflicts_with = "ephemeral")]
+        no_ephemeral: bool,
+        /// 覆盖输出语言：zh / en（默认取 manifest.options.skill_lang，缺省 zh）
+        #[arg(long)]
+        lang: Option<String>,
+        /// 以 JSON 格式输出结构化报告（键名恒为英文）
+        #[arg(long)]
+        json: bool,
+    },
     /// 立即检查 CLI 是否有新版本（同步联网，不写提示状态之外的任何东西）
     ///
     /// 日常运行时由后台异步检查代替，这条命令用于脚本或想立刻知道答案的场合。
@@ -520,6 +544,25 @@ fn run(cli: Cli) -> anyhow::Result<()> {
     {
         return cmd_doctor(dir, *fix, lang.as_deref(), *json);
     }
+    // setup 子命令读取项目 manifest，不依赖模板目录，提前分发
+    if let Command::Setup {
+        dir,
+        dry_run,
+        ephemeral,
+        no_ephemeral,
+        lang,
+        json,
+    } = &cli.command
+    {
+        return cmd_setup(
+            dir,
+            *dry_run,
+            *ephemeral,
+            *no_ephemeral,
+            lang.as_deref(),
+            *json,
+        );
+    }
     let templates = load_templates(&cli.templates)?;
     match cli.command {
         Command::ListLayers { json } => cmd_list_layers(&templates, json),
@@ -651,6 +694,7 @@ fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Subrepo { .. } => unreachable!("subrepo 子命令已在加载模板前分发"),
         Command::Worktree { .. } => unreachable!("worktree 子命令已在加载模板前分发"),
         Command::Doctor { .. } => unreachable!("doctor 子命令已在加载模板前分发"),
+        Command::Setup { .. } => unreachable!("setup 子命令已在加载模板前分发"),
         Command::CheckUpdate { .. } => unreachable!("check-update 子命令已在加载模板前分发"),
         Command::SelfCmd { .. } => unreachable!("self 子命令已在加载模板前分发"),
         Command::BackgroundUpdateCheck => unreachable!("后台更新检查已在入口处分发"),
@@ -1810,4 +1854,132 @@ fn cmd_doctor(dir: &Path, fix: bool, lang: Option<&str>, json: bool) -> anyhow::
         update::exit(code);
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// setup：跨平台一键装机
+// ---------------------------------------------------------------------------
+
+fn cmd_setup(
+    dir: &Path,
+    dry_run: bool,
+    ephemeral: bool,
+    no_ephemeral: bool,
+    lang: Option<&str>,
+    json: bool,
+) -> anyhow::Result<()> {
+    let override_lang = match lang {
+        None => None,
+        Some("zh") => Some(pengj_core::Lang::Zh),
+        Some("en") => Some(pengj_core::Lang::En),
+        Some(other) => anyhow::bail!("无效语言：{other}（可选 zh/en）"),
+    };
+
+    let ephemeral_override = if ephemeral {
+        Some(true)
+    } else if no_ephemeral {
+        Some(false)
+    } else {
+        None
+    };
+
+    let opts = pengj_core::SetupOptions {
+        dry_run,
+        ephemeral: ephemeral_override,
+        lang: override_lang,
+    };
+
+    let report = match pengj_core::run_setup(dir, &opts) {
+        Ok(report) => report,
+        Err(pengj_core::CoreError::MissingManifest(_)) => {
+            anyhow::bail!(
+                "未找到 .pengj-templates/manifest.json（{} 尚未由 pengj-templates 纳管）；\
+                 请先运行 `pengj-templates-cli adopt --dir {} --layers <层清单>`",
+                dir.display(),
+                dir.display()
+            );
+        }
+        Err(err) => return Err(err.into()),
+    };
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        let effective_lang = pengj_core::Lang::from_skill_lang(Some(report.lang.as_str()));
+        print!(
+            "{}",
+            pengj_core::format_setup_report(&report, effective_lang)
+        );
+    }
+
+    let code = report.exit_code();
+    if code != 0 {
+        update::exit(code);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod setup_cli_tests {
+    use super::*;
+
+    #[test]
+    fn setup子命令参数解析支持dry_run与临时环境覆盖() {
+        let cli = Cli::try_parse_from([
+            "pengj-templates-cli",
+            "setup",
+            "--dir",
+            "/tmp/demo",
+            "--dry-run",
+            "--ci",
+            "--lang",
+            "en",
+            "--json",
+        ])
+        .expect("--ci 别名与 --dry-run/--lang/--json 应可解析");
+
+        match cli.command {
+            Command::Setup {
+                dir,
+                dry_run,
+                ephemeral,
+                no_ephemeral,
+                lang,
+                json,
+            } => {
+                assert_eq!(dir, PathBuf::from("/tmp/demo"));
+                assert!(dry_run);
+                assert!(ephemeral);
+                assert!(!no_ephemeral);
+                assert_eq!(lang.as_deref(), Some("en"));
+                assert!(json);
+            }
+            _ => panic!("预期解析为 Command::Setup"),
+        }
+
+        let cli_no_eph = Cli::try_parse_from(["pengj-templates-cli", "setup", "--no-ephemeral"])
+            .expect("--no-ephemeral 应可解析");
+        match cli_no_eph.command {
+            Command::Setup {
+                ephemeral,
+                no_ephemeral,
+                ..
+            } => {
+                assert!(!ephemeral);
+                assert!(no_ephemeral);
+            }
+            _ => panic!("预期解析为 Command::Setup"),
+        }
+
+        let conflict = Cli::try_parse_from([
+            "pengj-templates-cli",
+            "setup",
+            "--ephemeral",
+            "--no-ephemeral",
+        ]);
+        assert!(
+            conflict.is_err(),
+            "--ephemeral 与 --no-ephemeral 同时传入应报错"
+        );
+    }
 }
