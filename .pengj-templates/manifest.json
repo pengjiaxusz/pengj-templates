@@ -1,6 +1,6 @@
 {
   "tool": "pengj-templates",
-  "version": "0.85.0",
+  "version": "0.85.1",
   "project_name": "pengj-templates",
   "layers": [
     "common",
@@ -170,6 +170,8 @@
     ".pengj-templates/scripts/doctor.cmd": "3498d22336badc2843d5b57792d58c18771d805e9fc081e20108fae53b04ee00",
     ".pengj-templates/scripts/doctor.d/README.md": "fb7a29477e7f6216cf076a4344e6f97cda4b7aa48efc1f0e00209339acceb64f",
     ".pengj-templates/scripts/doctor.sh": "6392f3eb8d7068e99ee1199bbfbe69dc2337e587bad013294789732378b07510",
+    ".pengj-templates/scripts/setup.cmd": "daf755afe0f04fdd303b43347f5880af2ed8480ef537d772a68c86b63202d21f",
+    ".pengj-templates/scripts/setup.sh": "12f4bc9ff5d6c66c8c87b47e6f5e0715799e24f07b91362b148c854594636898",
     "AGENTS.md": "3c8cf77732e372bbec99e6721bcbdc91ea1d07d3be3b947950c5df8d1aee08b5",
     "CONTRIBUTING.md": "c29741b79aa3d9128e16b9c7c0c322f24aa18ae26d1730b7f10ee9c87dd7e138",
     "Cargo.toml": "53130b1a688cbae224b0ebe55f910c099580b36f7390b690783b298a27bf3cb2",

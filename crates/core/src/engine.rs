@@ -7358,4 +7358,154 @@ body
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
+
+    /// 零前置薄引导脚本 `setup.sh` / `setup.cmd` 契约：
+    /// - 随 `common` 层生成，支持 `skill_lang` 双语且双向 `i18n_audit` 均零违规；
+    /// - `setup.sh` 具备可执行位（Unix `100755`）、补齐 PATH、支持 `--dry-run`、支持 `curl`/`wget` 回退与 `$GITHUB_PATH`；
+    /// - `setup.cmd` 为 UTF-8 无 BOM + CRLF、启用 `chcp 65001`、支持 `--dry-run`、PowerShell 安装与 `%GITHUB_PATH%`；
+    /// - 既有的 `doctor.sh` / `doctor.cmd` 依然保持纯只读，不包含自动下载执行逻辑。
+    #[test]
+    fn setup_scripts_bilingual_executable_and_doctor_readonly() {
+        let templates = real_templates();
+        let tmp = std::env::temp_dir().join(format!(
+            "pengj-setup-scripts-{}-{}",
+            std::process::id(),
+            unique_id()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let layers = vec!["common".to_string()];
+
+        for (lang_str, expected_lang) in [
+            ("zh", crate::i18n_audit::Lang::Zh),
+            ("en", crate::i18n_audit::Lang::En),
+        ] {
+            let proj_name = format!("setup_proj_{lang_str}");
+            let mut options = BTreeMap::new();
+            options.insert("skill_lang".to_string(), serde_json::json!(lang_str));
+            generate(&templates, &proj_name, &layers, options, &tmp).unwrap();
+            let proj = tmp.join(&proj_name);
+
+            let setup_sh_path = proj.join(".pengj-templates/scripts/setup.sh");
+            let setup_cmd_path = proj.join(".pengj-templates/scripts/setup.cmd");
+            assert!(setup_sh_path.is_file(), "{lang_str} 应生成 setup.sh");
+            assert!(setup_cmd_path.is_file(), "{lang_str} 应生成 setup.cmd");
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mode = std::fs::metadata(&setup_sh_path)
+                    .unwrap()
+                    .permissions()
+                    .mode();
+                assert!(
+                    mode & 0o111 != 0,
+                    "{lang_str} 的 setup.sh 必须保留可执行权限位，实际模式: {mode:o}"
+                );
+            }
+
+            let setup_sh = std::fs::read_to_string(&setup_sh_path).unwrap();
+            assert!(setup_sh.starts_with("#!/bin/sh\n"));
+            assert!(setup_sh.contains("${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin"));
+            assert!(setup_sh.contains("--dry-run"));
+            assert!(setup_sh.contains(
+                "curl -fsSL https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh"
+            ));
+            assert!(setup_sh.contains(
+                "wget -qO- https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.sh | sh"
+            ));
+            assert!(setup_sh.contains("GITHUB_PATH"));
+            assert!(setup_sh.contains(r#"exec pengj-templates-cli setup --dir . "$@""#));
+
+            let setup_cmd_bytes = std::fs::read(&setup_cmd_path).unwrap();
+            assert!(
+                !setup_cmd_bytes.starts_with(&[0xEF, 0xBB, 0xBF]),
+                "{lang_str} 的 setup.cmd 不得带 UTF-8 BOM"
+            );
+            let setup_cmd = String::from_utf8(setup_cmd_bytes).unwrap();
+            assert!(
+                setup_cmd.contains("\r\n"),
+                "{lang_str} 的 setup.cmd 必须使用 CRLF 换行"
+            );
+            assert!(
+                !setup_cmd.replace("\r\n", "").contains('\n'),
+                "{lang_str} 的 setup.cmd 不得混入孤立 LF"
+            );
+            assert!(setup_cmd.starts_with("@echo off\r\n"));
+            assert!(setup_cmd.contains("setlocal EnableExtensions\r\n"));
+            assert!(setup_cmd.contains("chcp 65001 >nul\r\n"));
+            assert!(setup_cmd.contains(r"%LOCALAPPDATA%\pengj-templates\bin"));
+            assert!(setup_cmd.contains("--dry-run"));
+            assert!(setup_cmd.contains(
+                r#"powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://github.com/pengjiaxusz/pengj-templates/releases/latest/download/install.ps1 | iex""#
+            ));
+            assert!(setup_cmd.contains("GITHUB_PATH"));
+            assert!(setup_cmd.contains("pengj-templates-cli setup --dir . %*"));
+
+            if expected_lang == crate::i18n_audit::Lang::Zh {
+                assert!(
+                    crate::i18n_audit::contains_han(&setup_sh),
+                    "中文 setup.sh 必须含汉字"
+                );
+                assert!(
+                    crate::i18n_audit::contains_han(&setup_cmd),
+                    "中文 setup.cmd 必须含汉字"
+                );
+            } else {
+                assert!(
+                    !crate::i18n_audit::contains_han(&setup_sh),
+                    "英文 setup.sh 不得含汉字"
+                );
+                assert!(
+                    !crate::i18n_audit::contains_han(&setup_cmd),
+                    "英文 setup.cmd 不得含汉字"
+                );
+            }
+
+            // 双向 i18n_audit 必须零违规
+            let audit = crate::i18n_audit::audit_generated(&proj, expected_lang);
+            assert!(
+                !audit.has_violations(),
+                "{lang_str} 项目双向语言审计应零违规，实际: {:?}",
+                audit.findings
+            );
+
+            // 确认 doctor.sh / doctor.cmd 保持纯只读，无任何实际执行的下载逻辑
+            let doctor_sh =
+                std::fs::read_to_string(proj.join(".pengj-templates/scripts/doctor.sh")).unwrap();
+            for line in doctor_sh.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("echo ") {
+                    continue;
+                }
+                assert!(
+                    !trimmed.contains("curl") && !trimmed.contains("wget"),
+                    "{lang_str} 的 doctor.sh 非提示行不得包含下载命令: {trimmed}"
+                );
+            }
+
+            let doctor_cmd =
+                std::fs::read_to_string(proj.join(".pengj-templates/scripts/doctor.cmd")).unwrap();
+            for line in doctor_cmd.lines() {
+                let trimmed = line.trim();
+                let lower = trimmed.to_ascii_lowercase();
+                if trimmed.is_empty()
+                    || lower.starts_with("rem ")
+                    || lower.starts_with("echo ")
+                    || lower.starts_with(">&2 echo")
+                {
+                    continue;
+                }
+                assert!(
+                    !lower.contains("powershell")
+                        && !lower.contains("irm ")
+                        && !lower.contains("iex"),
+                    "{lang_str} 的 doctor.cmd 非提示行不得包含下载命令: {trimmed}"
+                );
+            }
+        }
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }
