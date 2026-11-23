@@ -13,16 +13,22 @@ git clone {{ clone_url }}
 {% endif -%}
 ```
 
-## 2. Environment Check
+## 2. Environment Check & Setup
 
-Run the bootstrap script to inspect your local environment (read-only by default; never downloads or modifies tools automatically):
-
-```sh
-# Linux / macOS
-sh .pengj-templates/scripts/doctor.sh
-# Windows
-.pengj-templates\scripts\doctor.cmd
-```
+- Personal workstation (read-only check; never downloads or modifies tools):
+  ```sh
+  # Linux / macOS
+  sh .pengj-templates/scripts/doctor.sh
+  # Windows
+  .pengj-templates\scripts\doctor.cmd
+  ```
+- Fresh VM / CI / automated environment (one-shot setup; add `--dry-run` to preview):
+  ```sh
+  # Linux / macOS
+  sh .pengj-templates/scripts/setup.sh
+  # Windows
+  .pengj-templates\scripts\setup.cmd
+  ```
 {% else %}
 # {{ project_name }} 贡献指南
 
@@ -36,16 +42,22 @@ git clone {{ clone_url }}
 {% endif -%}
 ```
 
-## 2. 环境自检
+## 2. 环境准备与自检
 
-运行引导脚本执行本地环境体检（默认只读，永不自动下载或修改工具）：
-
-```sh
-# Linux / macOS
-sh .pengj-templates/scripts/doctor.sh
-# Windows
-.pengj-templates\scripts\doctor.cmd
-```
+- 个人开发机（默认只读体检，不自动下载或修改工具）：
+  ```sh
+  # Linux / macOS
+  sh .pengj-templates/scripts/doctor.sh
+  # Windows
+  .pengj-templates\scripts\doctor.cmd
+  ```
+- 新虚拟机 / CI / 自动化环境（一键装齐依赖并初始化，可先加 `--dry-run` 预览）：
+  ```sh
+  # Linux / macOS
+  sh .pengj-templates/scripts/setup.sh
+  # Windows
+  .pengj-templates\scripts\setup.cmd
+  ```
 {% endif -%}
 <!-- PENGJ_TEMPLATE_END -->
 
