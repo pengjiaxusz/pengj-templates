@@ -1123,7 +1123,7 @@ pub fn generate(
     for (rel, bytes) in &bytes_map {
         let path = target.join(rel);
         write_file(&path, bytes)?;
-        let rel_str = rel.to_string_lossy().into_owned();
+        let rel_str = crate::manifest::normalize_rel_path(&rel.to_string_lossy());
         manifest.files.insert(rel_str.clone(), sha256_hex(bytes));
         written.push(rel_str);
     }
@@ -1231,7 +1231,7 @@ pub fn adopt_project(
     let mut manifest_files = BTreeMap::new();
 
     for (rel, bytes) in &bytes_map {
-        let rel_str = rel.to_string_lossy().into_owned();
+        let rel_str = crate::manifest::normalize_rel_path(&rel.to_string_lossy());
         let target = project_dir.join(rel);
 
         if ignores.contains(rel) {
@@ -1604,7 +1604,7 @@ pub fn update_project_with_options(
     let mut new_files: BTreeMap<String, String> = BTreeMap::new();
 
     for (rel, bytes) in &bytes_map {
-        let rel_str = rel.to_string_lossy().into_owned();
+        let rel_str = crate::manifest::normalize_rel_path(&rel.to_string_lossy());
         // 黑名单文件：配置**值**首次生成时写入，之后归用户所有，模板不再接管。
         // 但「说明」不是用户资产——文件里的受管说明块（PENGJ_TEMPLATE_START/END）
         // 仍随模板演进。否则语义一反转，注释就原地烂成误导：文档冻结在用户手里，
@@ -2146,7 +2146,7 @@ pub fn audit_project(
         if ignores.contains(rel) {
             continue;
         }
-        let rel_str = rel.to_string_lossy().into_owned();
+        let rel_str = crate::manifest::normalize_rel_path(&rel.to_string_lossy());
         let target = project_dir.join(rel);
 
         if !target.exists() {
