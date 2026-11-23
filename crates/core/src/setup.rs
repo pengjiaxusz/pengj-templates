@@ -15,6 +15,7 @@ use crate::doctor::{absolute, display_path, has_layer, resolve_lang, uses_lld};
 use crate::error::Result;
 use crate::i18n_audit::Lang;
 use crate::manifest::ProjectManifest;
+use crate::setup_ephemeral::{detect_ephemeral, execute_ephemeral_step, plan_ephemeral_step};
 
 /// 临时受限环境自动判定的可用磁盘空间阈值（20 GiB）
 pub const EPHEMERAL_AVAIL_THRESHOLD_BYTES: u64 = 20 * 1024 * 1024 * 1024;
@@ -428,9 +429,23 @@ impl FakeSetupEnv {
         self.executed.lock().map(|v| v.clone()).unwrap_or_default()
     }
 
+    /// 设置模拟的用户主目录（传 `None` 模拟主目录不可用）
+    pub fn with_home_dir(mut self, home: Option<PathBuf>) -> Self {
+        self.home = home;
+        self
+    }
+
     /// 读取虚拟文件内容
     pub fn read_virtual_file(&self, path: &Path) -> Option<String> {
         self.files.lock().ok()?.get(path).cloned()
+    }
+
+    /// 列出所有已写入或预置的虚拟文件路径
+    pub fn virtual_file_paths(&self) -> Vec<PathBuf> {
+        self.files
+            .lock()
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default()
     }
 }
 
@@ -660,7 +675,9 @@ pub fn run_setup_with_env(
     } else {
         planned_steps
             .into_iter()
-            .map(|step| execute_planned_step(&root, &manifest, env, opts, lang, step))
+            .map(|step| {
+                execute_planned_step(&root, &manifest, &ephemeral_reason, env, opts, lang, step)
+            })
             .collect()
     };
 
@@ -702,115 +719,6 @@ pub fn run_setup_with_env(
         failed,
         steps,
     })
-}
-
-/// 判定当前是否处于临时受限环境，并返回可读原因说明
-fn detect_ephemeral(
-    root: &Path,
-    override_flag: Option<bool>,
-    env: &dyn SetupEnv,
-    lang: Lang,
-) -> (bool, String) {
-    if let Some(false) = override_flag {
-        return (
-            false,
-            match lang {
-                Lang::Zh => "已通过 --no-ephemeral 显式关闭".to_string(),
-                Lang::En => "explicitly disabled via --no-ephemeral".to_string(),
-            },
-        );
-    }
-
-    if let Some(true) = override_flag {
-        return (
-            true,
-            match lang {
-                Lang::Zh => "已通过 --ephemeral/--ci 显式开启".to_string(),
-                Lang::En => "explicitly enabled via --ephemeral/--ci".to_string(),
-            },
-        );
-    }
-
-    if is_truthy_env(env.env_var("GITHUB_ACTIONS").as_deref()) {
-        return (
-            true,
-            match lang {
-                Lang::Zh => "检测到环境变量 GITHUB_ACTIONS=true".to_string(),
-                Lang::En => "detected environment variable GITHUB_ACTIONS=true".to_string(),
-            },
-        );
-    }
-
-    if is_truthy_env(env.env_var("CI").as_deref()) {
-        return (
-            true,
-            match lang {
-                Lang::Zh => "检测到环境变量 CI=true".to_string(),
-                Lang::En => "detected environment variable CI=true".to_string(),
-            },
-        );
-    }
-
-    if let Some(disk) = env.disk_space(root) {
-        let avail_gib = bytes_to_gib(disk.available_bytes);
-        let total_gib = bytes_to_gib(disk.total_bytes);
-        if disk.available_bytes < EPHEMERAL_AVAIL_THRESHOLD_BYTES {
-            return (
-                true,
-                match lang {
-                    Lang::Zh => format!("分区可用空间 {avail_gib:.1} GiB 低于 20 GiB 阈值"),
-                    Lang::En => {
-                        format!(
-                            "available disk space {avail_gib:.1} GiB is below the 20 GiB threshold"
-                        )
-                    }
-                },
-            );
-        }
-        if disk.total_bytes < EPHEMERAL_TOTAL_THRESHOLD_BYTES {
-            return (
-                true,
-                match lang {
-                    Lang::Zh => format!("分区总容量 {total_gib:.1} GiB 低于 40 GiB 阈值"),
-                    Lang::En => {
-                        format!(
-                            "total disk capacity {total_gib:.1} GiB is below the 40 GiB threshold"
-                        )
-                    }
-                },
-            );
-        }
-        return (
-            false,
-            match lang {
-                Lang::Zh => {
-                    format!("磁盘空间充裕（可用 {avail_gib:.1} GiB / 总计 {total_gib:.1} GiB）")
-                }
-                Lang::En => format!(
-                    "sufficient disk space ({avail_gib:.1} GiB available / {total_gib:.1} GiB total)"
-                ),
-            },
-        );
-    }
-
-    (
-        false,
-        match lang {
-            Lang::Zh => "未检测到 CI 标记且磁盘空间未触发阈值".to_string(),
-            Lang::En => "no CI marker detected and disk threshold not triggered".to_string(),
-        },
-    )
-}
-
-fn is_truthy_env(value: Option<&str>) -> bool {
-    matches!(
-        value.map(|v| v.trim().to_ascii_lowercase()).as_deref(),
-        Some("true" | "1" | "yes")
-    )
-}
-
-fn bytes_to_gib(bytes: u64) -> f64 {
-    bytes as f64 / (1024.0 * 1024.0 * 1024.0)
 }
 
 // ---------------------------------------------------------------------------
@@ -855,7 +763,7 @@ fn build_setup_plan(
         }
     }
 
-    // 5. 临时受限环境优化（占位步骤，实际写入由下游工单 #170 填充）
+    // 5. 临时受限环境优化（见 setup_ephemeral.rs）
     steps.push(plan_ephemeral_step(
         has_rust,
         ephemeral,
@@ -1182,102 +1090,6 @@ fn plan_lld(env: &dyn SetupEnv, lang: Lang) -> SetupStep {
     }
 }
 
-fn plan_ephemeral_step(
-    has_rust: bool,
-    ephemeral: bool,
-    ephemeral_reason: &str,
-    os: SetupOs,
-    env: &dyn SetupEnv,
-    lang: Lang,
-) -> SetupStep {
-    if !ephemeral {
-        return SetupStep {
-            id: "ephemeral".to_string(),
-            category: "env".to_string(),
-            status: SetupStatus::Skipped,
-            summary: match lang {
-                Lang::Zh => format!("非临时受限环境（{ephemeral_reason}），保留默认增量编译"),
-                Lang::En => format!(
-                    "not an ephemeral environment ({ephemeral_reason}); keeping default incremental builds"
-                ),
-            },
-            detail: None,
-            remedy: None,
-        };
-    }
-
-    let github_env = env.env_var("GITHUB_ENV").filter(|s| !s.trim().is_empty());
-    if let Some(gh_env_path) = github_env {
-        return SetupStep {
-            id: "ephemeral".to_string(),
-            category: "env".to_string(),
-            status: SetupStatus::Planned,
-            summary: match lang {
-                Lang::Zh => "临时受限环境优化：向 $GITHUB_ENV 注入 CARGO_INCREMENTAL=0".to_string(),
-                Lang::En => {
-                    "ephemeral environment optimization: append CARGO_INCREMENTAL=0 to $GITHUB_ENV"
-                        .to_string()
-                }
-            },
-            detail: Some(match lang {
-                Lang::Zh => format!("目标文件：{gh_env_path}；触发原因：{ephemeral_reason}"),
-                Lang::En => format!("target path: {gh_env_path}; reason: {ephemeral_reason}"),
-            }),
-            remedy: None,
-        };
-    }
-
-    if !has_rust {
-        return SetupStep {
-            id: "ephemeral".to_string(),
-            category: "env".to_string(),
-            status: SetupStatus::Skipped,
-            summary: match lang {
-                Lang::Zh => {
-                    "临时受限环境已激活，但项目未启用 Rust 层且无 $GITHUB_ENV，跳过 Cargo 增量配置"
-                        .to_string()
-                }
-                Lang::En => {
-                    "ephemeral environment active, but Rust layer is not enabled and $GITHUB_ENV is unset; skipping Cargo incremental config"
-                        .to_string()
-                }
-            },
-            detail: None,
-            remedy: None,
-        };
-    }
-
-    let cargo_config = match os {
-        SetupOs::Windows => r"%USERPROFILE%\.cargo\config.toml",
-        SetupOs::Linux | SetupOs::MacOs => "~/.cargo/config.toml",
-    };
-
-    SetupStep {
-        id: "ephemeral".to_string(),
-        category: "env".to_string(),
-        status: SetupStatus::Planned,
-        summary: match lang {
-            Lang::Zh => {
-                "临时受限环境优化：向用户级 Cargo 配置合并写入 [build] incremental = false"
-                    .to_string()
-            }
-            Lang::En => {
-                "ephemeral environment optimization: merge [build] incremental = false into user Cargo config"
-                    .to_string()
-            }
-        },
-        detail: Some(match lang {
-            Lang::Zh => format!(
-                "默认路径：{cargo_config}（绝不修改项目仓库文件）；触发原因：{ephemeral_reason}"
-            ),
-            Lang::En => format!(
-                "default path: {cargo_config} (never modifies repository files); reason: {ephemeral_reason}"
-            ),
-        }),
-        remedy: None,
-    }
-}
-
 fn plan_doctor_fix(lang: Lang) -> SetupStep {
     SetupStep {
         id: "doctor-fix".to_string(),
@@ -1365,7 +1177,8 @@ fn plan_setup_d(root: &Path, os: SetupOs, env: &dyn SetupEnv, lang: Lang) -> Set
 
 fn execute_planned_step(
     root: &Path,
-    _manifest: &ProjectManifest,
+    manifest: &ProjectManifest,
+    ephemeral_reason: &str,
     env: &dyn SetupEnv,
     _opts: &SetupOptions,
     lang: Lang,
@@ -1382,6 +1195,7 @@ fn execute_planned_step(
         "bque" => crate::setup_tools::execute_bque(env, lang),
         "rust" => crate::setup_tools::execute_rust(root, env, lang),
         "lld" => crate::setup_tools::execute_lld(env, lang),
+        "ephemeral" => execute_ephemeral_step(manifest, ephemeral_reason, env, lang, step),
         _ => {
             let skeleton_note = match lang {
                 Lang::Zh => "装机骨架占位：实际执行逻辑待后续工单接入（当前未做修改）".to_string(),
