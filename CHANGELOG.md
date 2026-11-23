@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.88.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.87.0...v0.88.0) (2026-11-23)
+
+
+### Features
+
+* **ci:** 支持纯文档改动跳过门禁与本地 pre-push 并新增变更探测工作流与 doctor 巡检 ([#181](https://github.com/pengjiaxusz/pengj-templates/issues/181)) ([fea1243](https://github.com/pengjiaxusz/pengj-templates/commit/fea12438258e53570b09d84faf7053a916b20e2c))
+
 ## [0.87.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.86.2...v0.87.0) (2026-11-23)
 
 
