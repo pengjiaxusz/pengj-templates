@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.86.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.85.1...v0.86.0) (2026-11-23)
+
+
+### Features
+
+* **core,cli:** 新增 setup 子命令骨架、--dry-run 装机计划与环境探针接缝 ([ae55531](https://github.com/pengjiaxusz/pengj-templates/commit/ae555314502749ac61f319775cb7f4058820eabe))
+* **core,templates:** 新增跨平台一键装机（setup）与临时受限环境自动优化 ([5bb5e05](https://github.com/pengjiaxusz/pengj-templates/commit/5bb5e0543ad0c041e77a8665e884063d0d35299a))
+* **core:** 实现 setup 子模块拉齐、通用工具安装与 Rust 工具链对齐 ([edbe382](https://github.com/pengjiaxusz/pengj-templates/commit/edbe3822e223e296a82e6def714424bdae7b0082))
+* **core:** 实现临时受限环境自动识别与无污染优化 ([ab6bada](https://github.com/pengjiaxusz/pengj-templates/commit/ab6bada29279f768a95f96991fcb19280e455415))
+* **core:** 装机收尾接入离线 doctor --fix 与 setup.d 扩展槽 ([fda8a5a](https://github.com/pengjiaxusz/pengj-templates/commit/fda8a5a3e2e6a86a4df573bc03d321def7a9c1c1))
+* **templates:** 新增零前置薄脚本 setup.sh / setup.cmd 并同步本仓库 ([616fe27](https://github.com/pengjiaxusz/pengj-templates/commit/616fe2730c2d4c606cdce4db9c9583e74c05d226))
+
 ## [0.85.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.85.0...v0.85.1) (2026-11-23)
 
 
