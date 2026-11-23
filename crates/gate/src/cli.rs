@@ -234,9 +234,17 @@ fn hook_pre_push() -> Result<u8, String> {
         .list("prepush.commands")
         .map(<[String]>::to_vec)
         .unwrap_or_default();
-    let code = prepush::run_commands(&commands)?;
-    if code != 0 {
-        return Ok(code);
+    if !commands.is_empty() && prepush::skip_commands_requested() {
+        println!(
+            "[gate] pre-push: skipping {} custom command(s) ({} is set)",
+            commands.len(),
+            prepush::SKIP_COMMANDS_ENV
+        );
+    } else {
+        let code = prepush::run_commands(&commands)?;
+        if code != 0 {
+            return Ok(code);
+        }
     }
 
     println!("[gate] pre-push passed");

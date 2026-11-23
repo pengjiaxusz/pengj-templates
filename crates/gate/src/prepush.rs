@@ -13,10 +13,11 @@
 //! 裸奔，问题一路藏到 CI 才暴露。`pre-push` 是唯一覆盖所有造历史方式的钩子：不管
 //! 提交是敲出来的、am 进来的还是 rebase 出来的，要发出去都得先过这里。
 //!
-//! 内置检查只有两项，都是「CI 会跑、本地最容易漏」的：`cargo fmt --check`（见
+//! 内置检查只有两项，都是秒级且「CI 会跑、本地最容易漏」的：`cargo fmt --check`（见
 //! [`check_fmt`]）与代码语言守卫（在 `cli` 里编排，因为它要读 `gate.toml` 的模式）。
-//! 项目自己的重型检查（clippy 之类）由 `prepush.commands` 声明、按序执行——钩子不替
-//! 项目决定跑什么，只保证「声明了就一定跑」。
+//! `prepush.commands` 默认留空，重型检查（clippy、全量测试等）应交由 CI；若项目显式
+//! 声明了额外命令，受限环境可通过 `PENGJ_GATE_SKIP_PREPUSH_COMMANDS=1` 跳过它们，
+//! 同时保留内置秒级门禁。
 
 use std::io::{IsTerminal, Read};
 use std::path::Path;
@@ -128,6 +129,24 @@ pub fn check_fmt() -> Result<(), String> {
     ))
 }
 
+/// 受限环境下跳过 `prepush.commands`（但保留内置秒级门禁）的环境变量名。
+pub const SKIP_COMMANDS_ENV: &str = "PENGJ_GATE_SKIP_PREPUSH_COMMANDS";
+
+/// 解析布尔风格的跳过标记：`1`、`true`、`yes`（忽略大小写与首尾空白）视为开启。
+pub fn parse_skip_flag(raw: &str) -> bool {
+    matches!(
+        raw.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes"
+    )
+}
+
+/// 判断当前进程是否请求跳过 `prepush.commands`。
+pub fn skip_commands_requested() -> bool {
+    std::env::var(SKIP_COMMANDS_ENV)
+        .map(|val| parse_skip_flag(&val))
+        .unwrap_or(false)
+}
+
 /// 按 `prepush.commands` 的顺序跑项目自己的检查。
 ///
 /// 每条写成「程序 + 参数」的普通字符串，按空白切分，不支持引号与管道——钩子里没有
@@ -197,5 +216,16 @@ refs/heads/b\t2222\trefs/heads/b\t3333
         let mut parts = "just  gate-lang".split_whitespace();
         assert_eq!(parts.next(), Some("just"));
         assert_eq!(parts.collect::<Vec<_>>(), vec!["gate-lang"]);
+    }
+
+    #[test]
+    fn parses_skip_commands_flag() {
+        assert!(parse_skip_flag("1"));
+        assert!(parse_skip_flag("true"));
+        assert!(parse_skip_flag(" TRUE "));
+        assert!(parse_skip_flag("yes"));
+        assert!(!parse_skip_flag(""));
+        assert!(!parse_skip_flag("0"));
+        assert!(!parse_skip_flag("false"));
     }
 }

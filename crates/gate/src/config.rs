@@ -292,7 +292,9 @@ fn expected_kind(key: &str) -> Option<ValueKind> {
         | "commit.subject_min_han"
         | "commit.max_header"
         | "commit.max_footer_line" => Some(ValueKind::Num),
-        "commit.types" | "commit.scopes" | "project.disabled" | "disabled" => Some(ValueKind::List),
+        "commit.types" | "commit.scopes" | "project.disabled" | "disabled" | "prepush.commands" => {
+            Some(ValueKind::List)
+        }
         _ => None,
     }
 }
@@ -370,5 +372,19 @@ types = ["feat", "fix"]
         let config = parse("[project]\ndisabled = [\"lang-guard\"]").unwrap();
         assert!(config.is_disabled("lang-guard"));
         assert!(!config.is_disabled("commit"));
+    }
+
+    #[test]
+    fn prepush_commands_accepts_list_and_rejects_non_list() {
+        let empty = parse("prepush.commands = []\n").unwrap();
+        assert_eq!(empty.list("prepush.commands"), Some(&[][..]));
+
+        let populated = parse("prepush.commands = [\"just gate-lang\"]\n").unwrap();
+        assert_eq!(
+            populated.list("prepush.commands").unwrap(),
+            ["just gate-lang"]
+        );
+
+        assert!(parse("prepush.commands = \"just check\"\n").is_err());
     }
 }

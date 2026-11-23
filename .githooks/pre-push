@@ -1,10 +1,11 @@
 #!/bin/sh
 # gate hook: the pre-push stage.
 #
-# 推送离开本机前跑三项：
+# `pre-push` 默认保持秒级轻量（clippy、全量测试等重型检查交由 CI）：
 #   1. `cargo fmt --check`（与 CI 同一条命令）；
 #   2. 代码语言守卫，覆盖整个工作树；
-#   3. `.pengj-templates/gate.toml` 里 `prepush.commands` 声明的命令。
+#   3. `.pengj-templates/gate.toml` 里 `prepush.commands` 声明的可选命令（默认留空；
+#      受限环境可设 `PENGJ_GATE_SKIP_PREPUSH_COMMANDS=1` 仅跳过自定义命令）。
 #
 # 为什么需要这一层：`git am`、`git cherry-pick`、`git rebase` 都不触发 pre-commit，
 # 只有 `git commit` 会——批量落补丁的格式问题因此一路藏到 CI。
