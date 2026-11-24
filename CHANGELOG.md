@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.88.2](https://github.com/pengjiaxusz/pengj-templates/compare/v0.88.1...v0.88.2) (2026-11-24)
+
+
+### Bug Fixes
+
+* **core:** 对齐非 Windows 平台缺失 bque 的 doctor 警告与安装提示 ([d44fc6b](https://github.com/pengjiaxusz/pengj-templates/commit/d44fc6b23d86ad2f97d6cb9f9479636ddf6dea8b))
+
 ## [0.88.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.88.0...v0.88.1) (2026-11-24)
 
 
