@@ -729,10 +729,16 @@ fn bque_item_from_probe(
         None => DoctorItem {
             id: "bque".to_string(),
             category: "tool".to_string(),
-            level: DoctorLevel::Ok,
+            level: DoctorLevel::Warn,
             summary: match lang {
-                Lang::Zh => "当前平台不需要 bque".to_string(),
-                Lang::En => "bque not required on this platform".to_string(),
+                Lang::Zh => {
+                    "未找到 bque（可选，Linux/WSL2 同样支持；安装命令：curl -fsSL https://github.com/pengjiaxusz/bque/releases/latest/download/install.sh | sh）"
+                        .to_string()
+                }
+                Lang::En => {
+                    "bque not found (optional on Linux/WSL2; install: curl -fsSL https://github.com/pengjiaxusz/bque/releases/latest/download/install.sh | sh)"
+                        .to_string()
+                }
             },
             details: Vec::new(),
             output: None,
@@ -2188,6 +2194,20 @@ mod tests {
             bque_item_from_probe(Some("bque 0.2.0".to_string()), None, false, Lang::En);
         assert_eq!(fallback_en.level, DoctorLevel::Ok);
         assert_eq!(fallback_en.summary, "bque 0.2.0");
+
+        // 非 Windows 未安装时给出非阻断 Warn 与 install.sh 安装指引（英文零汉字）
+        let missing_unix_zh = bque_item_from_probe(None, None, false, Lang::Zh);
+        assert_eq!(missing_unix_zh.level, DoctorLevel::Warn);
+        assert!(missing_unix_zh.summary.contains("install.sh"));
+
+        let missing_unix_en = bque_item_from_probe(None, None, false, Lang::En);
+        assert_eq!(missing_unix_en.level, DoctorLevel::Warn);
+        assert!(missing_unix_en.summary.contains("install.sh"));
+        assert!(
+            !contains_han(&missing_unix_en.summary),
+            "英文文案不应含汉字: {}",
+            missing_unix_en.summary
+        );
     }
 
     #[test]
