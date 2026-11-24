@@ -45,7 +45,7 @@ to a recipe of its own.
 
 - Variadic recipes: `build *ARGS:` then forward with `{% raw %}{{ARGS}}{% endraw %}`. In a template file, wrap that variable in a minijinja raw block so it survives rendering.
 - Prefix the command with `@` to suppress just's command echo when the recipe itself prints useful output.
-- When a layer uses worktrees, inject the shared target dir through `pengj-templates-cli worktree target-dir` — see `templates/rust/.pengj-templates/just/rust.just` for the `shared_win()` / `shared_sh()` macro pattern. Do not hardcode `CARGO_TARGET_DIR`.
+- When a layer uses worktrees, inject the shared target dir through `pengj-templates-cli worktree target-dir` — see `templates/rust/.pengj-templates/just/rust.just` for the `shared_win()` / `shared_sh()` macro pattern. Do not hardcode `CARGO_TARGET_DIR`, and never write a bare top-level backtick like ``export CARGO_TARGET_DIR := `pengj-templates-cli worktree target-dir --dir .` `` (top-level backticks do not inherit `export PATH` and fail with exit 127 when the CLI is missing or PATH has not been refreshed; prepend the default install dir and fall back to `${CARGO_TARGET_DIR:-target}`).
 - Multi-line recipes: just runs each line in its own shell by default. Use `#!/usr/bin/env bash` shebang recipes or explicit line continuation when state must be shared.
 
 ## 4. Managed-block discipline
@@ -102,7 +102,7 @@ This is the current layer's legitimate downgrade, not the recommended end state.
 
 - 变参配方写成 `build *ARGS:`，再用 `{% raw %}{{ARGS}}{% endraw %}` 转发。模板文件里要把这个变量包在 minijinja raw 块内才能扛住渲染。
 - 配方本身有有用输出时，命令前加 `@` 关掉 just 的回显。
-- 层用了工作树时，通过 `pengj-templates-cli worktree target-dir` 取共享目录——参照 `templates/rust/.pengj-templates/just/rust.just` 的 `shared_win()` / `shared_sh()` 宏写法，不要硬编码 `CARGO_TARGET_DIR`。
+- 层用了工作树时，通过 `pengj-templates-cli worktree target-dir` 取共享目录——参照 `templates/rust/.pengj-templates/just/rust.just` 的 `shared_win()` / `shared_sh()` 宏写法，不要硬编码 `CARGO_TARGET_DIR`，也禁止在顶层裸写反引号 ``export CARGO_TARGET_DIR := `pengj-templates-cli worktree target-dir --dir .` ``（顶层反引号不会继承 `export PATH`，一旦未装 CLI 或终端未刷新 PATH 就会以退出码 127 炸毁整个 `justfile`；若需顶层导出，必须在反引号内补齐默认安装目录并优雅回退到 `${CARGO_TARGET_DIR:-target}`）。
 - 多行配方默认每行独立 shell。需要共享状态时用 `#!/usr/bin/env bash` shebang 配方或显式续行。
 
 ## 4. 托管块纪律

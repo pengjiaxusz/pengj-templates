@@ -7,9 +7,14 @@
 set -eu
 
 PENGJ_BIN="${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin"
+LOCAL_BIN="$HOME/.local/bin"
+case ":$PATH:" in
+  *":$LOCAL_BIN:"*) ;;
+  *) PATH="$LOCAL_BIN:$PATH"; export PATH ;;
+esac
 case ":$PATH:" in
   *":$PENGJ_BIN:"*) ;;
-  *) PATH="$PATH:$PENGJ_BIN"; export PATH ;;
+  *) PATH="$PENGJ_BIN:$PATH"; export PATH ;;
 esac
 
 if command -v just >/dev/null 2>&1 \
@@ -49,9 +54,14 @@ exit 1
 set -eu
 
 PENGJ_BIN="${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin"
+LOCAL_BIN="$HOME/.local/bin"
+case ":$PATH:" in
+  *":$LOCAL_BIN:"*) ;;
+  *) PATH="$LOCAL_BIN:$PATH"; export PATH ;;
+esac
 case ":$PATH:" in
   *":$PENGJ_BIN:"*) ;;
-  *) PATH="$PATH:$PENGJ_BIN"; export PATH ;;
+  *) PATH="$PENGJ_BIN:$PATH"; export PATH ;;
 esac
 
 if command -v just >/dev/null 2>&1 \

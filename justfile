@@ -4,6 +4,8 @@ set minimum-version := "1.56.0"
 set shell := ["sh", "-uc"]
 [windows]
 set shell := ["pwsh", "-NoProfile", "-Command"]
+[unix]
+export PATH := env('XDG_DATA_HOME', env('HOME', '') + '/.local/share') + '/pengj-templates/bin:' + env('HOME', '') + '/.local/bin:' + env('PATH', '')
 # 允许项目专属区用同名 recipe 覆盖框架配方（例如 `test` 前需要先产出某个产物），避免去改受管的 import 文件。
 set allow-duplicate-recipes := true
 
@@ -38,7 +40,7 @@ doctor *ARGS:
 export CARGO_TARGET_DIR := if os_family() == "windows" {
     `$d = if (Get-Command pengj-templates-cli -ErrorAction SilentlyContinue) { pengj-templates-cli worktree target-dir --dir . 2>$null }; if ($LASTEXITCODE -eq 0 -and $d) { $d } elseif ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { 'target' }`
 } else {
-    `command -v pengj-templates-cli >/dev/null 2>&1 && pengj-templates-cli worktree target-dir --dir . 2>/dev/null || printf '%s' "${CARGO_TARGET_DIR:-target}"`
+    `PATH="${XDG_DATA_HOME:-$HOME/.local/share}/pengj-templates/bin:$HOME/.local/bin:$PATH"; command -v pengj-templates-cli >/dev/null 2>&1 && pengj-templates-cli worktree target-dir --dir . 2>/dev/null || printf '%s' "${CARGO_TARGET_DIR:-target}"`
 }
 
 # ---------- 提交门禁（crates/gate） ----------

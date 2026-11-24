@@ -98,7 +98,8 @@ cp -R "$bundle_root/templates" "$templates_dir"
 echo "--> $(t '已安装 CLI' 'Installed CLI'): $exe_path"
 echo "--> $(t '已安装模板' 'Installed templates'): $templates_dir"
 
-# 6. Make the CLI reachable: a symlink in a directory that is already on PATH.
+# 6. Make the CLI reachable: symlink into an existing writable bin dir, or
+#    create ~/.local/bin (which Ubuntu/WSL2 ~/.profile adds to PATH automatically).
 link_dir=""
 for candidate in "${HOME}/.local/bin" "${HOME}/bin" "/usr/local/bin"; do
     if [ -d "$candidate" ] && [ -w "$candidate" ]; then
@@ -107,9 +108,20 @@ for candidate in "${HOME}/.local/bin" "${HOME}/bin" "/usr/local/bin"; do
     fi
 done
 
+if [ -z "$link_dir" ] && mkdir -p "${HOME}/.local/bin" 2>/dev/null && [ -w "${HOME}/.local/bin" ]; then
+    link_dir="${HOME}/.local/bin"
+fi
+
 if [ -n "$link_dir" ]; then
     ln -sf "$exe_path" "$link_dir/pengj-templates-cli"
     echo "--> $(t '已链接' 'Linked'): $link_dir/pengj-templates-cli"
+    case ":${PATH:-}:" in
+        *":$link_dir:"*) ;;
+        *)
+            echo "--> $(t '提示：当前终端 PATH 尚未包含' 'Note: current shell PATH does not include') $link_dir"
+            echo "    $(t '立即生效请执行：' 'Run now:') export PATH="$link_dir:\$PATH" $(t '（或重新打开终端）' '(or restart your shell)')"
+            ;;
+    esac
 else
     echo "--> $(t '未找到可写的 PATH 目录，请手动将' 'No writable PATH directory found; add') $bin_dir $(t '加入 PATH。' 'to your PATH manually.')" >&2
 fi
