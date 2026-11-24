@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.88.1](https://github.com/pengjiaxusz/pengj-templates/compare/v0.88.0...v0.88.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **templates,cli:** 修复 Linux 下 just 与 doctor 找不到默认安装目录中 CLI 的问题 ([a9e9975](https://github.com/pengjiaxusz/pengj-templates/commit/a9e997555d4f3389ef3463ad0839a07eaac3648f))
+* **templates,core:** 声明 just 最低版本 1.56.0 并在 doctor 与 setup 中校验版本 ([7e712c4](https://github.com/pengjiaxusz/pengj-templates/commit/7e712c4305749e03ec1f32b3776d1efc7879807e))
+
 ## [0.88.0](https://github.com/pengjiaxusz/pengj-templates/compare/v0.87.0...v0.88.0) (2026-11-23)
 
 
