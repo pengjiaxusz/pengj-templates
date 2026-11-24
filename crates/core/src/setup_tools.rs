@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::doctor::is_just_version_supported;
 use crate::i18n_audit::Lang;
 use crate::setup::{CommandOutput, CommandSpec, SetupEnv, SetupOs, SetupStatus, SetupStep};
 
@@ -187,17 +188,19 @@ pub(crate) fn execute_submodules(root: &Path, env: &dyn SetupEnv, lang: Lang) ->
 pub(crate) fn execute_just(env: &dyn SetupEnv, lang: Lang) -> SetupStep {
     if let Some(ver) = env.probe_command_version("just", &["--version"]) {
         let trimmed = ver.strip_prefix("just ").unwrap_or(&ver).trim();
-        return SetupStep {
-            id: "just".to_string(),
-            category: "tool".to_string(),
-            status: SetupStatus::Skipped,
-            summary: match lang {
-                Lang::Zh => format!("just 已安装（{trimmed}），跳过"),
-                Lang::En => format!("just already installed ({trimmed}); skipped"),
-            },
-            detail: None,
-            remedy: None,
-        };
+        if is_just_version_supported(trimmed) {
+            return SetupStep {
+                id: "just".to_string(),
+                category: "tool".to_string(),
+                status: SetupStatus::Skipped,
+                summary: match lang {
+                    Lang::Zh => format!("just 已安装（{trimmed}），跳过"),
+                    Lang::En => format!("just already installed ({trimmed}); skipped"),
+                },
+                detail: None,
+                remedy: None,
+            };
+        }
     }
 
     match env.target_os() {
@@ -230,7 +233,7 @@ fn execute_just_unix(env: &dyn SetupEnv, lang: Lang) -> SetupStep {
     let quoted_dir = shell_single_quote(&bin_dir);
     let tmp_prefix = unix_exec_tmpdir_prefix(env);
     let script = format!(
-        "{tmp_prefix}mkdir -p {quoted_dir} && curl --proto '=https' --tlsv1.2 -sSf {JUST_INSTALL_SH_URL} | sh -s -- --to {quoted_dir}"
+        "{tmp_prefix}mkdir -p {quoted_dir} && curl --proto '=https' --tlsv1.2 -sSf {JUST_INSTALL_SH_URL} | sh -s -- --force --to {quoted_dir}"
     );
     let spec = CommandSpec::new("sh", &["-c", &script]);
     let manual = match lang {
@@ -1170,7 +1173,7 @@ mod tests {
         write_manifest(&dir, &["common", "just", "bque", "rust"], BTreeMap::new());
 
         let env = FakeSetupEnv::new(SetupOs::Linux)
-            .with_command("just", "just 1.40.0")
+            .with_command("just", "just 1.56.0")
             .with_command("bque", "bque 0.5.0")
             .with_command("rustup", "rustup 1.28.1")
             .with_command("cargo", "cargo 1.85.0")
@@ -1199,6 +1202,40 @@ mod tests {
         assert!(
             env.executed_commands().is_empty(),
             "全部已装时不应执行任何外部命令"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn 旧版just在执行模式下会触发强制覆盖安装() {
+        let dir = temp_dir("just-outdated-upgrade");
+        write_manifest(&dir, &["common", "just"], BTreeMap::new());
+
+        let env = FakeSetupEnv::new(SetupOs::Linux).with_command("just", "just 1.45.0-1");
+        let report = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: false,
+                ephemeral: Some(false),
+                lang: Some(Lang::Zh),
+            },
+            &env,
+        )
+        .expect("执行应成功");
+
+        let just_step = report
+            .steps
+            .iter()
+            .find(|s| s.id == "just")
+            .expect("应包含 just");
+        assert_eq!(just_step.status, SetupStatus::Installed);
+        let cmds = env.executed_commands();
+        assert!(
+            cmds.iter().any(|c| c
+                .args
+                .iter()
+                .any(|a| a.contains("just.systems/install.sh") && a.contains("--force"))),
+            "应通过官方 install.sh --force 升级旧版 just，实际命令：{cmds:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

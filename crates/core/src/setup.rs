@@ -12,8 +12,8 @@ use std::sync::Mutex;
 use serde::Serialize;
 
 use crate::doctor::{
-    absolute, display_path, has_layer, resolve_lang, run_doctor, uses_lld, DoctorLevel,
-    DoctorOptions, DoctorReport,
+    absolute, display_path, has_layer, is_just_version_supported, resolve_lang, run_doctor,
+    uses_lld, DoctorLevel, DoctorOptions, DoctorReport, MIN_JUST_VERSION_STR,
 };
 use crate::error::Result;
 use crate::i18n_audit::{contains_han, Lang};
@@ -908,20 +908,25 @@ fn plan_submodules(
 }
 
 fn plan_just(os: SetupOs, env: &dyn SetupEnv, lang: Lang) -> SetupStep {
-    if let Some(ver) = env.probe_command_version("just", &["--version"]) {
-        let trimmed = ver.strip_prefix("just ").unwrap_or(&ver).trim();
-        return SetupStep {
-            id: "just".to_string(),
-            category: "tool".to_string(),
-            status: SetupStatus::Skipped,
-            summary: match lang {
-                Lang::Zh => format!("just 已安装（{trimmed}），跳过"),
-                Lang::En => format!("just already installed ({trimmed}); skipped"),
-            },
-            detail: None,
-            remedy: None,
-        };
-    }
+    let outdated = if let Some(ver) = env.probe_command_version("just", &["--version"]) {
+        let trimmed = ver.strip_prefix("just ").unwrap_or(&ver).trim().to_string();
+        if is_just_version_supported(&trimmed) {
+            return SetupStep {
+                id: "just".to_string(),
+                category: "tool".to_string(),
+                status: SetupStatus::Skipped,
+                summary: match lang {
+                    Lang::Zh => format!("just 已安装（{trimmed}），跳过"),
+                    Lang::En => format!("just already installed ({trimmed}); skipped"),
+                },
+                detail: None,
+                remedy: None,
+            };
+        }
+        Some(trimmed)
+    } else {
+        None
+    };
 
     let target = match os {
         SetupOs::Windows => r"%LOCALAPPDATA%\just\bin\just.exe",
@@ -932,17 +937,29 @@ fn plan_just(os: SetupOs, env: &dyn SetupEnv, lang: Lang) -> SetupStep {
         id: "just".to_string(),
         category: "tool".to_string(),
         status: SetupStatus::Planned,
-        summary: match lang {
-            Lang::Zh => "将安装 just（任务运行器）".to_string(),
-            Lang::En => "will install just (command runner)".to_string(),
+        summary: match (outdated.as_deref(), lang) {
+            (Some(old), Lang::Zh) => {
+                format!("检测到 just {old} 过旧（模板需要 >= {MIN_JUST_VERSION_STR}），将安装新版 just")
+            }
+            (Some(old), Lang::En) => format!(
+                "just {old} is too old (template requires >= {MIN_JUST_VERSION_STR}); will install newer just"
+            ),
+            (None, Lang::Zh) => {
+                format!("将安装 just（任务运行器，>= {MIN_JUST_VERSION_STR}）")
+            }
+            (None, Lang::En) => {
+                format!("will install just (command runner, >= {MIN_JUST_VERSION_STR})")
+            }
         },
         detail: Some(match lang {
             Lang::Zh => format!("默认路径：{target}；大致体积：约 3–5 MB"),
             Lang::En => format!("default path: {target}; approx size: ~3-5 MB"),
         }),
         remedy: Some(match lang {
-            Lang::Zh => "手动安装参考：https://github.com/casey/just#installation".to_string(),
-            Lang::En => "manual install: https://github.com/casey/just#installation".to_string(),
+            Lang::Zh => "手动安装参考：https://github.com/casey/just#installation（Linux 请避免使用旧版 apt）"
+                .to_string(),
+            Lang::En => "manual install: https://github.com/casey/just#installation (avoid outdated apt packages on Linux)"
+                .to_string(),
         }),
     }
 }
@@ -1887,7 +1904,7 @@ mod tests {
         write_manifest(&dir, &["common", "just", "bque", "rust"], BTreeMap::new());
 
         let env = FakeSetupEnv::new(SetupOs::Linux)
-            .with_command("just", "just 1.40.0")
+            .with_command("just", "just 1.56.0")
             .with_command("bque", "bque 0.5.0")
             .with_command("rustup", "rustup 1.28.1")
             .with_command("cargo", "cargo 1.85.0")
@@ -1950,6 +1967,26 @@ mod tests {
         let lld_detail = lld_step.detail.as_deref().unwrap_or("");
         assert!(lld_detail.contains("/usr/bin/ld.lld"));
         assert!(lld_detail.contains("MB"));
+
+        // 已安装旧版 just（低于 1.56.0）时应标记 Planned 而非 Skipped
+        let old_just_env = FakeSetupEnv::new(SetupOs::Linux).with_command("just", "just 1.45.0-1");
+        let report_old = run_setup_with_env(
+            &dir,
+            &SetupOptions {
+                dry_run: true,
+                ephemeral: None,
+                lang: None,
+            },
+            &old_just_env,
+        )
+        .expect("旧版 just 预演应成功");
+        let old_just_step = report_old
+            .steps
+            .iter()
+            .find(|s| s.id == "just")
+            .expect("应包含 just");
+        assert_eq!(old_just_step.status, SetupStatus::Planned);
+        assert!(old_just_step.summary.contains("1.56.0"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
