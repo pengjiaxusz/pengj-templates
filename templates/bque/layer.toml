@@ -1,5 +1,5 @@
 name = "bque"
-description = "Windows 全局编译排队、CPU 后台降级防卡顿与纯净基准测试保护：只做声明（配套 bque 技能 + doctor 的安装检测），不产出 just 配方——包装层传不进 bque 自己的 --cwd / --observer / --priority，重型命令请在项目配方里直接 `bque run --`"
+description = "跨平台（Windows / Linux）全局编译预算排队、低占用自动让槽、看门狗防卡死与纯净基准测试保护：只做声明（配套 bque 技能 + doctor/setup 安装检测），不产出 just 配方——包装层传不进 bque 自己的 --weight / --scope / --stall-timeout / --observer，重型命令请在项目配方里直接 `bque run --`"
 depends = ["common"]
 
 # 配套技能：勾选本层即自动带上「排队」技能，避免「有配方没文档」的半接入。

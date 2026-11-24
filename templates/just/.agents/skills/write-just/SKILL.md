@@ -30,7 +30,7 @@ Never create root `scripts/` or root `just/` — those names belong to the proje
 
 1. **Wrap every heavy command when `bque` is in `layers`** — including `cargo run`. Use `bque run -- <cmd>`; benchmarks use `bque bench -- <cmd>`. A raw `cargo run/build/clippy/test/bench`, `ninja`, `cmake --build`, `ctest`, or `pnpm build` is a defect.
 2. **No bque layer?** A direct command is the legitimate downgrade of the current layer — say so in a comment, and do not present it as the recommended endpoint. Never force raw `bque` into Unix/CI.
-3. **Platform pairs**: if Windows and Unix differ, write both `[windows]` and `[unix]` recipes. bque is a Windows-only global lock; the `[unix]` branch passes the command straight through — that is expected, not a bypass.
+3. **Platform pairs**: if Windows and Unix differ, write both `[windows]` and `[unix]` recipes. bque supports both Windows and Linux/WSL2, while generated `[unix]` recipes intentionally pass through so CI runners stay zero-dependency — that is expected, not a bypass.
 4. **Variadic args**: declare `*ARGS` and forward with `{% raw %}{{ARGS}}{% endraw %}`. There is no ad-hoc wrapper recipe (`just q-run` is gone): one-off heavy commands call `bque run -- <cmd>` / `bque bench -- <cmd>` directly, and a command that keeps coming back gets its own recipe here.
 
 ## 3. Minimal correct recipe
@@ -86,7 +86,7 @@ The script is read-only and exits non-zero when it finds an unwrapped heavy comm
 
 1. **只要 `layers` 含 `bque`，重型命令一律包装**——包括 `cargo run`。用 `bque run -- <命令>`，跑分用 `bque bench -- <命令>`。裸写 `cargo run/build/clippy/test/bench`、`ninja`、`cmake --build`、`ctest`、`pnpm build` 都算缺陷。
 2. **没有 bque 层？** 直跑是当前层的合法降级——在注释里说明，别把它包装成推荐终点。严禁在 Unix / CI 里强行套原生 bque。
-3. **平台成对**：Windows 与 Unix 行为不同就同时写 `[windows]` 与 `[unix]` 两个配方。bque 是 Windows 全局锁，`[unix]` 分支直跑透传属预期，不算绕过。
+3. **平台成对**：Windows 与 Unix 行为不同就同时写 `[windows]` 与 `[unix]` 两个配方。bque 已跨平台支持 Windows 与 Linux/WSL2，但模板 `[unix]` 分支为兼容零依赖 CI 保持直跑透传，属预期行为，不算绕过。
 4. **变参**：声明 `*ARGS` 并用 `{% raw %}{{ARGS}}{% endraw %}` 转发。本层不再提供临时包装配方（`just q-run` 已撤掉）：一次性重命令直接 `bque run -- <命令>` / `bque bench -- <命令>`，反复要用的再在这里写成具体配方。
 
 ## 3. 最小正确配方
