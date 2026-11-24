@@ -38,7 +38,7 @@ to a recipe of its own.
 
 - `[windows]` / `[unix]` must appear together for any recipe whose body differs. A lone `[windows]` recipe makes `just` on Linux/macOS report "no recipe found".
 - `[unix]` is a real attribute in just (covers Linux and macOS). Do not use `[linux]` and assume macOS is included.
-- bque is a Windows-only global kernel lock. The `[unix]` branch running the raw command is the intended behavior — never call `bque` there.
+- bque supports both Windows and Linux/WSL2, while `[unix]` recipes intentionally run the raw command so CI runners need no `bque` binary — never force `bque` into `[unix]` template recipes.
 - If a recipe is identical on all platforms (e.g. `fmt`), write it once with no attribute.
 
 ## 3. Arguments and shell details
@@ -95,7 +95,7 @@ This is the current layer's legitimate downgrade, not the recommended end state.
 
 - 只要 Windows 与 Unix 命令体不同，就必须同时写 `[windows]` 与 `[unix]`。只写 `[windows]` 会让 Linux / macOS 上的 `just` 报「找不到配方」。
 - `[unix]` 是 just 的真实属性（含 Linux 与 macOS）。不要用 `[linux]` 然后以为 macOS 也覆盖了。
-- bque 是 Windows 全局内核锁，`[unix]` 分支直跑是预期行为——绝不在那里调 bque。
+- bque 已支持 Windows 与 Linux/WSL2 双平台，但模板 `[unix]` 分支为保证 CI 零依赖保持直跑透传——不要强行把 `bque` 塞进通用 `[unix]` 配方。
 - 所有平台命令体一样时（如 `fmt`）只写一遍，不加属性。
 
 ## 3. 变参与 shell 细节
