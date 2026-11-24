@@ -2,6 +2,7 @@
 # {% if options["skill_lang"] == "en" %}The framework area below is a managed block: template updates replace it in place; everything outside the block belongs to the project.{% else %}框架区在下方托管块内，由模板更新原位替换；块外的项目专属区归项目所有。{% endif %}
 # {% if options["skill_lang"] == "en" %}Heavy commands live in the project area: on Windows wrap them as `bque run -- <cmd>`, benchmarks as `bque bench -- <cmd>`.{% else %}重型任务写在项目专属区：Windows 上直接包成 `bque run -- <cmd>`，性能跑分用 `bque bench -- <cmd>`。{% endif %}
 # PENGJ_TEMPLATE_START
+set minimum-version := "1.56.0"
 [unix]
 set shell := ["sh", "-uc"]
 [windows]

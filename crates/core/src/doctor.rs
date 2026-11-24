@@ -399,17 +399,59 @@ fn check_git_tool(lang: Lang) -> DoctorItem {
     }
 }
 
-fn check_just_tool(lang: Lang) -> DoctorItem {
-    match probe_tool_version("just", &["--version"]) {
-        Some(ver) => {
-            let trimmed = ver.strip_prefix("just ").unwrap_or(&ver).trim();
-            DoctorItem {
-                id: "just".to_string(),
-                category: "tool".to_string(),
-                level: DoctorLevel::Ok,
-                summary: format!("just {trimmed}"),
-                details: Vec::new(),
-                output: None,
+/// 模板 `justfile` 使用 `[unix]`/`[windows]` 修饰 `set shell`，依赖 `just >= 1.56.0`。
+pub(crate) const MIN_JUST_VERSION: (u64, u64, u64) = (1, 56, 0);
+pub(crate) const MIN_JUST_VERSION_STR: &str = "1.56.0";
+
+/// 从版本输出（如 `"just 1.56.0"`、`"1.45.0-1"`、`"1.59.0 (abc)"`）解析 `(major, minor, patch)`。
+pub(crate) fn parse_semver_triple(raw: &str) -> Option<(u64, u64, u64)> {
+    let trimmed = raw.strip_prefix("just ").unwrap_or(raw).trim();
+    let token = trimmed.split_whitespace().next()?;
+    let core = token.split(['-', '+']).next()?;
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next().unwrap_or("0").parse().ok()?;
+    Some((major, minor, patch))
+}
+
+/// 判断已安装的 `just` 版本是否满足模板最低要求（无法解析时保守放行）。
+pub(crate) fn is_just_version_supported(raw: &str) -> bool {
+    match parse_semver_triple(raw) {
+        Some(v) => v >= MIN_JUST_VERSION,
+        None => true,
+    }
+}
+
+fn evaluate_just_version(ver: Option<&str>, lang: Lang) -> DoctorItem {
+    match ver {
+        Some(raw) => {
+            let trimmed = raw.strip_prefix("just ").unwrap_or(raw).trim();
+            if is_just_version_supported(trimmed) {
+                DoctorItem {
+                    id: "just".to_string(),
+                    category: "tool".to_string(),
+                    level: DoctorLevel::Ok,
+                    summary: format!("just {trimmed}"),
+                    details: Vec::new(),
+                    output: None,
+                }
+            } else {
+                DoctorItem {
+                    id: "just".to_string(),
+                    category: "tool".to_string(),
+                    level: DoctorLevel::Error,
+                    summary: match lang {
+                        Lang::Zh => format!(
+                            "just {trimmed} 版本过旧（模板需要 >= {MIN_JUST_VERSION_STR}）；请卸载旧版（如 apt install just）并改用官方安装脚本（curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sh -s -- --to ~/.local/bin）或 cargo install just"
+                        ),
+                        Lang::En => format!(
+                            "just {trimmed} is too old (template requires >= {MIN_JUST_VERSION_STR}); remove outdated distro packages (e.g. apt) and install via the official script (curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sh -s -- --to ~/.local/bin) or cargo install just"
+                        ),
+                    },
+                    details: Vec::new(),
+                    output: None,
+                }
             }
         }
         None => DoctorItem {
@@ -417,16 +459,22 @@ fn check_just_tool(lang: Lang) -> DoctorItem {
             category: "tool".to_string(),
             level: DoctorLevel::Error,
             summary: match lang {
-                Lang::Zh => {
-                    "未找到 just（约 3–5 MB；常见安装位置：~/.local/bin、~/.cargo/bin 或系统包管理器目录）；安装地址：https://github.com/casey/just#installation".to_string()
-                }
-                Lang::En => "just not found (~3-5 MB; typical install path: ~/.local/bin, ~/.cargo/bin, or package manager bin); install: https://github.com/casey/just#installation"
-                    .to_string(),
+                Lang::Zh => format!(
+                    "未找到 just（需 >= {MIN_JUST_VERSION_STR}，约 3–5 MB；常见安装位置：~/.local/bin 或 ~/.cargo/bin，Ubuntu/Debian 请勿使用旧版 apt）；推荐安装：curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sh -s -- --to ~/.local/bin 或 https://github.com/casey/just#installation"
+                ),
+                Lang::En => format!(
+                    "just not found (requires >= {MIN_JUST_VERSION_STR}, ~3-5 MB; typical install path: ~/.local/bin or ~/.cargo/bin; avoid outdated apt packages); install: curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | sh -s -- --to ~/.local/bin or https://github.com/casey/just#installation"
+                ),
             },
             details: Vec::new(),
             output: None,
         },
     }
+}
+
+fn check_just_tool(lang: Lang) -> DoctorItem {
+    let ver = probe_tool_version("just", &["--version"]);
+    evaluate_just_version(ver.as_deref(), lang)
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -2210,5 +2258,30 @@ jobs:
         assert!(ok_item.details.is_empty());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn just版本校验拒绝低于1_56_0且放行达标版本() {
+        assert_eq!(parse_semver_triple("just 1.45.0-1"), Some((1, 45, 0)));
+        assert_eq!(parse_semver_triple("just 1.56.0"), Some((1, 56, 0)));
+        assert_eq!(parse_semver_triple("1.59.0 (abc123)"), Some((1, 59, 0)));
+        assert!(!is_just_version_supported("just 1.45.0-1"));
+        assert!(!is_just_version_supported("1.55.1"));
+        assert!(is_just_version_supported("just 1.56.0"));
+        assert!(is_just_version_supported("just 1.59.0"));
+        assert!(is_just_version_supported("just dev"));
+
+        let old_zh = evaluate_just_version(Some("just 1.45.0-1"), Lang::Zh);
+        assert_eq!(old_zh.level, DoctorLevel::Error);
+        assert!(old_zh.summary.contains("1.56.0"));
+
+        let old_en = evaluate_just_version(Some("just 1.45.0"), Lang::En);
+        assert_eq!(old_en.level, DoctorLevel::Error);
+        assert!(old_en.summary.contains("1.56.0"));
+        assert!(!contains_han(&old_en.summary));
+
+        let ok = evaluate_just_version(Some("just 1.56.0"), Lang::Zh);
+        assert_eq!(ok.level, DoctorLevel::Ok);
+        assert_eq!(ok.summary, "just 1.56.0");
     }
 }

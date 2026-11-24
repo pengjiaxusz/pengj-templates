@@ -1,4 +1,5 @@
 # PENGJ_TEMPLATE_START
+set minimum-version := "1.56.0"
 [unix]
 set shell := ["sh", "-uc"]
 [windows]
